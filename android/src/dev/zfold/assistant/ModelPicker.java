@@ -25,7 +25,7 @@ final class ModelPicker {
     frame.addView(sheet,new FrameLayout.LayoutParams(width,-2));
     LinearLayout head=new LinearLayout(context);head.setGravity(Gravity.CENTER_VERTICAL);head.setPadding(Ui.dp(context,14),Ui.dp(context,11),Ui.dp(context,8),Ui.dp(context,7));
     TextView title=Ui.text(context,"模型与供应商",14,theme.ink);title.setTypeface(Typeface.create("sans-serif-medium",0));head.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-    head.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭模型切换",theme.muted,Color.TRANSPARENT,()->handle[0].dismiss()),new LinearLayout.LayoutParams(Ui.dp(context,42),Ui.dp(context,42)));
+    head.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭模型切换",theme.muted,Color.TRANSPARENT,()->handle[0].dismiss()),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     sheet.addView(head);
     LinearLayout list=new LinearLayout(context);list.setOrientation(LinearLayout.VERTICAL);
     JSONArray providers=runtime.modelProviders;int rows=1;

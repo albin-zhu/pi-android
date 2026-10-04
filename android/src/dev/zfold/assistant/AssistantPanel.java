@@ -372,7 +372,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
       LinearLayout labels=new LinearLayout(getContext());labels.setOrientation(VERTICAL);LayoutParams labelParams=new LayoutParams(0,-2,1);labelParams.leftMargin=dp(9);row.addView(labels,labelParams);
       TextView title=text(file.name,13,theme.ink);title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);title.setTypeface(Typeface.create("sans-serif-medium",0));labels.addView(title);
       TextView detail=text(file.detail.replace("\n"," · "),11,theme.muted);detail.setSingleLine(true);detail.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);labels.addView(detail);
-      row.addView(new Ui.Action(getContext(),R.drawable.ic_x,"","移除 "+file.name,theme.muted,Color.TRANSPARENT,()->{localFiles.remove(file);renderFiles();updateControls();}),new LayoutParams(dp(42),dp(42)));
+      row.addView(new Ui.Action(getContext(),R.drawable.ic_x,"","移除 "+file.name,theme.muted,Color.TRANSPARENT,()->{localFiles.remove(file);renderFiles();updateControls();}),new LayoutParams(dp(48),dp(48)));
       fileList.addView(row,new LayoutParams(-1,-2));
     }
   }

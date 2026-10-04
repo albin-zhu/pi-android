@@ -46,8 +46,8 @@ final class ProviderAuthDialog implements PiRuntime.Listener {
     frame.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());drawer.setPadding(Ui.dp(context,16)+bars.left,bars.top+Ui.dp(context,16),Ui.dp(context,16)+bars.right,bars.bottom+Ui.dp(context,16));return insets;});
     LinearLayout brand=new LinearLayout(context);brand.setGravity(Gravity.CENTER_VERTICAL);
     TextView title=Ui.text(context,"供应商登录",19,theme.ink);title.setTypeface(Typeface.create("sans-serif-medium",0));brand.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-    brand.addView(new Ui.Action(context,R.drawable.ic_arrow_clockwise,"","刷新供应商登录状态",theme.muted,Color.TRANSPARENT,this::refresh),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
-    brand.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭供应商登录",theme.muted,Color.TRANSPARENT,this::close),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
+    brand.addView(new Ui.Action(context,R.drawable.ic_arrow_clockwise,"","刷新供应商登录状态",theme.muted,Color.TRANSPARENT,this::refresh),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
+    brand.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭供应商登录",theme.muted,Color.TRANSPARENT,this::close),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     drawer.addView(brand);
     TextView help=Ui.text(context,"OAuth 会打开浏览器或显示设备码；完成后凭据保存在应用私有 auth.json，不会写入 git。",12,theme.muted);
     help.setLineSpacing(Ui.dp(context,3),1f);LinearLayout.LayoutParams helpParams=new LinearLayout.LayoutParams(-1,-2);helpParams.setMargins(0,Ui.dp(context,9),0,0);drawer.addView(help,helpParams);
@@ -108,7 +108,7 @@ final class ProviderAuthDialog implements PiRuntime.Listener {
       LinearLayout actions=new LinearLayout(context);actions.setGravity(Gravity.END);
       if(provider.optBoolean("oauthLogin"))actions.addView(new Ui.Action(context,R.drawable.ic_arrow_square_out,"OAuth 登录","使用 OAuth 登录 "+provider.optString("name"),theme.accent,theme.accentSoft,()->login(provider.optString("id"),"oauth")),new LinearLayout.LayoutParams(-2,-2));
       if(provider.optBoolean("apiKeyLogin"))actions.addView(new Ui.Action(context,R.drawable.ic_gear_six,"Key 登录","使用供应商提供的 API Key 登录",theme.ink,theme.field,()->login(provider.optString("id"),"api_key")),new LinearLayout.LayoutParams(-2,-2));
-      if(!provider.optString("id").equals("custom"))actions.addView(new Ui.Action(context,R.drawable.ic_x,"","移除 "+provider.optString("name"),theme.error,Color.TRANSPARENT,()->remove(provider.optString("id"))),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
+      if(!provider.optString("id").equals("custom"))actions.addView(new Ui.Action(context,R.drawable.ic_x,"","移除 "+provider.optString("name"),theme.error,Color.TRANSPARENT,()->remove(provider.optString("id"))),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
       card.addView(actions,new LinearLayout.LayoutParams(-1,-2));
       list.addView(card,new LinearLayout.LayoutParams(-1,-2));LinearLayout.LayoutParams params=(LinearLayout.LayoutParams)card.getLayoutParams();params.topMargin=list.getChildCount()==1?0:Ui.dp(context,8);card.setLayoutParams(params);
     }

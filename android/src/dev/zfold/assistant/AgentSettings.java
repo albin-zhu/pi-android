@@ -36,7 +36,7 @@ final class AgentSettings implements PiRuntime.Listener {
     int width=Math.min(Ui.dp(context,420),context.getResources().getDisplayMetrics().widthPixels-Ui.dp(context,28));
     LinearLayout head=new LinearLayout(context);head.setGravity(Gravity.CENTER_VERTICAL);
     TextView title=Ui.text(context,"Agent 身份",17,theme.ink);title.setTypeface(Typeface.create("sans-serif-medium",0));head.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-    head.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭 Agent 身份设置",theme.muted,Color.TRANSPARENT,()->handle[0].dismiss()),new LinearLayout.LayoutParams(Ui.dp(context,42),Ui.dp(context,42)));
+    head.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭 Agent 身份设置",theme.muted,Color.TRANSPARENT,()->handle[0].dismiss()),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     sheet.addView(head);
     TextView help=Ui.text(context,"名字会用于聊天标题、自我介绍和系统提示词。system.md 保存完整提示词，保存后立即重载。",12,theme.muted);help.setLineSpacing(Ui.dp(context,3),1f);LinearLayout.LayoutParams helpParams=new LinearLayout.LayoutParams(-1,-2);helpParams.topMargin=Ui.dp(context,9);sheet.addView(help,helpParams);
     LinearLayout avatarRow=new LinearLayout(context);avatarRow.setGravity(Gravity.CENTER_VERTICAL);LinearLayout.LayoutParams avatarRowParams=new LinearLayout.LayoutParams(-1,-2);avatarRowParams.topMargin=Ui.dp(context,14);sheet.addView(avatarRow,avatarRowParams);

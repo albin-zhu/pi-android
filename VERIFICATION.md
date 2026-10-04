@@ -645,3 +645,13 @@
 以上文件和图片保存在 `artifacts/interaction-redesign/`。0.2.69 compat28 APK 构建通过。验收并未扩大到所有 Android 版本、所有第三方真实账号或进程被系统杀死后的恢复。
 
 - **终端横屏最终复核**：旋转过渡结束后，发现标题栏/按键栏挤占空间，以及上游视图最低四行会把光标放到可见区域之外。紧凑布局收起标题栏，并在按键栏提供会话、选项、收起；视图行数最低两行，与 TerminalEmulator 的限制一致。`terminal-visible-cursor.txt` 六项通过，另断言真实光标底边不超过视图高度；已查看 `terminal-landscape-visible-cursor.png`，输出、提示符和光标可见。第三方组件改动已记录在其 README。
+
+## 2026-10-05 · 0.2.70 最终边界与完成审计
+
+- 初始真实边缘拖动复现浮球进入状态栏：`bubble=Rect(21, 0 - 158, 137)`，安全区域为 `Rect(0, 63 - 1080, 2337)`。第一次 probe 把断言放在主线程，导致 instrumentation 进程退出；后续 probe 将断言移回测试线程。原坐标证据保存在 `bounds-before-detail.txt`，未把该次退出误报为成功。
+- 窗口使用完整显示区域坐标，DockingDrag 显式约束 systemBars / displayCutout；旋转时重新约束位置。`bounds-after.txt` 六项通过：横竖屏两角、旋转重新定位、贴边重新点击。`floating-safe-area.png` 已查看，浮球未遮住系统栏。
+- 关闭、刷新、移除等 Ui.Action 的固定尺寸补到 48dp；带文字的编辑和设置按钮使用内容宽度，避免挤压文字。
+- 修复工具目录消费返回键却没有关闭的问题。`final-navigation.txt` 九项通过，新增目录返回键检查，保持工作台路径、草稿、拖动与真实 Pi 回合继续执行的原有验收。
+- `acceptance-node-tests.txt`：57 项通过、0 项失败。`final-build.log`：compat28 APK 构建与签名校验成功，已安装模拟器。
+- 最终 APK：`Zfold-0.2.70-compat28-debug.apk`，versionCode 270、targetSdk 28、arm64-v8a；SHA-256 `1da769b5b2192c3ad40632b69066e51b01c8a24579d7cb85944c3cb25ddfd022`。
+- 已按原始要求、计划表、测试断言和已查看图像完成审计，当前完整结果统一在 INTERACTION_REDESIGN.md。旧章节中的“待验证”记录保留其历史含义，以最新完成审计为准。

@@ -12,16 +12,16 @@ final class DockingDrag implements View.OnTouchListener,Choreographer.FrameCallb
   private final View view;private final WindowManager manager;private final WindowManager.LayoutParams params;private final Position position;
   private final Handler main=new Handler(Looper.getMainLooper());private final Context app;
   private VelocityTracker velocity;private float downX,downY,originX,originY,x,y,vx,vy,targetX,targetY;
-  private int maxX,maxY;private boolean moving,longPressed,settling,disposed;private long frameAt;private int frames;
+  private int minX,minY,maxX,maxY;private boolean moving,longPressed,settling,disposed;private long frameAt;private int frames;
   private final Runnable longPress=this::longPress;
   private void longPress(){if(!moving&&!disposed&&view.isPressed()){longPressed=view.performLongClick();view.setPressed(false);}}
   DockingDrag(View view,WindowManager manager,WindowManager.LayoutParams params,Position position){
     this.view=view;this.manager=manager;this.params=params;this.position=position;app=view.getContext().getApplicationContext();app.registerComponentCallbacks(this);bounds();
   }
-  private void bounds(){WindowMetrics metrics=manager.getMaximumWindowMetrics();Rect rect=metrics.getBounds();Insets bars=metrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());maxX=Math.max(0,rect.width()-bars.left-bars.right-params.width);maxY=Math.max(0,rect.height()-bars.top-bars.bottom-params.height);}
-  private int edge(){return Math.min(Ui.dp(view.getContext(),8),maxX/2);}
+  private void bounds(){WindowMetrics metrics=manager.getMaximumWindowMetrics();Rect rect=metrics.getBounds();Insets bars=metrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());minX=bars.left;minY=bars.top;maxX=Math.max(minX,rect.width()-bars.right-params.width);maxY=Math.max(minY,rect.height()-bars.bottom-params.height);}
+  private int edge(){return Math.min(Ui.dp(view.getContext(),8),(maxX-minX)/2);}
   void place(){bounds();set(params.x<0?maxX-edge():params.x,params.y);}
-  private void set(float nx,float ny){x=Math.max(0,Math.min(maxX,nx));y=Math.max(0,Math.min(maxY,ny));params.x=Math.round(x);params.y=Math.round(y);if(view.isAttachedToWindow())try{manager.updateViewLayout(view,params);}catch(IllegalArgumentException ignored){}position.save(params.x,params.y);}
+  private void set(float nx,float ny){x=Math.max(minX,Math.min(maxX,nx));y=Math.max(minY,Math.min(maxY,ny));params.x=Math.round(x);params.y=Math.round(y);if(view.isAttachedToWindow())try{manager.updateViewLayout(view,params);}catch(IllegalArgumentException ignored){}position.save(params.x,params.y);}
   private void cancel(){settling=false;Choreographer.getInstance().removeFrameCallback(this);main.removeCallbacks(longPress);}
   public boolean onTouch(View ignored,MotionEvent event){
     if(disposed)return false;
@@ -41,19 +41,20 @@ final class DockingDrag implements View.OnTouchListener,Choreographer.FrameCallb
     }
   }
   private void dock(){
-    targetX=x+vx*.12f<maxX*.5f?edge():maxX-edge();float reach=Ui.dp(view.getContext(),72);targetY=Math.max(0,Math.min(maxY,y+Math.max(-reach,Math.min(reach,vy*.07f))));
+    targetX=x+vx*.12f<(minX+maxX)*.5f?minX+edge():maxX-edge();float reach=Ui.dp(view.getContext(),72);targetY=Math.max(minY,Math.min(maxY,y+Math.max(-reach,Math.min(reach,vy*.07f))));
     if(!Ui.motion()){set(targetX,targetY);return;}
     settling=true;frameAt=0;frames=0;Choreographer.getInstance().postFrameCallback(this);
   }
   public void doFrame(long now){
     if(!settling||disposed)return;
+    if(!Ui.motion()){settling=false;set(targetX,targetY);return;}
     float elapsed=frameAt==0?1f/60:Math.min(.12f,(now-frameAt)/1_000_000_000f);frameAt=now;
     int steps=Math.max(1,(int)Math.ceil(elapsed/.008f));float dt=elapsed/steps;
     for(int i=0;i<steps;i++){vx+=(500*(targetX-x)-42*vx)*dt;vy+=(500*(targetY-y)-42*vy)*dt;x+=vx*dt;y+=vy*dt;}set(x,y);
     if(++frames>120||(Math.hypot(targetX-x,targetY-y)<.6&&Math.hypot(vx,vy)<8)){settling=false;set(targetX,targetY);return;}
     Choreographer.getInstance().postFrameCallback(this);
   }
-  public void onConfigurationChanged(Configuration configuration){main.post(()->{if(disposed)return;cancel();boolean right=params.x>maxX/2;bounds();set(right?maxX-edge():edge(),params.y);});}
+  public void onConfigurationChanged(Configuration configuration){main.post(()->{if(disposed)return;cancel();boolean right=params.x>(minX+maxX)/2;bounds();set(right?maxX-edge():minX+edge(),params.y);});}
   public void onLowMemory(){}
   void dispose(){disposed=true;cancel();if(velocity!=null){velocity.recycle();velocity=null;}app.unregisterComponentCallbacks(this);}
 }

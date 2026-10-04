@@ -35,7 +35,8 @@ public final class InteractionInstrumentation extends Instrumentation implements
       click("Skills");waitText("本地 Skills");click("关闭 Skill 管理");waitText("手机工作台页面");
       click("模型与账号");waitText("连接你的模型");click("取消");waitText("手机工作台页面");
       click("读屏与操作");for(int i=0;i<50;i++){AccessibilityNodeInfo root=getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).getRootInActiveWindow();if(root!=null&&"com.android.settings".contentEquals(root.getPackageName()))break;Thread.sleep(100);if(i==49)throw new IllegalStateException("System accessibility settings missing");}back();waitText("手机工作台页面");
-      EmulatorChecks.screenshot(this,"workbench-navigation.png");result.putBoolean("workbenchRoutes",true);back();
+      EmulatorChecks.screenshot(this,"workbench-navigation.png");result.putBoolean("workbenchRoutes",true);
+      click("工具目录");waitText("功能中心");back();waitText("打开工作台");result.putBoolean("catalogBackCloses",true);runOnMainSync(()->{MainActivity main=MainActivity.current();if(main!=null)main.finish();});waitText("手机工作台页面");back();
       for(int i=0;i<50&&!AssistantOverlay.isShowing();i++)Thread.sleep(100);runOnMainSync(()->{});require(AssistantOverlay.isShowing()&&AssistantOverlay.currentPanel().input.getText().toString().equals("Gesture draft")&&ScreenContext.enabled(),"Work screen return lost floating draft");result.putBoolean("workScreenDraftReturn",true);
       for(int i=0;i<200&&!runtime.ready;i++)Thread.sleep(100);
       runOnMainSync(()->runtime.send(PiRuntime.json("type","configure","config",PiRuntime.json("baseUrl","http://127.0.0.1:18875/v1","model","interaction-test","apiKey","fixture","api","openai-completions"))));require(configured.await(20,TimeUnit.SECONDS),"Model fixture not configured");

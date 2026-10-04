@@ -554,7 +554,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       LinearLayout labels=new LinearLayout(this);labels.setOrientation(LinearLayout.VERTICAL);LinearLayout.LayoutParams labelParams=new LinearLayout.LayoutParams(0,-2,1);labelParams.leftMargin=dp(9);row.addView(labels,labelParams);
       TextView title=text(file.name,13,theme.ink);title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));labels.addView(title);
       String detail=file.detail.replace("\n"," · ");TextView detailView=text(detail,11,theme.muted);detailView.setSingleLine(true);detailView.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);labels.addView(detailView);
-      row.addView(new Ui.Action(this,R.drawable.ic_x,"","移除 "+file.name,theme.muted,Color.TRANSPARENT,()->{localFiles.remove(file);updateDraftAttachment();}),new LinearLayout.LayoutParams(dp(42),dp(42)));
+      row.addView(new Ui.Action(this,R.drawable.ic_x,"","移除 "+file.name,theme.muted,Color.TRANSPARENT,()->{localFiles.remove(file);updateDraftAttachment();}),new LinearLayout.LayoutParams(dp(48),dp(48)));
       row.setBackground(Ui.ripple(this,theme.surface,12,theme.ink));row.setClickable(true);row.setFocusable(true);
       fileList.addView(row,new LinearLayout.LayoutParams(-1,-2));
     }

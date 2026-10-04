@@ -156,7 +156,7 @@ export class ConnectorManager {
     const headers={...config.headers};if(config.auth==='bearer'&&config.token)headers.Authorization='Bearer '+config.token;
     const provider=config.auth==='oauth'?this.provider(config,entry):undefined;
     const createClient=()=>{
-      const client=new Client({name:'zfold-android',version:'0.2.69'},{capabilities:{roots:{listChanged:true}}});
+      const client=new Client({name:'zfold-android',version:'0.2.70'},{capabilities:{roots:{listChanged:true}}});
       client.setRequestHandler(ListRootsRequestSchema,async()=>({roots:[{uri:pathToFileURL(this.workspace()).href,name:'当前项目'}]}));
       client.setNotificationHandler(ToolListChangedNotificationSchema,()=>{if(valid()&&entry.state==='connected')this.loadTools(config,entry).catch(error=>{entry.error=this.redact(error,config);this.changed();});});
       client.onclose=()=>{if(valid()){entry.state='disconnected';entry.error='连接已关闭，点击重新连接';entry.tools=[];this.changed();}};

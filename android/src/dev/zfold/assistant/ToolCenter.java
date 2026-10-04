@@ -48,7 +48,7 @@ final class ToolCenter implements PiRuntime.Listener {
   private void open(int initial){
     Context context=anchor.getContext();section=initial;
     FrameLayout frame=new FrameLayout(context);frame.setFocusableInTouchMode(true);
-    frame.setOnKeyListener((v,key,event)->event.getAction()==KeyEvent.ACTION_UP&&key==KeyEvent.KEYCODE_BACK);
+    frame.setOnKeyListener((v,key,event)->{if(key!=KeyEvent.KEYCODE_BACK)return false;if(event.getAction()==KeyEvent.ACTION_UP)close();return true;});
     View scrim=new View(context);scrim.setBackgroundColor(0x74000000);scrim.setContentDescription("关闭工具中心");scrim.setClickable(true);scrim.setOnClickListener(v->close());
     frame.addView(scrim,new FrameLayout.LayoutParams(-1,-1));
     LinearLayout drawer=new LinearLayout(context);drawer.setOrientation(LinearLayout.VERTICAL);drawer.setBackgroundColor(theme.surface);drawer.setElevation(Ui.dp(context,18));drawer.setClickable(true);
@@ -59,8 +59,8 @@ final class ToolCenter implements PiRuntime.Listener {
     frame.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());drawer.setPadding(Ui.dp(context,16)+bars.left,bars.top+Ui.dp(context,16),Ui.dp(context,16)+bars.right,bars.bottom+Ui.dp(context,16));return insets;});
     LinearLayout brand=new LinearLayout(context);brand.setGravity(Gravity.CENTER_VERTICAL);
     TextView title=Ui.text(context,"功能中心",19,theme.ink);title.setTypeface(Typeface.create("sans-serif-medium",0));brand.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-    brand.addView(new Ui.Action(context,R.drawable.ic_arrow_clockwise,"","刷新工具目录",theme.muted,Color.TRANSPARENT,this::refresh),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
-    brand.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭工具中心",theme.muted,Color.TRANSPARENT,this::close),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
+    brand.addView(new Ui.Action(context,R.drawable.ic_arrow_clockwise,"","刷新工具目录",theme.muted,Color.TRANSPARENT,this::refresh),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
+    brand.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭工具中心",theme.muted,Color.TRANSPARENT,this::close),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     drawer.addView(brand);
     TextView help=Ui.text(context,"会话、Agent、供应商、工具和运行时的统一入口。列表只展示能力；执行仍受权限和确认控制。",12,theme.muted);
     help.setLineSpacing(Ui.dp(context,3),1f);LinearLayout.LayoutParams helpParams=new LinearLayout.LayoutParams(-1,-2);helpParams.setMargins(0,Ui.dp(context,9),0,0);drawer.addView(help,helpParams);
@@ -165,7 +165,7 @@ final class ToolCenter implements PiRuntime.Listener {
     LinearLayout labels=new LinearLayout(context);labels.setOrientation(LinearLayout.VERTICAL);LinearLayout.LayoutParams labelParams=new LinearLayout.LayoutParams(0,-2,1);labelParams.leftMargin=Ui.dp(context,10);card.addView(labels,labelParams);
     TextView titleView=Ui.text(context,title,14,theme.ink);titleView.setTypeface(Typeface.create("sans-serif-medium",0));labels.addView(titleView);
     TextView detailView=Ui.text(context,detail,11,theme.muted);detailView.setSingleLine(true);detailView.setEllipsize(TextUtils.TruncateAt.END);LinearLayout.LayoutParams detailParams=new LinearLayout.LayoutParams(-1,-2);detailParams.topMargin=Ui.dp(context,3);labels.addView(detailView,detailParams);
-    card.addView(new Ui.Action(context,R.drawable.ic_arrow_up,"","打开 "+title,theme.accent,Color.TRANSPARENT,action),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
+    card.addView(new Ui.Action(context,R.drawable.ic_arrow_up,"","打开 "+title,theme.accent,Color.TRANSPARENT,action),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     card.setOnClickListener(v->{Ui.click(card);action.run();});
     card.setContentDescription(title+"，"+detail);
     list.addView(card,new LinearLayout.LayoutParams(-1,-2));LinearLayout.LayoutParams params=(LinearLayout.LayoutParams)card.getLayoutParams();params.topMargin=list.getChildCount()==1?0:Ui.dp(context,8);card.setLayoutParams(params);
@@ -255,7 +255,7 @@ final class ToolCenter implements PiRuntime.Listener {
     LinearLayout.LayoutParams detailParams=new LinearLayout.LayoutParams(-1,-2);detailParams.setMargins(0,Ui.dp(context,6),0,0);card.addView(detailView,detailParams);
     if(secondary!=null||primaryAction!=null){
       LinearLayout actions=new LinearLayout(context);actions.setGravity(Gravity.END);
-      if(secondary!=null)actions.addView(new Ui.Action(context,R.drawable.ic_gear_six,"设置","打开设置",theme.muted,Color.TRANSPARENT,secondary),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
+      if(secondary!=null)actions.addView(new Ui.Action(context,R.drawable.ic_gear_six,"设置","打开设置",theme.muted,Color.TRANSPARENT,secondary),new LinearLayout.LayoutParams(-2,Ui.dp(context,48)));
       if(primaryAction!=null)actions.addView(new Ui.Action(context,R.drawable.ic_arrow_up,"运行","运行 "+title,theme.accent,theme.accentSoft,primaryAction),new LinearLayout.LayoutParams(-2,-2));
       card.addView(actions,new LinearLayout.LayoutParams(-1,-2));
     }

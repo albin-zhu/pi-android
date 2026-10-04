@@ -34,8 +34,8 @@ final class SkillManager implements PiRuntime.Listener {
     drawer.setPadding(Ui.dp(context,16),top+Ui.dp(context,16),Ui.dp(context,16),Ui.dp(context,16));
     LinearLayout brand=new LinearLayout(context);brand.setGravity(Gravity.CENTER_VERTICAL);
     TextView title=Ui.text(context,"本地 Skills",18,theme.ink);title.setTypeface(Typeface.create("sans-serif-medium",0));title.setLetterSpacing(-.01f);brand.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-    brand.addView(new Ui.Action(context,R.drawable.ic_arrow_clockwise,"","刷新本地 Skills",theme.muted,Color.TRANSPARENT,this::refresh),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
-    brand.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭 Skill 管理",theme.muted,Color.TRANSPARENT,this::close),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
+    brand.addView(new Ui.Action(context,R.drawable.ic_arrow_clockwise,"","刷新本地 Skills",theme.muted,Color.TRANSPARENT,this::refresh),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
+    brand.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭 Skill 管理",theme.muted,Color.TRANSPARENT,this::close),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     drawer.addView(brand);
     TextView help=Ui.text(context,"项目 Skill 存放在项目 .pi/skills，全局 Skill 对所有项目生效。实际路径见下方目录信息。",12,theme.muted);help.setLineSpacing(Ui.dp(context,3),1f);LinearLayout.LayoutParams helpParams=new LinearLayout.LayoutParams(-1,-2);helpParams.setMargins(0,Ui.dp(context,10),0,0);drawer.addView(help,helpParams);
     LinearLayout buttons=new LinearLayout(context);buttons.setOrientation(LinearLayout.HORIZONTAL);
@@ -85,8 +85,8 @@ final class SkillManager implements PiRuntime.Listener {
       card.addView(head);
       TextView desc=Ui.text(context,item.optString("description","没有描述"),12,theme.muted);desc.setMaxLines(3);desc.setEllipsize(TextUtils.TruncateAt.END);desc.setLineSpacing(Ui.dp(context,3),1f);LinearLayout.LayoutParams descParams=new LinearLayout.LayoutParams(-1,-2);descParams.topMargin=Ui.dp(context,6);card.addView(desc,descParams);
       LinearLayout actions=new LinearLayout(context);actions.setGravity(Gravity.END);actions.setOrientation(LinearLayout.HORIZONTAL);
-      actions.addView(new Ui.Action(context,R.drawable.ic_copy,"编辑","编辑本地 Skill",theme.ink,Color.TRANSPARENT,()->edit(item,item.optString("scope","project"))),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
-      actions.addView(new Ui.Action(context,R.drawable.ic_x,"","删除 "+item.optString("name","skill"),theme.error,Color.TRANSPARENT,()->confirmDelete(item)),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
+      actions.addView(new Ui.Action(context,R.drawable.ic_copy,"编辑","编辑本地 Skill",theme.ink,Color.TRANSPARENT,()->edit(item,item.optString("scope","project"))),new LinearLayout.LayoutParams(-2,Ui.dp(context,48)));
+      actions.addView(new Ui.Action(context,R.drawable.ic_x,"","删除 "+item.optString("name","skill"),theme.error,Color.TRANSPARENT,()->confirmDelete(item)),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
       card.addView(actions,new LinearLayout.LayoutParams(-1,-2));
       list.addView(card,new LinearLayout.LayoutParams(-1,-2));LinearLayout.LayoutParams params=(LinearLayout.LayoutParams)card.getLayoutParams();params.topMargin=i==0?0:Ui.dp(context,8);card.setLayoutParams(params);
     }

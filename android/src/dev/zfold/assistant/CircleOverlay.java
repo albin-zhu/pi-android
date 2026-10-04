@@ -32,7 +32,7 @@ public final class CircleOverlay {
     Ui.Bubble view=new Ui.Bubble(context);view.setBusy(PiRuntime.get(context).busy);
     int size=Math.round(52*context.getResources().getDisplayMetrics().density);
     int type=service!=null?WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY:WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-    WindowManager.LayoutParams p=new WindowManager.LayoutParams(size,size,type,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,PixelFormat.TRANSLUCENT);p.gravity=Gravity.TOP|Gravity.LEFT;p.y=bubbleY;p.x=bubbleX;p.setFitInsetsTypes(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+    WindowManager.LayoutParams p=new WindowManager.LayoutParams(size,size,type,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);p.gravity=Gravity.TOP|Gravity.LEFT;p.y=bubbleY;p.x=bubbleX;p.setFitInsetsTypes(0);p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
     view.setOnClickListener(v->{Ui.click(v);AssistantOverlay.show(context);});
     view.setOnLongClickListener(v->{v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);showActions(context,v);return true;});
     DockingDrag controller=new DockingDrag(view,wm,p,(x,y)->{bubbleX=x;bubbleY=y;});controller.place();view.setOnTouchListener(controller);
