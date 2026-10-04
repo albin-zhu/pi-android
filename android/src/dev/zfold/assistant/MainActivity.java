@@ -22,9 +22,10 @@ import java.util.*;
 public final class MainActivity extends Activity implements PiRuntime.Listener {
   static final int BG=Color.rgb(245,246,247), INK=Color.rgb(16,20,24), MUTED=Color.rgb(95,107,120), ACCENT=Color.rgb(47,111,237), LINE=Color.rgb(226,230,234);
   static volatile MainActivity current;
-  PiRuntime runtime; LinearLayout conversation,root,intro,draftAttachment,fileList,composerSurface,statusRow,actionToolbar; android.view.View slashSuggest; FrameLayout composerFrame;ScrollView scroll; TextView status,draftLabel; Ui.RichBlock answer; Ui.Action voiceButton,modelButton,circleButton,attachButton,screenShareButton,sendButton,sessionButton,overflowButton; EditText input; ImageView draftThumbnail,draftExpanded; Bitmap draftBitmap; Ui.Theme theme;
+  PiRuntime runtime; LinearLayout conversation,root,intro,draftAttachment,fileList,composerSurface,statusRow,actionToolbar; android.view.View slashSuggest; FrameLayout composerFrame;ScrollView scroll; TextView status,draftLabel,appTitle; Ui.RichBlock answer; Ui.Action voiceButton,modelButton,circleButton,attachButton,screenShareButton,sendButton,sessionButton,overflowButton; EditText input; ImageView draftThumbnail,draftExpanded; Bitmap draftBitmap; Ui.Theme theme;
   StringBuilder response=new StringBuilder(); boolean continuous,compactHeader,screenSharing,capturingScreen,composerCompact;
   final Runnable screenListener=()->{screenSharing=ScreenContext.enabled();updateScreenShareControl();};
+  private boolean returnWorkbench,temporarySettingsHost;
   String lastSentFiles="";
   int statusToken;
   VoiceTurnController voice;
@@ -34,7 +35,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   String pendingTaskPrompt;
   final Map<String,ToolCallView> toolViews=new LinkedHashMap<>();
   @Override public void onCreate(Bundle state){
-    super.onCreate(state);theme=new Ui.Theme(this);compactHeader=getResources().getConfiguration().screenWidthDp<360;getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);
+    super.onCreate(state);returnWorkbench=getIntent().getBooleanExtra("return_workbench",false);temporarySettingsHost=returnWorkbench;theme=new Ui.Theme(this);compactHeader=getResources().getConfiguration().screenWidthDp<360;getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);
     getWindow().getDecorView().setSystemUiVisibility(theme.dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     current=this;
     runtime=PiRuntime.get(this);runtime.listen(this);
@@ -50,6 +51,9 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     buildUI();ScreenContext.listen(screenListener);screenListener.run();
     if(runtime.ready&&!runtime.configured)runtime.restoreConfiguration();
     else if(runtime.configured)runtime.send(PiRuntime.json("type","history"));
+    if(getIntent().getBooleanExtra("open_capabilities",false)){getIntent().removeExtra("open_capabilities");permissions();}
+    if(getIntent().getBooleanExtra("open_speech",false)){getIntent().removeExtra("open_speech");speechCapabilities();}
+    if(getIntent().getBooleanExtra("open_tools",false)){getIntent().removeExtra("open_tools");sessionButton.post(()->showToolCenter(sessionButton));}
     if(getIntent().getBooleanExtra("open_models",false)){getIntent().removeExtra("open_models");settings();}
     if(getIntent().getBooleanExtra("open_sessions",false)){getIntent().removeExtra("open_sessions");sessionButton.post(this::openSidebar);}
     if(getIntent().getBooleanExtra("open_provider_auth",false)){getIntent().removeExtra("open_provider_auth");sessionButton.post(()->ProviderAuthDialog.show(sessionButton,runtime));}
@@ -78,6 +82,10 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   void buildUI(){
     root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(theme.page);root.setPadding(dp(12),0,dp(12),dp(10));
     root.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());android.graphics.Insets ime=insets.getInsets(WindowInsets.Type.ime());root.setPadding(dp(12)+bars.left,bars.top+dp(2),dp(12)+bars.right,dp(10)+Math.max(bars.bottom,ime.bottom));return insets;});
+    LinearLayout navigation=new LinearLayout(this);navigation.setGravity(Gravity.CENTER_VERTICAL);navigation.setPadding(dp(2),dp(5),0,dp(5));
+    TextView name=text(runtime.agentName,20,theme.ink);appTitle=name;name.setTypeface(Typeface.create("sans-serif-medium",0));name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);navigation.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+    navigation.addView(new Ui.Action(this,R.drawable.ic_sidebar,"","会话",theme.muted,Color.TRANSPARENT,this::openSidebar),new LinearLayout.LayoutParams(dp(48),dp(48)));
+    navigation.addView(new Ui.Action(this,R.drawable.ic_workbench,"工作台","打开工作台",theme.ink,Color.TRANSPARENT,()->WorkbenchActivity.open(this)));root.addView(navigation);
     scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.setClipToPadding(false);
     conversation=new LinearLayout(this);conversation.setOrientation(LinearLayout.VERTICAL);conversation.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(conversation);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     intro=new LinearLayout(this);intro.setOrientation(LinearLayout.VERTICAL);intro.setGravity(Gravity.CENTER);intro.setPadding(dp(12),dp(34),dp(12),dp(30));
@@ -102,7 +110,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     statusRow=new LinearLayout(this);statusRow.setGravity(Gravity.CENTER_VERTICAL);statusRow.setPadding(dp(8),0,dp(8),dp(4));
     status=text(idleStatus(),11,theme.muted);status.setSingleLine(true);status.setEllipsize(android.text.TextUtils.TruncateAt.END);statusRow.addView(status,new LinearLayout.LayoutParams(0,-2,1));
     statusRow.setVisibility(View.GONE);
-    input=new EditText(this);input.setTextSize(16);input.setTextColor(theme.ink);input.setHintTextColor(theme.muted);input.setHint("说说你的想法…");input.setBackgroundColor(Color.TRANSPARENT);input.setMinLines(1);input.setMaxLines(5);input.setPadding(dp(11),dp(4),dp(11),dp(6));input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);composerSurface.addView(input,new LinearLayout.LayoutParams(-1,-2));
+    input=new EditText(this);input.setTextSize(16);input.setTextColor(theme.ink);input.setHintTextColor(theme.muted);input.setHint("说说你的想法…");input.setBackgroundColor(Color.TRANSPARENT);input.setMinLines(1);input.setMaxLines(5);input.setPadding(dp(11),dp(4),dp(11),dp(6));input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);input.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI|android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN);composerSurface.addView(input,new LinearLayout.LayoutParams(-1,-2));
     slashSuggest=SlashSuggest.attach(input,theme,this::runSlashCommand);composerSurface.addView(slashSuggest,new LinearLayout.LayoutParams(-1,-2));
     LinearLayout toolbar=new LinearLayout(this);toolbar.setGravity(Gravity.CENTER_VERTICAL);toolbar.setPadding(dp(2),dp(4),dp(2),0);actionToolbar=toolbar;
     modelButton=new Ui.Action(this,R.drawable.ic_chat_circle_text,"模型","快速切换模型",theme.muted,Color.TRANSPARENT,()->ModelPicker.show(modelButton,runtime));modelButton.label.setMaxWidth(dp(84));modelButton.label.setTextSize(12);toolbar.addView(modelButton);
@@ -168,7 +176,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       public void openSkills(){SkillManager.show(anchor,runtime);}
       public void openProviderAuth(){ProviderAuthDialog.show(anchor,runtime);}
       public void openRuntimePacks(){runtimePacksSettings();}
-      public void openTerminal(){startActivity(new Intent(MainActivity.this,TerminalActivity.class));}
+      public void openTerminal(){TerminalActivity.open(MainActivity.this);}
       public void newSession(){if(!runtime.busy)runtime.send(PiRuntime.json("type","new_session"));}
       public void stopTask(){stop();}
       public void toggleVoice(){toggleVoice();}
@@ -271,7 +279,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     switch(event.optString("type")){
       case "ready":showStatus(idleStatus());updateModelChip();break;
       case "configured":showStatus(idleStatus());updateModelChip();break;
-      case "agent_identity":runtime.send(PiRuntime.json("type","history"));break;
+      case "agent_identity":if(appTitle!=null)appTitle.setText(runtime.agentName);runtime.send(PiRuntime.json("type","history"));break;
       case "jev_status":break;
       case "jev_error":notice(event.optString("message"));break;
       case "session_changed":conversation.removeAllViews();toolViews.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
@@ -303,7 +311,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     int mode=widthDp>=680?0:widthDp>=570?1:widthDp>=420?2:3;
     composerCompact=mode>=1;
     modelButton.label.setMaxWidth(mode==3?dp(56):mode==2?dp(70):dp(84));
-    modelButton.setCompact(mode>=3);screenShareButton.label.setMaxWidth(dp(mode>=2?42:100));
+    modelButton.setCompact(mode>=3);modelButton.setVisibility(widthDp<350&&getResources().getConfiguration().fontScale>1.15f?View.GONE:View.VISIBLE);screenShareButton.label.setMaxWidth(dp((mode>=2?42:100)*getResources().getConfiguration().fontScale));
     voiceButton.setCompact(mode>=1);
     sessionButton.setCompact(true);
     circleButton.setCompact(mode>=1);
@@ -321,6 +329,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   }
   void showToolbarOverflow(){
     ArrayList<Ui.Action> items=new ArrayList<>();
+    if(modelButton.getVisibility()==View.GONE)items.add(modelButton);
     if(sessionButton.getVisibility()==View.GONE)items.add(sessionButton);
     if(circleButton.getVisibility()==View.GONE)items.add(circleButton);
     if(attachButton.getVisibility()==View.GONE)items.add(attachButton);
@@ -374,12 +383,14 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   }
   void settings(){
     JSONObject c=config();LinearLayout fields=new LinearLayout(this);fields.setOrientation(LinearLayout.VERTICAL);fields.setPadding(dp(24),0,dp(24),dp(10));
-    TextView intro=text("Pi 支持多个供应商。custom 保存接口地址和 Key；内置供应商可留空接口地址，用 auth.json 或环境变量认证。配置保存在 storage/pi/.pi/agent。",13,theme.muted);fields.addView(intro);
+    TextView intro=text("填写服务提供的模型与认证信息，也可以登录供应商账号。配置保存在手机私有目录，支持多个供应商。",13,theme.muted);fields.addView(intro);
+    fields.addView(new Ui.Action(this,R.drawable.ic_arrow_square_out,"供应商账号登录","登录供应商账号",theme.accent,theme.field,()->ProviderAuthDialog.show(fields,runtime)));
     AutoCompleteTextView provider=providerField(fields,c.optString("provider","custom"));
     EditText endpoint=field(fields,"接口地址（custom 必填，包含 /v1；内置供应商留空）",c.optString("baseUrl"),false),key=field(fields,"API Key（custom 或 BYOK）",c.optString("apiKey"),true);
     AutoCompleteTextView model=modelField(fields,"模型名称（输入过滤或选择）",c.optString("model"));
     EditText api=field(fields,"消息格式（custom 必填：openai-responses / openai-completions / anthropic-messages / google-generative-ai）",c.optString("api","openai-responses"),false);
     ScrollView formScroll=new ScrollView(this);formScroll.addView(fields);AlertDialog dialog=new AlertDialog.Builder(this).setTitle("连接你的模型").setView(formScroll).setNegativeButton("取消",null).setPositiveButton("保存",null).create();
+    dialog.setOnDismissListener(d->{if(returnWorkbench){returnWorkbench=false;getIntent().removeExtra("return_workbench");WorkbenchActivity.returnFromSettings(this);if(temporarySettingsHost)finishAndRemoveTask();}});
     dialog.setOnShowListener(x->dialog.getButton(-1).setOnClickListener(v->{
       if(runtime.busy){notice("请先停止当前任务");return;}
       String providerId=provider.getText().toString().trim(),url=endpoint.getText().toString().trim(),apiValue=api.getText().toString().trim();
@@ -553,7 +564,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     StringBuilder out=new StringBuilder("[本地文件：");for(int i=0;i<files.size();i++){if(i>0)out.append("，");out.append(files.get(i).name);}return out.append("]").toString();
   }
   @Override protected void onResume(){super.onResume();acceptImage();}
-  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);acceptImage();if(intent.getBooleanExtra("open_models",false)){intent.removeExtra("open_models");settings();}if(intent.getBooleanExtra("open_capabilities",false)){intent.removeExtra("open_capabilities");permissions();}if(intent.getBooleanExtra("open_speech",false)){intent.removeExtra("open_speech");speechCapabilities();}if(intent.getBooleanExtra("open_sessions",false)){intent.removeExtra("open_sessions");sessionButton.post(this::openSidebar);}if(intent.getBooleanExtra("open_provider_auth",false)){intent.removeExtra("open_provider_auth");sessionButton.post(()->ProviderAuthDialog.show(sessionButton,runtime));}if(intent.getBooleanExtra("open_runtime_packs",false)){intent.removeExtra("open_runtime_packs");runtimePacksSettings();}}
+  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);returnWorkbench=intent.getBooleanExtra("return_workbench",false);acceptImage();if(intent.getBooleanExtra("open_tools",false)){intent.removeExtra("open_tools");sessionButton.post(()->showToolCenter(sessionButton));}if(intent.getBooleanExtra("open_models",false)){intent.removeExtra("open_models");settings();}if(intent.getBooleanExtra("open_capabilities",false)){intent.removeExtra("open_capabilities");permissions();}if(intent.getBooleanExtra("open_speech",false)){intent.removeExtra("open_speech");speechCapabilities();}if(intent.getBooleanExtra("open_sessions",false)){intent.removeExtra("open_sessions");sessionButton.post(this::openSidebar);}if(intent.getBooleanExtra("open_provider_auth",false)){intent.removeExtra("open_provider_auth");sessionButton.post(()->ProviderAuthDialog.show(sessionButton,runtime));}if(intent.getBooleanExtra("open_runtime_packs",false)){intent.removeExtra("open_runtime_packs");runtimePacksSettings();}}
   @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==21&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)toggleVoice();if(request==22)toggleWake();}
   @Override protected void onPause(){super.onPause();if(voice.sessionActive()&&!VoiceCallActivity.isActive()){VoiceWakeService.resume(this);}}
   @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);if(new Ui.Theme(this).dark!=theme.dark){recreate();return;}}

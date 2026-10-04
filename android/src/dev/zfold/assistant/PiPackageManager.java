@@ -19,6 +19,10 @@ public final class PiPackageManager {
   public static final long INDEX_TTL=10*60_000L, MAX_DEB=256_000_000L, MAX_INDEX=8_000_000L;
   private static final Object LOCK=new Object();
 
+  public interface Progress {void update(String message);}
+  private static final ThreadLocal<Progress> progress=new ThreadLocal<>();
+  private static void report(String message){Progress observer=progress.get();if(observer!=null)observer.update(message);}
+  public static JSONObject install(Context context,String name,Progress observer)throws Exception{progress.set(observer);try{report("正在读取软件包目录…");return install(context,name);}finally{progress.remove();}}
   private PiPackageManager(){}
 
   public static File root(Context context){return new File(context.getFilesDir(),"runtime/pkg");}
@@ -93,7 +97,8 @@ public final class PiPackageManager {
   private static JSONObject installOne(Context context,JSONObject index,String name)throws Exception {
     NativeToolExecution.checkpoint();
     JSONObject item=index.optJSONObject(name);if(item==null)throw new Exception("仓库中找不到 "+name);
-    File deb=download(context,item);
+    report("下载 "+name+"…");File deb=download(context,item);
+    report("安装 "+name+"…");
     File stage=Files.createTempDirectory(cacheDir(context).toPath(),"extract-").toFile();
     try {
       JSONObject state=installed(context);
@@ -227,7 +232,10 @@ public final class PiPackageManager {
     try {
       connection.connect();
       if(connection.getResponseCode()/100!=2)throw new Exception("下载 HTTP "+connection.getResponseCode());
-      try(InputStream input=connection.getInputStream();OutputStream out=new FileOutputStream(partial)) {transfer(input,out,MAX_DEB);}
+      try(InputStream input=connection.getInputStream();OutputStream out=new FileOutputStream(partial)) {
+        byte[] buffer=new byte[32768];int count;long total=0,last=0;
+        while((count=input.read(buffer))>=0){NativeToolExecution.checkpoint();total+=count;if(total>MAX_DEB)throw new IOException("文件超过大小限制");out.write(buffer,0,count);long now=android.os.SystemClock.uptimeMillis();if(now-last>600){last=now;report("下载 "+name(item)+" · "+(total/1024)+" / "+(item.optLong("size")/1024)+" KB");}}
+      }
       connection.disconnect();
     }finally{connection.disconnect();}
     String actual=sha256(partial);

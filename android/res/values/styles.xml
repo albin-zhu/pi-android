@@ -5,6 +5,9 @@
   <item name="android:navigationBarColor">#F5F6F7</item><item name="android:windowLightNavigationBar">true</item>
   <item name="android:windowActionModeOverlay">true</item><item name="android:windowBackground">#F5F6F7</item>
  </style>
+ <style name="WorkScreenTheme" parent="AppTheme">
+  <item name="android:windowDisablePreview">true</item>
+ </style>
  <style name="TransparentTheme" parent="android:style/Theme.Material.Light.NoActionBar">
   <item name="android:windowIsTranslucent">true</item><item name="android:windowBackground">@android:color/transparent</item>
   <item name="android:windowNoTitle">true</item><item name="android:backgroundDimEnabled">false</item>

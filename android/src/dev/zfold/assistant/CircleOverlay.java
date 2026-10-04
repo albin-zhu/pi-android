@@ -14,13 +14,17 @@ public final class CircleOverlay {
   static View captureView(){return bubble;}
   static volatile String selectedImage;
   static View bubble;static WindowManager manager;static boolean accessibilityBubble;
-  static int bubbleX=20,bubbleY=280;
+  static int bubbleX=-1,bubbleY=280;private static DockingDrag drag;private static VoiceStatus.Listener voiceListener;private static boolean waitingForCompact;
   interface Selected {void done(String image);}
   static boolean hasBubble(){return bubble!=null;}
-  static void hideBubble(){VoiceStatus.stopListening(null);if(bubble!=null){try{manager.removeView(bubble);}catch(IllegalArgumentException ignored){}bubble=null;manager=null;accessibilityBubble=false;}}
+  static void hideBubble(){waitingForCompact=false;removeBubble();}
+  static void suspendForCompact(){waitingForCompact|=hasBubble();removeBubble();}
+  static void resumeAfterCompact(Context context){if(waitingForCompact&&!AssistantOverlay.isShowing()&&!AssistantSessionService.isShowing()){waitingForCompact=false;ensureBubble(context);}}
+  private static void removeBubble(){VoiceStatus.stopListening(voiceListener);voiceListener=null;if(drag!=null){drag.dispose();drag=null;}if(bubble!=null){try{manager.removeView(bubble);}catch(IllegalArgumentException ignored){}bubble=null;manager=null;accessibilityBubble=false;}}
   static void showBubble(Context c){if(hasBubble())hideBubble();else ensureBubble(c);}
   static void ensureBubble(Context c){
-    if(bubble!=null)return;
+    if(UnifiedOverlay.captureView()!=null){waitingForCompact=true;return;}
+    if(bubble!=null)return;waitingForCompact=false;
     PhoneAccessibility service=PhoneAccessibility.instance;
     Context context=service!=null?service:c.getApplicationContext();
     if(service==null&&!Settings.canDrawOverlays(context)){Toast.makeText(context,"请先允许 Zfold 显示悬浮窗",Toast.LENGTH_LONG).show();return;}
@@ -28,27 +32,23 @@ public final class CircleOverlay {
     Ui.Bubble view=new Ui.Bubble(context);view.setBusy(PiRuntime.get(context).busy);
     int size=Math.round(52*context.getResources().getDisplayMetrics().density);
     int type=service!=null?WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY:WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-    WindowManager.LayoutParams p=new WindowManager.LayoutParams(size,size,type,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT);p.gravity=Gravity.TOP|Gravity.RIGHT;p.y=bubbleY;p.x=bubbleX;
-    view.setOnTouchListener(new View.OnTouchListener(){float sx,sy;int ox,oy;boolean moved;long down;
-      public boolean onTouch(View v,android.view.MotionEvent e){if(e.getAction()==0){sx=e.getRawX();sy=e.getRawY();ox=p.x;oy=p.y;moved=false;down=e.getEventTime();return true;}if(e.getAction()==2){float dx=e.getRawX()-sx,dy=e.getRawY()-sy;if(Math.abs(dx)+Math.abs(dy)>12)moved=true;p.x=Math.max(0,ox-(int)dx);p.y=Math.max(0,oy+(int)dy);bubbleX=p.x;bubbleY=p.y;wm.updateViewLayout(view,p);return true;}if(e.getAction()==1){if(!moved){
-        boolean busy=PiRuntime.get(context).busy;
-        if(busy&&e.getEventTime()-down>=500){PiRuntime.get(context).send(PiRuntime.json("type","stop"));PhoneHud.show(context,"正在停止手机操作");}
-        else{hideBubble();if(!busy&&e.getEventTime()-down>=500)begin(context,data->AssistantOverlay.show(context,data));else AssistantOverlay.show(context);}
-      }return true;}return true;}});
+    WindowManager.LayoutParams p=new WindowManager.LayoutParams(size,size,type,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,PixelFormat.TRANSLUCENT);p.gravity=Gravity.TOP|Gravity.LEFT;p.y=bubbleY;p.x=bubbleX;p.setFitInsetsTypes(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+    view.setOnClickListener(v->{Ui.click(v);AssistantOverlay.show(context);});
+    view.setOnLongClickListener(v->{v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);showActions(context,v);return true;});
+    DockingDrag controller=new DockingDrag(view,wm,p,(x,y)->{bubbleX=x;bubbleY=y;});controller.place();view.setOnTouchListener(controller);
     try{
-      wm.addView(view,p);manager=wm;bubble=view;accessibilityBubble=service!=null;
-      VoiceStatus.listen((state,message,previous)->{
-        view.setVoiceState(state,message);
-        String label;
-        if(state==VoiceStatus.State.LISTENING)label="正在听";
-        else if(state==VoiceStatus.State.THINKING)label="思考中";
-        else if(state==VoiceStatus.State.SPEAKING)label="正在播报";
-        else if(state==VoiceStatus.State.TASK)label="正在操作手机";
-        else if(state==VoiceStatus.State.ERROR)label="语音需要处理";
-        else label="语音已结束";
-        Toast.makeText(context,label,Toast.LENGTH_SHORT).show();
-      });
-    }catch(RuntimeException error){Toast.makeText(context,"悬浮入口未能显示，请检查手机能力",Toast.LENGTH_LONG).show();}
+      wm.addView(view,p);manager=wm;bubble=view;drag=controller;accessibilityBubble=service!=null;
+      voiceListener=(state,message,previous)->view.setVoiceState(state,message);VoiceStatus.listen(voiceListener);
+    }catch(RuntimeException error){controller.dispose();Toast.makeText(context,"悬浮入口未能显示，请检查手机能力",Toast.LENGTH_LONG).show();}
+  }
+  private static void showActions(Context context,View anchor){
+    PopupMenu menu=new PopupMenu(new ContextThemeWrapper(context,R.style.AppTheme),anchor);
+    menu.getMenu().add("展开助手").setOnMenuItemClickListener(item->{AssistantOverlay.show(context);return true;});
+    menu.getMenu().add("看屏幕").setOnMenuItemClickListener(item->{AssistantOverlay.show(context);AssistantPanel panel=AssistantOverlay.currentPanel();if(panel!=null&&!ScreenContext.enabled())panel.toggleScreenShare();return true;});
+    menu.getMenu().add("圈选屏幕").setOnMenuItemClickListener(item->{hideBubble();begin(context,data->AssistantOverlay.show(context,data));return true;});
+    menu.getMenu().add("工作台").setOnMenuItemClickListener(item->{WorkbenchActivity.open(context);return true;});
+    if(PiRuntime.get(context).busy)menu.getMenu().add("停止当前任务").setOnMenuItemClickListener(item->{PiRuntime.get(context).send(PiRuntime.json("type","stop"));return true;});
+    menu.getMenu().add("关闭悬浮入口").setOnMenuItemClickListener(item->{ScreenContext.setEnabled(false);hideBubble();return true;});menu.show();
   }
   static void setBusy(boolean busy){if(bubble instanceof Ui.Bubble)((Ui.Bubble)bubble).setBusy(busy);}
   static void accessibilityConnected(Context context){if(bubble!=null&&!accessibilityBubble){hideBubble();ensureBubble(context);}}
@@ -57,8 +57,8 @@ public final class CircleOverlay {
     begin(context,data->{selectedImage=data;context.startActivity(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));});
   }
   static void begin(Context context,Selected selected){
-    if(!Settings.canDrawOverlays(context)){Toast.makeText(context,"请先在手机能力中允许悬浮窗",Toast.LENGTH_LONG).show();return;}
-    PhoneAccessibility service=PhoneAccessibility.instance;if(service==null){Toast.makeText(context,"请先开启 Zfold 无障碍服务",Toast.LENGTH_LONG).show();return;}
+    PhoneAccessibility service=PhoneAccessibility.instance;if(service==null){Toast.makeText(context,"圈选需要先开启读屏与操作服务",Toast.LENGTH_LONG).show();context.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));return;}
+    hideBubble();
     if(context instanceof Activity)((Activity)context).moveTaskToBack(true);
     new Handler(Looper.getMainLooper()).postDelayed(()->service.capture((bitmap,error)->{
       if(error!=null){Toast.makeText(context,error,Toast.LENGTH_LONG).show();return;}
@@ -66,10 +66,10 @@ public final class CircleOverlay {
     }),350);
   }
   static void showSelection(Context context,Bitmap bitmap,Selected selected){
-    Context app=context.getApplicationContext();
-    if(!Settings.canDrawOverlays(app)){bitmap.recycle();Toast.makeText(app,"请先允许悬浮窗",Toast.LENGTH_LONG).show();return;}
-    WindowManager wm=(WindowManager)app.getSystemService(Context.WINDOW_SERVICE);
-    Selection view=new Selection(app,bitmap,wm,selected);WindowManager.LayoutParams p=new WindowManager.LayoutParams(-1,-1,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;wm.addView(view,p);
+    Context app=context.getApplicationContext();PhoneAccessibility service=PhoneAccessibility.instance;
+    if(service==null&&!Settings.canDrawOverlays(app)){bitmap.recycle();Toast.makeText(app,"读屏服务已断开，请重新开启后再圈选",Toast.LENGTH_LONG).show();return;}
+    Context host=service!=null?service:app;WindowManager wm=(WindowManager)host.getSystemService(Context.WINDOW_SERVICE);
+    Selection view=new Selection(host,bitmap,wm,selected);WindowManager.LayoutParams p=new WindowManager.LayoutParams(-1,-1,service!=null?WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY:WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;wm.addView(view,p);
   }
   static class Selection extends FrameLayout {
     final Bitmap screenshot;final WindowManager wm;final Selected selected;Runnable dismissed=()->{};

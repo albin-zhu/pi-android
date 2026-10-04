@@ -628,3 +628,20 @@
 
 - 0.2.68 最终 APK 再次通过上述 7 项，截图已核对：浮窗位于独立目标应用之上，顶部显示 `Screen QA Target`，看屏幕按钮完整可见，完成后恢复发送状态。
 - 另跑旧 `KeyboardInstrumentation` 未通过：`imeInsetVisible=true`、`panelBottom=1517`、`sendBottom=1478`，但 `keyboardTop=-1`，未取得输入法窗口，不能据此判断键盘遮挡已经解决。日志 `artifacts/interaction-redesign/screen-keyboard.txt`，这项继续列为未完成。测试需在 instrumentation 重启后重新绑定模拟器无障碍服务；本次仅开启本测试应用服务。
+
+## 2026-10-05 · 0.2.69 工作台与浮窗
+
+本阶段只使用 Android 16 模拟器。旧 `Medium_Phone_API_36.1` 正常关闭后，使用新建的 `Pi_Workbench_QA`（显式序列号 `emulator-5554`），不访问用户拿走的真机。
+
+- **工作台与拖动**：`workbench-android.txt`、`workbench-large-font.txt` 均为 `INSTRUMENTATION_CODE: -1`，八项通过。真实注入触摸验证抓取偏移、吸边中断、关闭动画；任务/通话状态与浮球互斥；界面进入终端、连接、Skills、模型设置、系统无障碍设置后返回；文本草稿保留；关闭界面后真实 Pi HTTP 回合继续完成。后一次使用 1.3 倍系统字体。
+- **键盘**：`keyboard-{portrait,landscape}-{1.0,1.3}.txt` 四组均通过，记录实际显示尺寸；横屏确为 2400×1080。窗口底边和发送按钮均不进入系统可见输入法区域，截图已查看。早期脚本被桌面方向锁定，旧“横屏”结果未作为证据；测试现在先打开可旋转目标应用，并关闭 Gboard 一次性字体更新提示。
+- **终端首装与生命周期**：`terminal-install-and-background.txt` 证明无 Bash 时系统 Shell 可输入、界面安装 Bash、裸 bash 可用以及回桌面后命令继续。最初下载超过 3 分钟测试上限，保留依赖后继续真实下载安装；未跳过包安装。`terminal-final.txt` 六项通过：裸 bash、普通后台、长按选择复制、PTY 同会话旋转、1.3 字体、会话新建/切换/仅结束所选进程。横屏视觉复核随后完成，见本节追加记录。
+- **系统助手**：`system-entry.txt` 七项通过，包括真实 Android 助手角色、外部应用画面、工作台返回原系统入口、系统/普通浮窗切换、草稿图片保留、取消圈选与关闭。测试临时设置角色及 VoiceInteractionService，结束后恢复原 Google 助手配置。
+- **圈选**：`circle-interaction.txt` 三项通过。没有额外 SYSTEM_ALERT_WINDOW 授权，使用无障碍浮层，实际注入四边触摸路径；输出图片中心来自外部目标应用，区外像素透明。
+- **屏幕共享回归**：`screen-regression.txt` 七项通过，仍使用真实 bundled Pi 校验模型收到的图片哈希；失败不提交旧图、关闭后不附新图、草稿移交和收起/关闭区分保持成立。
+- **头像打断**：`voice-avatar-all.txt` 六项通过，完整语音页、浮窗和通话状态条均调用实际打断控制器。使用合成忙碌回合检查转入监听与旧语音抑制，未采集麦克风。
+- **已有行为**：`final-node-tests.txt` 的 57 项测试通过。
+
+以上文件和图片保存在 `artifacts/interaction-redesign/`。0.2.69 compat28 APK 构建通过。验收并未扩大到所有 Android 版本、所有第三方真实账号或进程被系统杀死后的恢复。
+
+- **终端横屏最终复核**：旋转过渡结束后，发现标题栏/按键栏挤占空间，以及上游视图最低四行会把光标放到可见区域之外。紧凑布局收起标题栏，并在按键栏提供会话、选项、收起；视图行数最低两行，与 TerminalEmulator 的限制一致。`terminal-visible-cursor.txt` 六项通过，另断言真实光标底边不超过视图高度；已查看 `terminal-landscape-visible-cursor.png`，输出、提示符和光标可见。第三方组件改动已记录在其 README。

@@ -15,3 +15,6 @@ The upstream native TerminalSession/JNI are replaced by an app-side session adap
 under android/src/com/termux/terminal, so the existing app-owned PTY broker remains
 the process owner. VT parsing, input, rendering, selection and Unicode handling
 come from the upstream libraries.
+
+The view minimum is two terminal rows (supported by TerminalEmulator), so a
+landscape phone keyboard does not place the shell cursor below the visible view.

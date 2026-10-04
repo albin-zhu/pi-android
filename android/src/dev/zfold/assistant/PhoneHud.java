@@ -27,7 +27,7 @@ final class PhoneHud {
   }
   static synchronized void update(Context context,String action){show(context,action,false);}
   static synchronized void hide(){if(takeover)return;hideLocked();}
-  private static void hideLocked(){UnifiedOverlay.forceHide();}
+  private static void hideLocked(){UnifiedOverlay.hide(UnifiedOverlay.Mode.TASK);}
   static synchronized boolean showing(){return UnifiedOverlay.showing(UnifiedOverlay.Mode.TASK);}
   static synchronized boolean hasAction(String description){return UnifiedOverlay.hasAction(description);}
   static String action(JSONObject event){

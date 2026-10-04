@@ -28,7 +28,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
   LinearLayout toolList;final Map<String,ToolCallView> toolViews=new LinkedHashMap<>();
   VoiceTurnController voice;Bitmap imagePreview,sentBitmap;
   boolean speakingMode,disposed,expandedImage,renderPending,compact,screenSharing,capturingScreen;
-  boolean expanded;
+  boolean expanded;private int bottomInset;
   final Runnable screenListener=()->{screenSharing=ScreenContext.enabled();updateScreenShareControl();if(!screenSharing&&imageLabel!=null&&imageLabel.startsWith("屏幕 ·"))removeImage();};
   int voiceConfigWaits;
   String pendingTaskPrompt;
@@ -57,24 +57,24 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     runtime.listen(this);ScreenContext.listen(screenListener);screenListener.run();runtime.restoreConfiguration();updateControls();requestFocus();
   }
   int dp(float n){return Ui.dp(getContext(),n);}
-  void setBottomInset(int inset){int bottom=dp(10)+Math.max(0,inset);if(getPaddingBottom()!=bottom)setPadding(dp(14),dp(14),dp(14),bottom);}
+  void setBottomInset(int inset){bottomInset=Math.max(0,inset);int bottom=dp(compact?6:10)+bottomInset,top=dp(compact?6:14);if(getPaddingBottom()!=bottom||getPaddingTop()!=top)setPadding(dp(14),top,dp(14),bottom);}
   @Override protected void onMeasure(int widthSpec,int heightSpec){
     boolean next=MeasureSpec.getMode(heightSpec)!=MeasureSpec.UNSPECIFIED&&MeasureSpec.getSize(heightSpec)<dp(340);
-    if(state!=null&&attachment!=null&&next!=compact){compact=next;state.setVisibility(VISIBLE);attachment.setVisibility(image!=null&&!compact?VISIBLE:GONE);input.setHint(compact&&image!=null?"想对这张图做什么？":"想问什么，或让我做什么？");}
+    if(state!=null&&attachment!=null&&next!=compact){compact=next;setBottomInset(bottomInset);state.setVisibility(VISIBLE);attachment.setVisibility(image!=null&&!compact?VISIBLE:GONE);input.setHint(compact&&image!=null?"想对这张图做什么？":"想问什么，或让我做什么？");}
     super.onMeasure(widthSpec,heightSpec);
   }
   TextView text(String s,int size,int color){return Ui.text(getContext(),s,size,color);}
   Ui.Action action(int icon,String label,String description,int tint,int fill,Runnable task){return new Ui.Action(getContext(),icon,label,description,tint,fill,task);}
   LinearLayout row(){LinearLayout row=new LinearLayout(getContext());row.setGravity(Gravity.CENTER_VERTICAL);return row;}
   void buildHeader(){
-    LinearLayout head=row();identityBadge=new Ui.AgentAvatar(getContext(),runtime,30);head.addView(identityBadge,new LayoutParams(dp(30),dp(30)));
+    LinearLayout head=row();identityBadge=new Ui.AgentAvatar(getContext(),runtime,32);identityBadge.setPadding(dp(8),dp(8),dp(8),dp(8));identityBadge.setBackground(Ui.ripple(getContext(),Color.TRANSPARENT,24,theme.accent));identityBadge.setFocusable(true);identityBadge.setContentDescription("打开工作台");identityBadge.setOnClickListener(v->{Ui.click(v);if(voice.sessionActive()||voice.speaking())voice.forceInterrupt();else{hideKeyboard();WorkbenchActivity.open(getContext());}});head.addView(identityBadge,new LayoutParams(dp(48),dp(48)));
     LinearLayout identity=new LinearLayout(getContext());identity.setOrientation(VERTICAL);identity.setPadding(dp(10),0,0,0);
     TextView title=text(runtime.agentName,16,theme.ink);identityTitle=title;title.setTypeface(Typeface.create("sans-serif-medium",0));identity.addView(title);
     LinearLayout statusRow=row();statusRow.setPadding(0,dp(5),0,0);
     progress=new ProgressBar(getContext(),null,android.R.attr.progressBarStyleSmall);progress.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(theme.accent));statusRow.addView(progress,new LayoutParams(dp(12),dp(12)));
     state=text(runtime.busy?"正在处理":runtime.configured?"随时待命":"连接模型后开始",12,theme.muted);state.setPadding(dp(4),0,0,0);statusRow.addView(state,new LayoutParams(0,-2,1));identity.addView(statusRow);head.addView(identity,new LayoutParams(0,-2,1));
     expandAction=action(R.drawable.ic_arrows_out_simple,"",expanded?"收缩为半屏":"展开全屏",theme.muted,Color.TRANSPARENT,host::toggleExpansion);
-    head.addView(expandAction,new LayoutParams(dp(44),dp(44)));
+    head.addView(expandAction,new LayoutParams(dp(48),dp(48)));
     head.addView(action(R.drawable.ic_minus,"","最小化助手",theme.muted,Color.TRANSPARENT,()->{hideKeyboard();host.minimize();}),new LayoutParams(dp(48),dp(48)));
     head.addView(action(R.drawable.ic_x,"","关闭助手",theme.muted,Color.TRANSPARENT,()->{hideKeyboard();voice.stopSession(false);host.close();}),new LayoutParams(dp(48),dp(48)));addView(head);
     identity.setOnTouchListener(new OnTouchListener(){float origin;boolean moving;
@@ -116,7 +116,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
   }
   void buildComposer(){
     composerSurface=new LinearLayout(getContext());composerSurface.setOrientation(VERTICAL);composerSurface.setPadding(dp(7),dp(5),dp(7),dp(5));composerSurface.setBackground(Ui.shape(getContext(),theme.surface,24,0));
-    input=new EditText(getContext());input.setBackgroundColor(Color.TRANSPARENT);input.setTextSize(16);input.setTextColor(theme.ink);input.setHintTextColor(theme.muted);input.setHint("想问什么，或让我做什么？");input.setMinHeight(dp(46));input.setMinLines(1);input.setMaxLines(3);input.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI|android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN);input.setPadding(dp(9),dp(9),dp(9),dp(3));input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);composerSurface.addView(input,new LayoutParams(-1,-2));
+    input=new EditText(getContext());input.setBackgroundColor(Color.TRANSPARENT);input.setTextSize(16);input.setTextColor(theme.ink);input.setHintTextColor(theme.muted);input.setHint("想问什么，或让我做什么？");input.setMinHeight(dp(46));input.setMinLines(1);input.setMaxLines(3);input.setPadding(dp(9),dp(9),dp(9),dp(3));input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);input.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI|android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN);composerSurface.addView(input,new LayoutParams(-1,-2));
     input.setOnFocusChangeListener((v,focus)->composerSurface.setBackground(Ui.shape(getContext(),theme.surface,20,focus?theme.accent:theme.line)));
     input.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int count,int after){}public void onTextChanged(CharSequence s,int st,int before,int count){updateControls();}public void afterTextChanged(Editable s){}});
     slashSuggest=SlashSuggest.attach(input,theme,this::runSlashCommand);composerSurface.addView(slashSuggest,new LayoutParams(-1,-2));
@@ -136,6 +136,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
   }
   void updateControls(){
     if(primary==null||mic==null)return;
+    if(identityBadge!=null)identityBadge.setContentDescription(voice.sessionActive()||voice.speaking()?"点击头像打断语音":"打开工作台");
     primary.setIcon(runtime.busy?R.drawable.ic_stop:R.drawable.ic_arrow_up);primary.setContentDescription(runtime.busy?"停止当前任务":"发送");primary.setEnabled(runtime.busy||!localFiles.isEmpty()||input.getText().toString().trim().length()>0);
     updateScreenShareControl();
     updateComposerToolbar();
@@ -236,7 +237,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     int widthDp=Math.round(width/getResources().getDisplayMetrics().density);
     int mode=widthDp>=680?0:widthDp>=570?1:widthDp>=420?2:3;
     modelChip.label.setMaxWidth(mode==3?dp(52):mode==2?dp(66):dp(78));
-    modelChip.setCompact(mode>=3);screenShare.label.setMaxWidth(dp(mode>=2?42:100));
+    modelChip.setCompact(mode>=3);modelChip.setVisibility(widthDp<350&&getResources().getConfiguration().fontScale>1.15f?View.GONE:View.VISIBLE);screenShare.label.setMaxWidth(dp((mode>=2?42:100)*getResources().getConfiguration().fontScale));
     mic.setCompact(mode>=1);sidebar.setCompact(true);select.setCompact(mode>=1);screenShare.setCompact(false);fileButton.setCompact(mode>=1);overflow.setCompact(true);primary.setCompact(false);
 
     sidebar.setVisibility(mode==0?VISIBLE:GONE);
@@ -248,6 +249,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
   }
   void showToolbarOverflow(){
     ArrayList<Ui.Action> items=new ArrayList<>();
+    if(modelChip.getVisibility()==GONE)items.add(modelChip);
     if(sidebar.getVisibility()==GONE)items.add(sidebar);
     if(select.getVisibility()==GONE)items.add(select);
     if(fileButton.getVisibility()==GONE)items.add(fileButton);
@@ -336,7 +338,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
       public void openSkills(){SkillManager.show(sidebar,runtime);}
       public void openProviderAuth(){getContext().startActivity(new Intent(getContext(),MainActivity.class).putExtra("open_provider_auth",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));}
       public void openRuntimePacks(){getContext().startActivity(new Intent(getContext(),MainActivity.class).putExtra("open_runtime_packs",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));}
-      public void openTerminal(){getContext().startActivity(new Intent(getContext(),TerminalActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
+      public void openTerminal(){TerminalActivity.open(getContext());}
       public void newSession(){if(!runtime.busy)runtime.send(PiRuntime.json("type","new_session"));}
       public void stopTask(){stop();}
       public void toggleVoice(){voice();}

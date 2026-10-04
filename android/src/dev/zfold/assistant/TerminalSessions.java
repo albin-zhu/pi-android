@@ -21,7 +21,7 @@ final class TerminalSessions implements TerminalSessionClient {
   private String selected;
   private int nextOrdinal=1;
   static synchronized TerminalSessions get(Context context){if(instance==null)instance=new TerminalSessions(context.getApplicationContext());return instance;}
-  private TerminalSessions(Context context){this.context=context;System.loadLibrary("zfold");}
+  private TerminalSessions(Context context){this.context=context;}
   void observe(Listener value){listener=new WeakReference<>(value);}
   void detach(Listener value){if(listener.get()==value)listener.clear();}
   Job current(){Job job=jobs.get(selected);if(job==null||!job.session.isRunning())for(Job candidate:jobs.values())if(candidate.session.isRunning())job=candidate;return job!=null&&job.session.isRunning()?job:create();}
@@ -46,6 +46,7 @@ final class TerminalSessions implements TerminalSessionClient {
       try{owner.context.startForegroundService(new Intent(owner.context,TerminalKeepAliveService.class));}catch(RuntimeException error){Log.w("ZfoldTerminal","Foreground terminal service",error);}
       writer.execute(()->{
         try{
+          System.loadLibrary("zfold");
           File bash=PiPackageManager.prepareBash(owner.context);
           boolean useBash=owner.context.getApplicationInfo().targetSdkVersion==28&&bash!=null&&bash.canExecute();
           File executable=useBash?bash:new File("/system/bin/sh");
@@ -53,6 +54,7 @@ final class TerminalSessions implements TerminalSessionClient {
           String[] argv=useBash?new String[]{executable.getPath(),"--noprofile"}:new String[]{executable.getPath()};
           Map<String,String> environment=new ProcessBuilder("true").environment();
           RuntimeEnvironment.apply(environment,RuntimeEnvironment.forExecutable(owner.context,executable),null);
+          if(!useBash)environment.putIfAbsent("ENV",new File(environment.get("HOME"),".mkshrc").getPath());
           environment.put("TERM","xterm-256color");environment.put("COLORTERM","truecolor");
           environment.put("PS1",useBash?"\\[\\e[38;5;114m\\]\\W\\[\\e[0m\\] $ ":"$ ");
           cwd=RuntimeEnvironment.workingDirectory(owner.context,null).getPath();

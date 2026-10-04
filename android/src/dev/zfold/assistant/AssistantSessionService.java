@@ -11,6 +11,11 @@ public final class AssistantSessionService extends VoiceInteractionSessionServic
   private static Session active;
   static boolean isShowing(){return active!=null;}
   static AssistantPanel currentPanel(){return active==null?null:active.panel;}
+  static void yieldToOverlay(){
+    Session session=active;if(session==null||session.panel==null)return;
+    if(!AssistantOverlay.hasSavedDraft())AssistantOverlay.preserveDraft(session.panel.draft());
+    session.panel.voice.stopSession(false);session.hideKeyboard();session.hide();
+  }
   static void startVoice(){
     Session session=active;
     if(session==null||session.panel==null||session.panel.disposed)return;
@@ -57,19 +62,32 @@ public final class AssistantSessionService extends VoiceInteractionSessionServic
     void minimizePanel(){
       AssistantOverlay.preserveDraft(panel.draft());panel.voice.stopSession(false);hideKeyboard();expanded=false;
       CircleOverlay.ensureBubble(context);
-      if(CircleOverlay.hasBubble())hide();
+      if(CircleOverlay.hasBubble()||UnifiedOverlay.captureView()!=null)hide();
       else{container.removeAllViews();Ui.Bubble mini=new Ui.Bubble(context);mini.setOnClickListener(v->restorePanel());FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(dp(52),dp(52),Gravity.BOTTOM|Gravity.END);container.addView(mini,lp);touchSurface=mini;container.requestApplyInsets();}
     }
     void hideKeyboard(){panel.input.clearFocus();((android.view.inputmethod.InputMethodManager)context.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(panel.getWindowToken(),0);}
     void selectRegion(){
-      if(screen==null){Toast.makeText(context,"当前屏幕暂不可用，请重新唤起后再试",Toast.LENGTH_LONG).show();return;}
-      hideKeyboard();selecting=true;Bitmap captured=screen.copy(Bitmap.Config.ARGB_8888,false);
-      CircleOverlay.Selection selection=new CircleOverlay.Selection(context,captured,null,data->panel.attachImage(data,"已附上圈选内容"));selection.dismissed=()->restorePanel();
+      hideKeyboard();PhoneAccessibility service=PhoneAccessibility.instance;
+      if(service!=null){
+        panel.setVisibility(View.INVISIBLE);
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
+          if(active!=this||panel.disposed)return;
+          String app=service.screenApplicationPackage();
+          if(app.isEmpty()||app.equals(context.getPackageName())){panel.setVisibility(View.VISIBLE);Toast.makeText(context,"请先切换到要圈选的其他应用",Toast.LENGTH_LONG).show();return;}
+          try{service.captureApplication(app,(bitmap,error)->{if(active!=this||panel.disposed){if(bitmap!=null)bitmap.recycle();return;}panel.setVisibility(View.VISIBLE);if(error!=null){Toast.makeText(context,error,Toast.LENGTH_LONG).show();return;}showSelection(bitmap);});}
+          catch(RuntimeException error){panel.setVisibility(View.VISIBLE);Toast.makeText(context,"读屏服务已断开，请重试",Toast.LENGTH_LONG).show();}
+        },300);return;
+      }
+      if(screen==null){Toast.makeText(context,"重新唤起系统助手以取得画面，或开启读屏服务",Toast.LENGTH_LONG).show();return;}
+      showSelection(screen.copy(Bitmap.Config.ARGB_8888,false));
+    }
+    void showSelection(Bitmap captured){
+      selecting=true;CircleOverlay.Selection selection=new CircleOverlay.Selection(context,captured,null,data->panel.attachImage(data,"已附上圈选内容"));selection.dismissed=()->restorePanel();
       container.removeAllViews();container.setPadding(0,0,0,0);container.addView(selection,new FrameLayout.LayoutParams(-1,-1));touchSurface=selection;container.requestApplyInsets();
     }
-    @Override public void onShow(Bundle args,int flags){super.onShow(args,flags);active=this;AssistantOverlay.hide();CircleOverlay.hideBubble();if(container!=null&&(panel==null||panel.disposed))createPanel();Window window=getWindow().getWindow();window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND|WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);window.setNavigationBarColor(Color.TRANSPARENT);window.setNavigationBarContrastEnforced(false);window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE|WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);}
+    @Override public void onShow(Bundle args,int flags){super.onShow(args,flags);active=this;if(AssistantOverlay.currentPanel()!=null)AssistantOverlay.preserveDraft(AssistantOverlay.currentPanel().draft());AssistantOverlay.hide();CircleOverlay.hideBubble();UnifiedOverlay.forceHide();if(container!=null&&(panel==null||panel.disposed))createPanel();if(panel!=null)panel.restore(AssistantOverlay.takeDraft());Window window=getWindow().getWindow();window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND|WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);window.setNavigationBarColor(Color.TRANSPARENT);window.setNavigationBarContrastEnforced(false);window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE|WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);}
     @Override public void onComputeInsets(Insets out){super.onComputeInsets(out);out.touchableInsets=Insets.TOUCHABLE_INSETS_REGION;out.touchableRegion.setEmpty();if(touchSurface!=null&&touchSurface.getVisibility()==View.VISIBLE){int[] location=new int[2];touchSurface.getLocationInWindow(location);out.touchableRegion.set(location[0],location[1],location[0]+touchSurface.getWidth(),location[1]+touchSurface.getHeight());}}
-    @Override public void onHandleScreenshot(Bitmap screenshot){if(screen!=null)screen.recycle();screen=screenshot==null?null:screenshot.copy(Bitmap.Config.ARGB_8888,false);if(screen!=null&&panel!=null&&!panel.disposed)panel.attachImage(PhoneAccessibility.encode(screen.copy(Bitmap.Config.ARGB_8888,false)),"已附上当前屏幕");}
+    @Override public void onHandleScreenshot(Bitmap screenshot){if(screen!=null)screen.recycle();screen=screenshot==null?null:screenshot.copy(Bitmap.Config.ARGB_8888,false);if(screen!=null&&panel!=null&&!panel.disposed&&panel.image==null)panel.attachImage(PhoneAccessibility.encode(screen.copy(Bitmap.Config.ARGB_8888,false)),"已附上当前屏幕");}
     @Override public void onBackPressed(){
       if(selecting){if(touchSurface instanceof CircleOverlay.Selection){Bitmap bitmap=((CircleOverlay.Selection)touchSurface).screenshot;if(!bitmap.isRecycled())bitmap.recycle();}restorePanel();}
       else if(touchSurface!=panel)restorePanel();

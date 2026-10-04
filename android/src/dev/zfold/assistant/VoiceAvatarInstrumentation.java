@@ -19,6 +19,7 @@ public final class VoiceAvatarInstrumentation extends Instrumentation {
   @Override public void onStart(){
     Bundle result=new Bundle();String error="";AtomicBoolean active=new AtomicBoolean(true);VoiceTurnController[] controller=new VoiceTurnController[1];
     try{
+      EmulatorChecks.accessibility(this);
       Field foreground=MainActivity.class.getDeclaredField("foregroundVoice");foreground.setAccessible(true);
       Field mode=VoiceTurnController.class.getDeclaredField("mode");mode.setAccessible(true);
       Field utterance=VoiceTurnController.class.getDeclaredField("activeUtterance");utterance.setAccessible(true);
@@ -37,7 +38,9 @@ public final class VoiceAvatarInstrumentation extends Instrumentation {
         catch(Exception failure){throw new RuntimeException(failure);}
         runtime.busy=true;runtime.stopped=false;
       });
-      activity=(VoiceCallActivity)startActivitySync(new Intent(getTargetContext(),VoiceCallActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+      ActivityMonitor monitor=addMonitor(VoiceCallActivity.class.getName(),null,false);getTargetContext().startActivity(new Intent(getTargetContext(),VoiceCallActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+      activity=(VoiceCallActivity)waitForMonitorWithTimeout(monitor,20000);removeMonitor(monitor);if(activity==null)throw new IllegalStateException("Voice activity not ready");
+      for(int i=0;i<80;i++){boolean[] ready={false};runOnMainSync(()->{View avatar=findAvatar(activity.getWindow().getDecorView());ready[0]=avatar!=null&&avatar.isLaidOut();});if(ready[0])break;Thread.sleep(100);}
       boolean[] checks=new boolean[4];
       runOnMainSync(()->{
         View avatar=findAvatar(activity.getWindow().getDecorView());
@@ -48,8 +51,20 @@ public final class VoiceAvatarInstrumentation extends Instrumentation {
         // Disable the fixture before the recognizer's delayed start.
         active.set(false);runtime.busy=false;
       });
-      waitForIdleSync();
-      Bitmap screenshot=getUiAutomation().takeScreenshot();
+      boolean[] extra=new boolean[2];
+      runOnMainSync(()->{
+        try{
+          active.set(true);runtime.busy=true;mode.set(controller[0],VoiceTurnController.Mode.SPEAKING);utterance.set(controller[0],"mini-utterance");
+          UnifiedOverlay.call(getTargetContext(),"测试语音状态");View mini=findNamed(UnifiedOverlay.captureView(),"点击头像打断语音");
+          extra[0]=mini!=null&&mini.performClick()&&controller[0].listeningForInput()&&!controller[0].speaking();active.set(false);UnifiedOverlay.forceHide();
+          AssistantPanel panel=new AssistantPanel(getTargetContext(),new AssistantPanel.Host(){public void close(){}public void minimize(){}public void select(){}public void toggleExpansion(){}});
+          panel.speakingMode=true;runtime.busy=true;mode.set(panel.voice,VoiceTurnController.Mode.SPEAKING);utterance.set(panel.voice,"panel-utterance");panel.updateControls();
+          extra[1]=panel.identityBadge.performClick()&&panel.voice.listeningForInput()&&!panel.voice.speaking()&&Boolean.FALSE.equals(queue.invoke(panel.voice,"旧回答"));
+          panel.speakingMode=false;panel.dispose();runtime.busy=false;
+        }catch(Exception failure){throw new RuntimeException(failure);}
+      });
+      result.putBoolean("miniAvatarInterrupts",extra[0]);result.putBoolean("panelAvatarInterrupts",extra[1]);for(boolean check:extra)if(!check)throw new IllegalStateException("Floating avatar binding failed");
+      Bitmap screenshot=getUiAutomation(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).takeScreenshot();
       if(screenshot!=null)try(FileOutputStream out=new FileOutputStream(new File(getTargetContext().getCacheDir(),"voice-avatar-check.png"))){screenshot.compress(Bitmap.CompressFormat.PNG,100,out);screenshot.recycle();}
       result.putBoolean("accessibleAvatar",checks[0]);result.putBoolean("avatarInterrupts",checks[1]);result.putBoolean("busyTurnCanListen",checks[2]);result.putBoolean("oldSpeechSuppressed",checks[3]);
       for(boolean check:checks)if(!check)throw new IllegalStateException("Avatar interruption contract failed");
@@ -61,6 +76,7 @@ public final class VoiceAvatarInstrumentation extends Instrumentation {
     }
     finish(error.isEmpty()?-1:0,result);
   }
+  private static View findNamed(View view,String label){if(view==null)return null;if(label.contentEquals(view.getContentDescription()==null?"":view.getContentDescription()))return view;if(view instanceof ViewGroup)for(int i=0;i<((ViewGroup)view).getChildCount();i++){View match=findNamed(((ViewGroup)view).getChildAt(i),label);if(match!=null)return match;}return null;}
   private static View findAvatar(View view){
     if(view instanceof VoiceCallActivity.CallOrb)return view;
     if(view instanceof ViewGroup)for(int i=0;i<((ViewGroup)view).getChildCount();i++){View found=findAvatar(((ViewGroup)view).getChildAt(i));if(found!=null)return found;}

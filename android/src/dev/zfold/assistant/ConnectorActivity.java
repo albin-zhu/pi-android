@@ -18,14 +18,14 @@ public final class ConnectorActivity extends Activity implements PiRuntime.Liste
   private JSONObject state=new JSONObject();private JSONArray recipes=new JSONArray();
   private final Map<String,String> pending=new HashMap<>();private final Set<String> loginRequests=new HashSet<>();
   private AlertDialog editor;private TextView editorError;private String editorRequest;private boolean fromOverlay;
-  static void open(Context context){boolean overlay=AssistantOverlay.isShowing();if(overlay)AssistantOverlay.minimizeForPhoneControl(context);context.startActivity(new Intent(context,ConnectorActivity.class).putExtra("from_overlay",overlay).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
+  static void open(Context context){boolean overlay=FloatingNavigation.suspend(context);context.startActivity(new Intent(context,ConnectorActivity.class).putExtra("from_overlay",overlay).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
   static void returnFromOAuth(Context context){context.startActivity(new Intent(context,ConnectorActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP));}
   @Override protected void onCreate(Bundle saved){
     super.onCreate(saved);fromOverlay=getIntent().getBooleanExtra("from_overlay",false);if(fromOverlay)CircleOverlay.hideBubble();theme=new Ui.Theme(this);runtime=PiRuntime.get(this);build();runtime.listen(this);refresh();
   }
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);if(intent.hasExtra("from_overlay"))fromOverlay=intent.getBooleanExtra("from_overlay",false);setIntent(intent);refresh();}
   @Override protected void onResume(){super.onResume();if(runtime!=null)refresh();}
-  @Override protected void onDestroy(){runtime.unlisten(this);if(isFinishing()&&fromOverlay)AssistantOverlay.show(getApplicationContext());super.onDestroy();}
+  @Override protected void onDestroy(){runtime.unlisten(this);if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
   @Override public void onBackPressed(){finishAndRemoveTask();}
   private void build(){
     getWindow().setDecorFitsSystemWindows(false);getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);

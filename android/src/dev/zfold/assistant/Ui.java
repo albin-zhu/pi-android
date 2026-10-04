@@ -271,7 +271,7 @@ final class Ui {
     final ImageView icon;final StatusRing ring;
     Bubble(Context context){
       super(context);Theme t=new Theme(context);
-      setBackground(circle(context,t.surface,t.line));setElevation(dp(context,12));setClipToOutline(false);
+      setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(t.accentSoft),circle(context,t.surface,t.line),circle(context,Color.WHITE,0)));setElevation(dp(context,12));setClipToOutline(false);
       ring=new StatusRing(context);addView(ring,new LayoutParams(-1,-1));
       icon=new ImageView(context);icon.setImageDrawable(icon(context,R.drawable.ic_microphone,t.muted));
       FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(dp(context,22),dp(context,22),Gravity.CENTER);addView(icon,lp);
@@ -292,7 +292,7 @@ final class Ui {
       else if(state==VoiceStatus.State.TASK)description="Zfold 正在操作手机，点按查看或停止";
       else if(state==VoiceStatus.State.ERROR)description="Zfold 语音需要处理，点按展开";
       else description="展开 Zfold 语音助手";
-      setContentDescription(description);
+      setContentDescription(description+"，长按打开操作菜单");
     }
     private static GradientDrawable circle(Context c,int fill,int stroke){
       GradientDrawable d=new GradientDrawable();d.setShape(GradientDrawable.OVAL);d.setColor(fill);
