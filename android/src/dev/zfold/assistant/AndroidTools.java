@@ -15,15 +15,25 @@ import java.util.*;
 public final class AndroidTools {
   interface Result {void done(JSONObject value,String error);}
   static void execute(Context context,JSONObject request,Result result) {
+    execute(context,request,result,null);
+  }
+  static void execute(Context context,JSONObject request,Result result,Runnable heartbeat) {
     String name=request.optString("name");
+    NativeToolExecution call=NativeToolExecution.register(request,result,heartbeat);
+    if(call==null)return;
+    Context app=context.getApplicationContext();
+    Runnable operation=()->call.run(()->executeBody(app,request,call::complete));
     // PiRuntime dispatches on the UI thread. Process waits, PTY I/O and file
     // staging must leave that thread before doing any potentially blocking work.
     if(Looper.myLooper()==Looper.getMainLooper()&&
-        (name.equals("runtime_exec")||name.equals("runtime_stage")||name.equals("pty"))){
-      Context app=context.getApplicationContext();
-      new Thread(()->execute(app,request,result),"pi-tool-"+name).start();
+        (name.equals("runtime_exec")||name.equals("runtime_stage")||name.equals("pty")||name.equals("pkg"))){
+      new Thread(operation,"pi-tool-"+name).start();
       return;
     }
+    operation.run();
+  }
+  private static void executeBody(Context context,JSONObject request,Result result){
+    String name=request.optString("name");
     JSONObject args=request.optJSONObject("args");if(args==null)args=new JSONObject();
     try {
       if(name.equals("device_info")) {
@@ -108,15 +118,8 @@ public final class AndroidTools {
         for(java.util.Iterator<String> iterator=defaults.keys();iterator.hasNext();){String key=iterator.next();if(!args.has("env")||!args.optJSONObject("env").has(key))builder.environment().put(key,String.valueOf(defaults.opt(key)));}
         JSONObject env=args.optJSONObject("env");
         if(env!=null)for(java.util.Iterator<String> iterator=env.keys();iterator.hasNext();){String key=iterator.next();builder.environment().put(key,String.valueOf(env.opt(key)));}
-        java.lang.Process process=builder.start();
-        StringBuilder stdout=new StringBuilder(),stderr=new StringBuilder();
-        Thread out=new Thread(()->readProcess(process.getInputStream(),stdout));
-        Thread err=new Thread(()->readProcess(process.getErrorStream(),stderr));
-        out.start();err.start();
         long timeout=Math.min(Math.max(args.optLong("timeoutMs",60000),1000),600000);
-        if(!process.waitFor(timeout,java.util.concurrent.TimeUnit.MILLISECONDS)) {process.destroyForcibly();process.waitFor(2,java.util.concurrent.TimeUnit.SECONDS);throw new Exception("runtime_exec 超时，进程已停止");}
-        out.join(1000);err.join(1000);
-        result.done(PiRuntime.json("exitCode",process.exitValue(),"stdout",bound(stdout),"stderr",bound(stderr)),null);return;
+        result.done(RuntimeProcess.execute(builder,timeout),null);return;
       }
       if(name.equals("pty")) {
         if(context.getApplicationInfo().targetSdkVersion!=28)throw new Exception("PTY runtime 只在 compat28 通道可用");
@@ -151,13 +154,10 @@ public final class AndroidTools {
           List<String> env=new ArrayList<>();
           for(java.util.Map.Entry<String,String> entry:environmentSource.environment().entrySet())env.add(entry.getKey()+"="+entry.getValue());
           int rows=Math.min(Math.max(args.optInt("rows",40),2),200),cols=Math.min(Math.max(args.optInt("cols",120),20),500);
-          List<String> commandFinal=command;
-          List<String> envFinal=env;
-          new Thread(()->{
-            try {result.done(PiRuntime.json("id",PiRuntime.ptyOpen(commandFinal.toArray(new String[0]),cwdPath,
-              envFinal.toArray(new String[0]),rows,cols),"argv",commandFinal,"cwd",cwdPath,"rows",rows,"cols",cols),null);}
-            catch(Throwable e){result.done(null,e.getCause()==null?e.getMessage():e.getCause().getMessage());}
-          },"pi-pty-open").start();
+          NativeToolExecution.checkpoint();
+          int opened=PiRuntime.ptyOpen(command.toArray(new String[0]),cwdPath,env.toArray(new String[0]),rows,cols);
+          try{NativeToolExecution.checkpoint();}catch(java.util.concurrent.CancellationException cancelled){PiRuntime.ptyClose(opened);throw cancelled;}
+          result.done(PiRuntime.json("id",opened,"argv",command,"cwd",cwdPath,"rows",rows,"cols",cols),null);
           return;
         }
         int id=args.optInt("id");
@@ -171,15 +171,13 @@ public final class AndroidTools {
         }
         if(action.equals("read")) {
           int timeout=Math.min(Math.max(args.optInt("timeoutMs",1000),100),10000);
-          new Thread(()->{
-            try {
+          try {
               String encoded=PiRuntime.ptyRead(id,timeout);
               byte[] bytes=encoded==null||encoded.isEmpty()?new byte[0]:java.util.Base64.getDecoder().decode(encoded);
               String output=new String(bytes,java.nio.charset.StandardCharsets.UTF_8);
               int status=PiRuntime.ptyStatus(id);
               result.done(PiRuntime.json("output",output,"bytes",bytes.length,"alive",status<0,"exitCode",status>=0?Integer.valueOf(status):JSONObject.NULL),null);
-            }catch(Throwable e){result.done(null,e.getMessage());}
-          },"pi-pty-read").start();
+          }catch(Throwable e){result.done(null,e.getMessage());}
           return;
         }
         if(action.equals("status")) {
@@ -268,8 +266,7 @@ public final class AndroidTools {
       if(name.equals("pkg")) {
         final String action=args.optString("action","list"),packageName=args.optString("name"),query=args.optString("query");
         final boolean refresh=args.optBoolean("refresh",false);
-        new Thread(()->{
-          try {
+        try {
             JSONObject value;
             if(action.equals("search"))value=PiPackageManager.search(context,query,refresh);
             else if(action.equals("list"))value=PiPackageManager.status(context,false);
@@ -278,8 +275,7 @@ public final class AndroidTools {
             else if(action.equals("remove"))value=PiPackageManager.remove(context,packageName);
             else throw new Exception("pkg action 只能是 list/search/update/install/remove");
             result.done(value,null);
-          }catch(Exception e){result.done(null,e.getMessage());}
-        },"pi-pkg-"+action).start();
+        }catch(Exception e){result.done(null,e.getMessage());}
         return;
       }
       PhoneAccessibility service=PhoneAccessibility.instance;
@@ -305,12 +301,6 @@ public final class AndroidTools {
       }
     };handler.postDelayed(check,120);
   }
-  private static void readProcess(java.io.InputStream input,StringBuilder output){
-    try(java.io.Reader reader=new java.io.InputStreamReader(input,java.nio.charset.StandardCharsets.UTF_8)) {
-      char[] buffer=new char[8192];int n;
-      while((n=reader.read(buffer))>=0)output.append(buffer,0,n);
-    }catch(Exception ignored){}
-  }
   private static void rewriteToolShebang(Context context,File target)throws IOException {
     if(target.length()>8_000_000)return;
     byte[] value=java.nio.file.Files.readAllBytes(target.toPath());
@@ -322,10 +312,5 @@ public final class AndroidTools {
       .replaceFirst("^#!\\s*/bin/env\\b","#!"+packageBin+"/env")
       .replaceFirst("^#!\\s*/usr/bin/(node|python3?|bash|sh)\\b","#!"+packageBin+"/$1");
     if(!updated.equals(text))java.nio.file.Files.write(target.toPath(),updated.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-  }
-  private static String bound(StringBuilder value){
-    String text=value.toString();
-    if(text.length()>2_000_000)text=text.substring(0,2_000_000)+"\n[输出已截断]";
-    return text;
   }
 }

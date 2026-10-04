@@ -31,7 +31,9 @@ public final class PiRuntime {
   private final ExecutorService writer = Executors.newSingleThreadExecutor();
   private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
   public volatile boolean ready, configured, busy, stopped;
+  public volatile boolean stopUnconfirmed;
   private volatile boolean phoneActive;
+  private volatile String activeTurnId="";
   public boolean jevConfigured,jevEnabled;public String jevModel="jev-1.13.0";
   public volatile String agentName="Zfold",agentAvatar,agentPrompt="";
   public volatile String agentDefaultPrompt="";
@@ -128,6 +130,7 @@ public final class PiRuntime {
     } catch(Exception e){dispatch(json("type","error","message",e.getMessage()));}
   }
   private void dispatch(JSONObject event) {
+    if(event.optString("type").equals("tool_cancel")){NativeToolExecution.cancel(event.optString("id"));return;}
     main.post(() -> {
       String type=event.optString("type");
       boolean callVisible=VoiceCallActivity.isForeground()||VoiceMiniOverlay.showing();
@@ -151,7 +154,8 @@ public final class PiRuntime {
         if(latestUser!=null){lastPromptText=latestUser.optString("text");lastPromptHasImage=latestUser.optBoolean("hasImage");String picture=latestUser.optString("image");if(!picture.isEmpty())lastPromptImage=picture;else if(sessionId.equals(previousSession)&&lastPromptText.equals(previousText))lastPromptImage=previousImage;}
         lastResponse=latestAnswer;
       }
-      if(type.equals("turn_start")) {busy=true;stopped=false;lastResponse="";lastTools.clear();}
+      if(type.equals("turn_start")) {busy=true;stopped=false;stopUnconfirmed=false;activeTurnId=event.optString("turnId");lastResponse="";lastTools.clear();}
+      if(type.equals("tool_uncertain")&&activeTurnId.equals(event.optString("turnId"))){stopUnconfirmed=true;status=event.optString("message");}
       if(type.equals("tool_execution")) {lastTools.put(event.optString("id"),event);String toolName=event.optString("name");
         if(!callVisible&&(toolName.equals("phone_task")||toolName.equals("screen_read")||toolName.equals("screen_capture")||toolName.equals("ui_act")||toolName.equals("ui_tap")||toolName.equals("ui_input")||toolName.equals("ui_swipe")||toolName.equals("ui_back")||toolName.equals("app_open")||toolName.equals("split_screen")))PhoneHud.show(context,PhoneHud.action(event));}
       if(type.equals("delta")) lastResponse+=event.optString("text");
@@ -174,7 +178,8 @@ public final class PiRuntime {
         }
         Runnable execute=()->{
           if(stopped&&!event.isNull("turnId")){toolResult(event.optString("id"),null,"操作已停止");return;}
-          AndroidTools.execute(context,event,(result,error)->toolResult(event.optString("id"),result,error));
+          AndroidTools.execute(context,event,(result,error)->toolResult(event.optString("id"),result,error),
+            ()->send(json("type","tool_heartbeat","id",event.optString("id"))));
         };
         if(handoff)main.postDelayed(execute,260);else execute.run();
       }
@@ -192,7 +197,7 @@ public final class PiRuntime {
   public void send(JSONObject command) {
     if(!ready){dispatch(json("type","error","message","本地 Pi 尚未就绪"));return;}
     if(command.optString("type").equals("prompt")){stopped=false;busy=true;lastPromptText=command.optString("text");lastPromptImage=command.optString("image");lastPromptHasImage=!lastPromptImage.isEmpty();}
-    if(command.optString("type").equals("stop")){stopped=true;PhoneHud.hide();}
+    if(command.optString("type").equals("stop")){stopped=true;NativeToolExecution.cancelTurn(activeTurnId);PhoneHud.hide();}
     writer.execute(()->writeCommand(command.toString().getBytes(StandardCharsets.UTF_8)));
   }
   private void toolResult(String id,JSONObject result,String error){send(error==null?json("type","tool_result","id",id,"result",result):json("type","tool_result","id",id,"error",error));}

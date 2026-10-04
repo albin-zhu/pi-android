@@ -132,7 +132,7 @@ final class VoiceTurnController {
     queue(label);
   }
   void turnEnded(boolean aborted){
-    if(aborted){stopSession(false);callback.status("已停止");return;}
+    if(aborted){stopSession(false);callback.status(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");return;}
     if(!sessionActive())return;
     if(ttsReady&&finishResidual())return;
     if(engineSpeaking()){mode=Mode.SPEAKING;callback.status("正在播报 · 播完自动听");return;}

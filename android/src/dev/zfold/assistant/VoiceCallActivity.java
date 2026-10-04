@@ -91,7 +91,7 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
   }
   private void endCall(){
     VoiceTurnController controller=MainActivity.activeVoice();
-    if(controller!=null)controller.stopSession(true);else runtime.send(PiRuntime.json("type","stop"));
+    if(controller!=null)controller.stopSession(false);
     finish();
   }
 

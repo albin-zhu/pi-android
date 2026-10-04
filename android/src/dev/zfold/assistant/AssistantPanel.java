@@ -274,7 +274,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
       case "tool_execution":showTool(e);state.setText("running".equals(e.optString("status"))?PhoneHud.action(e):"正在处理…");
         if(voice.sessionActive()&&"running".equals(e.optString("status")))voice.toolAnnounce(PhoneHud.action(e));break;
       case "turn_end":{
-        showReply(runtime.lastResponse);if(e.optBoolean("aborted"))state.setText("已停止");voice.turnEnded(e.optBoolean("aborted"));
+        showReply(runtime.lastResponse);if(e.optBoolean("aborted"))state.setText(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");voice.turnEnded(e.optBoolean("aborted"));
         String queued=pendingTaskPrompt;pendingTaskPrompt=null;
         if(queued!=null&&!disposed)handler.postDelayed(()->{if(!disposed){voice();send(queued);}},380);
         break;

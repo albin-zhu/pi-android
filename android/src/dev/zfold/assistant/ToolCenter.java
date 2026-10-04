@@ -154,7 +154,7 @@ final class ToolCenter implements PiRuntime.Listener {
       actionCard(context,"Runtime Packs","安装受确认的 Android/bionic 工具包",R.drawable.ic_arrows_out_simple,host::openRuntimePacks);
       actionCard(context,"软件包管理","搜索、安装和删除 Termux 官方仓库 CLI",R.drawable.ic_file,host::openPackages);
     }
-    if(matches("terminal pty 终端 shell bash 命令行",query))actionCard(context,"Termux 终端","直接打开 PTY 交互终端，支持 bash / vim / tmux",R.drawable.ic_gear_six,host::openTerminal);
+    if(matches("terminal pty 终端 shell bash 命令行",query))actionCard(context,"命令终端","PTY 命令输入与文本输出；暂不支持全屏终端应用",R.drawable.ic_gear_six,host::openTerminal);
     if(matches("agent 身份 名字 头像 system prompt",query))actionCard(context,"Agent 身份","名字、头像和系统提示词",R.drawable.ic_chat_circle_text,host::openAgentSettings);
   }
 
@@ -178,7 +178,10 @@ final class ToolCenter implements PiRuntime.Listener {
       JSONObject item=tools.optJSONObject(i);if(item==null)continue;
       String name=item.optString("name"),label=item.optString("label",name),description=item.optString("description","没有描述");
       if(!matches(name+" "+label+" "+description,query))continue;
-      card(label,description+" · /"+name,"启用",name,R.drawable.ic_gear_six,null,()->host.prompt("请使用 "+name+" 工具完成一个最小验证步骤；执行前说明参数。"));
+      boolean enabled=item.optBoolean("enabled",true);String reason=item.optString("reason");
+      String badge=enabled?"已注册":item.optString("availability").equals("configuration_required")?"待配置":"不支持";
+      card(label,description+(reason.isEmpty()?"":" · "+reason),badge,name,R.drawable.ic_gear_six,null,
+        enabled?()->host.prompt("请使用 "+name+" 工具完成一个最小验证步骤；执行前说明参数。"):null);
       added++;
     }
     if(added==0)minor("没有匹配工具");

@@ -63,7 +63,7 @@ public final class TerminalActivity extends Activity {
     LinearLayout head = new LinearLayout(this);
     head.setGravity(Gravity.CENTER_VERTICAL);
     head.setPadding(dp(14), statusBarHeight() + dp(10), dp(8), dp(8));
-    TextView title = text("Termux 终端", 15, 0xFFF5F5F5, Typeface.create("sans-serif-medium", 0));
+    TextView title = text("命令终端", 15, 0xFFF5F5F5, Typeface.create("sans-serif-medium", 0));
     head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
     head.addView(action(R.drawable.ic_arrow_clockwise, "新建 PTY 会话", this::openPty), btn(42));
     head.addView(action(R.drawable.ic_x, "关闭终端", this::finish), btn(42));

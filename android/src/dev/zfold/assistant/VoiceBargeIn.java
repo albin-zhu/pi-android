@@ -76,6 +76,9 @@ final class VoiceBargeIn {
         byte[] bytes=new byte[pcm.length*2];double power=0;
         for(int i=0;i<pcm.length;i++){float value=pcm[i]/32768f;samples[i]=value;power+=value*value;bytes[2*i]=(byte)(pcm[i]&0xff);bytes[2*i+1]=(byte)(pcm[i]>>8);}
         offer(prebuffer,bytes,62);double rms=Math.sqrt(power/pcm.length);float probability=vad.compute(samples);
+        // beginRecognition already sends the history through the candidate frame.
+        // Every subsequent frame must also reach the recognizer's PCM pipe.
+        if(candidate)stream.offer(bytes);
         long now=SystemClock.elapsedRealtime();boolean active=now-started>250&&now>=echoCooldownUntil&&probability>=0.78f&&rms>=0.010f;
         if(active){speechFrames++;silentFrames=0;}else{speechFrames=Math.max(0,speechFrames-2);if(candidate)silentFrames++;}
         if(!candidate&&speechFrames>=7){

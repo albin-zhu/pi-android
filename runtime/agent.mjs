@@ -17,6 +17,7 @@ import { registerBundledOAuthFlowLoaders } from './oauth-bundle.mjs';
 import { defaultModelConfig, defaultModelOptions, defaultJevConfig } from './defaults.local.mjs';
 import { runtimePackCatalog } from './runtime-packs.mjs';
 import { createPtyTool } from './pty.mjs';
+import { NativeToolBridge } from './native-tools.mjs';
 
 const inputFd = Number(process.argv[2]), outputFd = Number(process.argv[3]);
 registerBundledOAuthFlowLoaders({anthropic:()=>anthropicOAuth,openaiCodex:()=>openaiCodexOAuth,githubCopilot:()=>githubCopilotOAuth,openrouter:()=>openRouterOAuth,kimiCoding:()=>kimiCodingOAuth,xai:()=>xaiOAuth,radius:createRadiusOAuth});
@@ -46,11 +47,11 @@ const nativeLibDir = process.env.ZFOLD_NATIVE_LIB_DIR || '';
 const runtimeDir=path.dirname(process.argv[1]);
 const toolsDir=path.join(runtimeDir,'tools');
 const packageBinDir=path.join(runtimeDir,'pkg','usr','bin');
-const runtimePackBinDir=path.join(runtimeDir,compatExec?'runtime-exec-test':'exec','usr','bin');
-const execPaths=[toolsDir,packageBinDir,runtimePackBinDir,'/system/bin','/system/xbin','/vendor/bin'].join(':');
 let runtimeChannel={channel:'modern',targetSdk:35,writableExec:false};
 try{const value=JSON.parse(fs.readFileSync(path.join(path.dirname(process.argv[1]),'runtime-channel.json'),'utf8'));if(value&&(value.channel==='modern'||value.channel==='compat28'))runtimeChannel=value;}catch{}
 const compatExec=runtimeChannel.channel==='compat28'&&runtimeChannel.targetSdk===28&&runtimeChannel.writableExec===true;
+const runtimePackBinDir=path.join(runtimeDir,compatExec?'runtime-exec-test':'exec','usr','bin');
+const execPaths=[toolsDir,packageBinDir,runtimePackBinDir,'/system/bin','/system/xbin','/vendor/bin'].join(':');
 const runtimeExecDir=path.join(path.dirname(process.argv[1]),compatExec?'runtime-exec-test':'exec');
 const packageRootDir=path.join(path.dirname(process.argv[1]),'pkg');
 function readInstalledPackages(){try{return JSON.parse(fs.readFileSync(path.join(packageRootDir,'installed.json'),'utf8'));}catch{return {};}}
@@ -115,9 +116,8 @@ let session, modelRuntime, resourceLoader, activeModel, config, busy = false, tu
 let streamingAssistant, changingSession=false;
 let phoneGuard=new PhoneTurnGuard(),phoneFailure;
 function stopPhoneLoop(message){phoneFailure=message;emit({type:'phone_halt',turnId});queueMicrotask(()=>{session?.abort().catch(()=>{});});}
-const pendingTools = new Map();
+const nativeTools = new NativeToolBridge(emit);
 const activeTools = new Map();
-let toolSequence = 0;
 const activeSessionFile=path.join(root,'active-session.json');
 const jevConfigFile=path.join(credentialsDir,'jev.json');
 let jevConfig=defaultJevConfig;
@@ -238,7 +238,13 @@ function builtinSkills(){
 function toolCatalog(){
   const managed=managedSkills();
   return {
-    tools:tools.map(item=>({name:item.name,label:item.label,description:item.description,enabled:true,source:'builtin'})),
+    tools:tools.map(item=>{
+      const unsupported=!compatExec&&['runtime_exec','tool_install','pty'].includes(item.name);
+      const unconfigured=item.name==='phone_task'&&(!jevConfig.enabled||!jevConfig.apiKey);
+      return {name:item.name,label:item.label,description:item.description,enabled:!unsupported&&!unconfigured,source:'builtin',
+        availability:unsupported?'unsupported':unconfigured?'configuration_required':'registered',
+        reason:unsupported?'当前构建通道不支持可写目录执行，需要 compat28':unconfigured?'尚未配置并启用 Jev':''};
+    }),
     skills:[...builtinSkills(),...managed.skills],
     diagnostics:managed.diagnostics,
     mcp:{connected:false,servers:[],message:'MCP server 尚未接入；目录只展示连接后的工具，不显示占位能力。'},
@@ -289,14 +295,10 @@ function android(name, args, signal) {
   if(turnId){
     try{args=phoneGuard.before(name,args);}catch(error){stopPhoneLoop(error.message);return Promise.reject(error);}
   }
-  const id = `native-${++toolSequence}`;
-  return new Promise((resolve, reject) => {
-    const cleanup = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); pendingTools.delete(id); };
-    const abort = () => { cleanup(); emit({ type:'tool_cancel', id }); reject(new Error('操作已停止')); };
-    const timer = setTimeout(() => { cleanup(); reject(new Error('手机工具响应超时')); }, 30000);
-    pendingTools.set(id, { resolve: value => { cleanup();try{if(turnId)phoneGuard.observed(name,value,args);resolve(value);}catch(error){stopPhoneLoop(error.message);reject(error);} }, reject: error => { cleanup(); reject(error); } });
-    signal?.addEventListener('abort', abort, { once:true });
-    emit({ type:'tool_request', id, name, args, turnId });
+  const requestTurn=turnId;
+  return nativeTools.call(name,args,{signal,turnId:requestTurn}).then(value=>{
+    try{if(requestTurn&&requestTurn===turnId&&!signal?.aborted)phoneGuard.observed(name,value,args);return value;}
+    catch(error){stopPhoneLoop(error.message);throw error;}
   });
 }
 function secureFilePath(toolName,value){
@@ -756,11 +758,7 @@ async function receive(command) {
   }
   if(command.type==='jev_status'){emitJevStatus();return;}
   if(command.type==='configure_default'){await configure(defaultModelConfig);return;}
-  if (command.type==='tool_result') {
-    const pending=pendingTools.get(command.id);
-    if(pending) command.error?pending.reject(new Error(command.error)):pending.resolve(command.result);
-    return;
-  }
+  if(nativeTools.receive(command))return;
   if(command.type==='stop') { stopRequested=true; await session?.abort(); return; }
   if(command.type==='configure') {
     if(changingSession)throw new Error('会话正在切换，请稍后再试');
@@ -809,7 +807,7 @@ async function receive(command) {
       const messages=session.messages;
       const last=[...messages].reverse().find(m=>m.role==='assistant');
       if(last?.stopReason==='error') throw new Error(last.errorMessage||'模型请求失败');
-      if(phoneFailure)emit({type:'error',message:phoneFailure,turnId});else emit({type:'turn_end',turnId,aborted:last?.stopReason==='aborted'});
+      if(phoneFailure)emit({type:'error',message:phoneFailure,turnId});else emit({type:'turn_end',turnId,aborted:stopRequested||last?.stopReason==='aborted'});
     } catch(error) { if(stopRequested)emit({type:'turn_end',turnId,aborted:true});else emit({type:'error',message:phoneFailure||error.message,turnId}); }
     finally {busy=false;turnId=null;}
   }

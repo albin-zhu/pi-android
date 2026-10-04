@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <android/log.h>
 #include <cstdlib>
+#include <cstring>
 
 namespace node { int Start(int argc, char** argv); }
 static int command_pipe[2], event_pipe[2];
@@ -87,6 +88,68 @@ Java_dev_zfold_assistant_PiRuntime_readEvents(JNIEnv* env, jclass) {
 static void throwJava(JNIEnv* env, const char* message) {
   jclass cls = env->FindClass("java/lang/IllegalArgumentException");
   if (cls) env->ThrowNew(cls, message);
+}
+
+// Non-interactive children get their own process group and separate output pipes.
+// Startup status closes on exec, so Java never cancels an unestablished group.
+extern "C" JNIEXPORT jintArray JNICALL
+Java_dev_zfold_assistant_RuntimeProcess_start(JNIEnv* env,jclass,jobjectArray args,jstring cwd,jobjectArray environment) {
+  std::vector<std::string> values,envValues;
+  for(int i=0;i<env->GetArrayLength(args);i++){
+    jstring value=(jstring)env->GetObjectArrayElement(args,i);values.push_back(str(env,value));env->DeleteLocalRef(value);
+  }
+  for(int i=0;i<env->GetArrayLength(environment);i++){
+    jstring value=(jstring)env->GetObjectArrayElement(environment,i);envValues.push_back(str(env,value));env->DeleteLocalRef(value);
+  }
+  if(values.empty()){throwJava(env,"Empty command");return nullptr;}
+  std::vector<char*> argv,envp;
+  for(auto& value:values)argv.push_back(value.data());argv.push_back(nullptr);
+  for(auto& value:envValues)envp.push_back(value.data());envp.push_back(nullptr);
+  std::string directory=str(env,cwd);
+  int output[2]={-1,-1},error[2]={-1,-1},startup[2]={-1,-1};
+  auto closePipes=[&](){for(int fd:{output[0],output[1],error[0],error[1],startup[0],startup[1]})if(fd>=0)close(fd);};
+  if(pipe2(output,O_CLOEXEC)||pipe2(error,O_CLOEXEC)||pipe2(startup,O_CLOEXEC)){
+    closePipes();throwJava(env,"Cannot open process pipes");return nullptr;
+  }
+  pid_t pid=fork();
+  if(pid<0){closePipes();throwJava(env,"Cannot fork command");return nullptr;}
+  if(pid==0){
+    close(output[0]);close(error[0]);close(startup[0]);
+    int failure=0;
+    if(setsid()<0||chdir(directory.c_str())<0)failure=errno;
+    int input=open("/dev/null",O_RDONLY|O_CLOEXEC);
+    if(!failure&&(input<0||dup2(input,STDIN_FILENO)<0||dup2(output[1],STDOUT_FILENO)<0||dup2(error[1],STDERR_FILENO)<0))failure=errno;
+    if(input>2)close(input);close(output[1]);close(error[1]);
+    signal(SIGPIPE,SIG_DFL);
+    if(!failure){execve(argv[0],argv.data(),envp.data());failure=errno;}
+    (void)!write(startup[1],&failure,sizeof(failure));_exit(127);
+  }
+  close(output[1]);output[1]=-1;close(error[1]);error[1]=-1;close(startup[1]);startup[1]=-1;
+  int failure=0;ssize_t bytes;
+  do{bytes=read(startup[0],&failure,sizeof(failure));}while(bytes<0&&errno==EINTR);
+  close(startup[0]);startup[0]=-1;
+  if(bytes!=0){
+    kill(-pid,SIGKILL);kill(pid,SIGKILL);
+    while(waitpid(pid,nullptr,0)<0&&errno==EINTR){}
+    closePipes();std::string message=std::string("Cannot start command: ")+strerror(failure?failure:EIO);
+    throwJava(env,message.c_str());return nullptr;
+  }
+  jint fields[]={pid,output[0],error[0]};jintArray result=env->NewIntArray(3);
+  env->SetIntArrayRegion(result,0,3,fields);return result;
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_dev_zfold_assistant_RuntimeProcess_poll(JNIEnv*,jclass,jint pid){
+  int status=0;pid_t result;
+  do{result=waitpid(pid,&status,WNOHANG);}while(result<0&&errno==EINTR);
+  if(result==0)return -1;
+  if(result<0)return -2;
+  return WIFEXITED(status)?WEXITSTATUS(status):WIFSIGNALED(status)?128+WTERMSIG(status):255;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_zfold_assistant_RuntimeProcess_signalGroup(JNIEnv*,jclass,jint pid,jint signal){
+  if(pid>1)kill(-pid,signal);
 }
 
 static std::shared_ptr<PtySession> ptySession(int id) {

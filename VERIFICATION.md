@@ -566,3 +566,19 @@
 - 旧代码的 2 秒命令使主线程分派阻塞 2111 ms。修复后 Fold7 的 12 秒命令耗时 12140 ms，分派返回 1 ms，命令期间心跳 243 次，最大主线程间隔 51 ms；stdout=`RUNTIME_RESPONSIVE`、stderr=`STDERR_OK`、exitCode=7 检查通过，超时与路径拒绝检查通过，`INSTRUMENTATION_CODE=-1`。结果见 `artifacts/takeover-20261004/regression-after.txt`。
 - `npm test` 40/40 通过；compat28 与 modern 构建均通过。最终 compat28 SHA-256 `f944c1b7546510692257448c0f926b5d797177d58bb1b530ddc6854e24e28c8d`；modern SHA-256 `d7c4270fd72fcb40527060e5bbb70959593250dd7cfb1543c19a518fd1aca3d4`。compat28 已覆盖安装 Fold7，冷启动 290 ms，Pi 0.85.1 / Node v24.21.0 发出 ready；检查时系统最后一次 ANR 仍为修复前的 20:13。
 - 结论限定于本次证据确认的工具执行阻塞。语音插话、ASR busy、扬声器路由和手动终端页面仍需各自的真机回归；不能用本次 Looper 检查代替这些验收。
+
+## 0.2.64 运行时执行与取消约定 · 2026-10-04
+
+- 提交了原始代码与 ANR 修复基线，设计决策见 RUNTIME_DESIGN.md。此次实现属于第一阶段，仍是同应用进程内的单活动 Pi 会话；独立 supervisor、多会话并发、任务恢复、统一环境 resolver 和私有凭据迁移没有在本轮实现。
+- `NativeToolBridge` 将 30 秒无消息检测改为通信存活租期，原生端每 2 秒发送心跳。取消等待执行端终态；确认超时产生 `tool_uncertain`，界面显示“停止尚未确认”。原生调用按 ID 去重并只完成一次，排队期间收到取消也会被记住。
+- 新增 JNI 非交互进程组与 `RuntimeProcess`：stdin 默认 EOF，stdout/stderr 分别流式保留最多 128 KiB，超额仍继续排空管道。取消/超时先 SIGTERM，再 SIGKILL 普通子进程组，回收组长后返回；主动 setsid 脱离的守护进程不属于此保证。包安装在下载、依赖包之间和文件替换前检查取消；不会声称已完成的依赖安装被回滚。
+- PTY 修复包含 `path` 导入、参数副本、AbortSignal 传递和 Pi 所要求的 `{content, details}` 结果结构；只调用原生 PTY 的旧验证无法覆盖这些 JS 接口问题。compat28 的 shell PATH 改在通道解析之后初始化；非屏幕工具不再消耗手机操作的 90 次预算。
+- 语音插话补上预缓冲之后的实时 PCM 入队。结束通话不再隐式取消 Agent 任务；明确的停止任务入口保留。此处属于代码与状态语义修复，真人插话、蓝牙/扬声器、ASR busy 仍待专门验收。
+- 纠正“新建工作区 Skill”的按钮含义、完整终端能力的过度描述，以及工具统一“启用”的状态。现代通道不支持的执行工具显示“不支持”，Jev 未配置显示“待配置”，其余显示“已注册”，不把注册误当所有前提都满足。
+- 干净检出可以用 `runtime/defaults.example.mjs` 无凭据构建；`ZFOLD_DEFAULTS_FILE` 可显式选择默认配置文件，个人 `defaults.local.mjs` 继续忽略。README 已纠正目前共享数据根下凭据不能称作私有存储的说明。
+- `npm test` 最终 47/47 通过。协议测试覆盖 90 秒存活续期、取消确认、确认失联、迟到/竞争结果，以及从真正 Agent 工具入口调用 PTY。无个人默认配置构建与测试也通过。
+- Fold7 `RuntimeResponsivenessInstrumentation`：12 秒命令主线程返回 2 ms，心跳 242 次，最大间隔 54 ms；超时、stdout/stderr、非零退出码和路径约束通过。
+- Fold7 `RuntimeLifecycleInstrumentation` 从完整 Pi 链路运行 35 秒命令，最终耗时 35180 ms；Agent PTY `open/read/close` 返回真实 `/dev/pts/`；Pi 停止任务后普通子进程不再写入标记文件。排队取消、直接进程组取消、超时后子进程、输出上限和 stdin EOF 均通过，`INSTRUMENTATION_CODE=-1`。测试使用电脑上的确定性模型 fixture，执行始终在手机；不能据此推断真实模型的任务完成率。
+- 两种最终 APK 构建通过：compat28 SHA-256 `a00e4a092bec02f106218cc52516d77c6e3ec9eab41cf4583d0bbfa90ce12a82`；modern SHA-256 `a8be74846aed9aa8a99c8867ecd31a477607adc06a0452ac754aae1549865f2f`。最终 compat28 已安装 Fold7。日志保存在本地忽略目录 `artifacts/runtime-foundation/`。
+
+复现完整调用链：启动 `node scripts/runtime-lifecycle-fixture.mjs`，设置 `adb reverse tcp:18872 tcp:18872`，再运行 `adb shell am instrument -w dev.zfold.assistant/.RuntimeLifecycleInstrumentation`。该检查使用 `PiRuntime.testMode` 的独立测试会话。

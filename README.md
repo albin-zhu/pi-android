@@ -4,6 +4,19 @@
 
 ## 当前版本
 
+### 0.2.64 运行时基础
+
+设计与实施顺序见 [RUNTIME_DESIGN.md](RUNTIME_DESIGN.md)。当前仍为单活动 Agent 会话；独立 supervisor、任务恢复、多会话并发、完整终端模拟和 MCP 接入属于后续阶段。
+
+- 原生工具以独立调用 ID 跟踪，运行中报告存活，通信失联时间与命令执行时限分离。
+- `runtime_exec` 使用受管理进程组；取消与超时会终止普通子进程，启动前取消不再执行。明确脱离进程组的守护进程不在这项保证内。
+- 取消等待执行端回执；无法确认时显示状态未知，不把失联当作成功停止。包安装在安全检查点响应取消，已装依赖不自动回滚。
+- 一次性命令 stdin 默认 EOF；stdout/stderr 各保留最多 128 KiB，持续排空管道并报告截断，完整交互使用 PTY。
+- 修复 Agent PTY 入口、compat28 PATH 初始化和插话识别的实时 PCM 输送。结束通话只关闭语音通道；停止任务保持独立。
+- 命令终端目前仅提供 PTY 输入和文本输出，尚未实现全屏终端模拟。工具目录区分已注册、不支持和待配置，移除误导性的任意 `/工具名` 描述。
+
+以下功能清单和版本段落包含历史演进；能力边界以本节及验证记录为准。
+
 - 原生对话、流式回复、停止任务，以及 Pi 会话本地持久化；支持新建、查看、切换会话并恢复上次选中的会话。
 - 自定义 OpenAI 兼容模型：接口地址、模型 ID、API Key，在应用“模型”中设置。
 - 默认语音助手服务、系统助手入口；首次需在系统设置选中 Zfold。唤起后直接浮在当前应用上，可输入、语音、圈选、停止、最小化和关闭，回复留在卡片内。
@@ -340,7 +353,7 @@ Pi 现在启用标准 `read/write/edit/ls/bash`。`bash` 使用 Android 自带 t
 3. 在“手机能力”中按需选择默认助手、启用 Zfold 无障碍服务、授予悬浮窗权限。
 4. 在目标 App 上唤起助手，点卡片里的“圈选”，完成后回到同一卡片输入处理要求。系统助手入口的圈选与最小化保留在系统助手窗口内；独立悬浮入口仍受目标 App 隐藏悬浮层的限制。
 
-模型设置、密钥和会话保存在应用私有 `no_backup` 目录。目前密钥采用应用私有文件保存，没有额外 Keystore 加密。不会导入电脑上的 Pi 凭据。Android 不允许读取的受保护界面仍然不能读取。
+当前拥有共享存储权限时，会话、Skills 和 `.pi/agent` 配置使用 `/storage/emulated/0/pi`；没有该权限时使用应用私有 `no_backup/agent`。因此当前凭据还不能统一称为“应用私有存储”。私有凭据迁移已列入 RUNTIME_DESIGN.md 的第二阶段。模型入口选择另存于私有 `no_backup/model.json`。不会导入电脑上的 Pi 凭据。Android 不允许读取的受保护界面仍然不能读取。
 
 ## 构建
 
@@ -350,12 +363,14 @@ Pi 现在启用标准 `read/write/edit/ls/bash`。`bash` 使用 Android 自带 t
 npm ci --ignore-scripts
 npm run bundle
 npm test
-npm run build
-adb install --no-incremental -r artifacts/Zfold-0.2.58-debug.apk
+ZFOLD_TARGET_SDK=28 npm run build
+adb install --no-incremental -r artifacts/Zfold-0.2.64-compat28-debug.apk
 adb shell am start -n dev.zfold.assistant/.MainActivity
 ```
 
 构建下载固定版本的 Node Android 运行时，并校验 SHA-256；来源与许可见 `THIRD_PARTY_NOTICES.md`。开发签名保存在 `.build/debug.keystore`，保留它才能无损更新已有安装。
+
+干净检出默认使用不含凭据的 `runtime/defaults.example.mjs`，模型在 App 中配置。本机可选的 `runtime/defaults.local.mjs` 不进入 Git；`ZFOLD_DEFAULTS_FILE=runtime/defaults.example.mjs` 可显式构建无个人默认配置的版本。省略 `ZFOLD_TARGET_SDK` 构建 modern 通道，工具目录会标明不支持的执行能力。
 
 ## 验证
 

@@ -1,4 +1,6 @@
 /** Persistent PTY sessions backed by the app-private Termux runtime broker. */
+import path from 'node:path';
+
 export function createPtyTool({ Type, android, compatExec, resolveRuntimeCommand }) {
   return {
     name:'pty',
@@ -22,11 +24,12 @@ export function createPtyTool({ Type, android, compatExec, resolveRuntimeCommand
       if(!compatExec)throw new Error('pty 只在 targetSdk 28 compat28 通道可用');
       const action=args.action||'open';
       if(action==='open'){
-        const argv=args.argv||['bash','--noprofile','--norc'];
+        const argv=[...(args.argv||['bash','--noprofile','--norc'])];
         if(!path.isAbsolute(argv[0]))argv[0]=resolveRuntimeCommand(argv[0]);
-        return await android('pty',{...args,action,argv});
+        args={...args,action,argv};
       }
-      return await android('pty',args);
+      const result=await android('pty',args,signal);
+      return {content:[{type:'text',text:JSON.stringify(result)}],details:result};
     }
   };
 }

@@ -285,7 +285,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       case "delta":boolean follow=followsBottom();String delta=event.optString("text");response.append(delta);if(answer==null)bubble("",false);answer.setText(response.toString());followBottom(follow);voice.append(delta);break;
       case "tool_execution":boolean followTool=followsBottom();showTool(event);answer=null;showStatus("running".equals(event.optString("status"))?PhoneHud.action(event):"正在处理…");if("running".equals(event.optString("status")))VoiceCallActivity.onControllerStatus(PhoneHud.action(event));followBottom(followTool);break;
       case "turn_end":{
-        if(event.optBoolean("aborted"))showStatus("已停止");voice.turnEnded(event.optBoolean("aborted"));
+        if(event.optBoolean("aborted"))showStatus(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");voice.turnEnded(event.optBoolean("aborted"));
         String queued=pendingTaskPrompt;pendingTaskPrompt=null;
         if(queued!=null&&!isFinishing())handler.postDelayed(()->{if(!isFinishing()){toggleVoice();sendText(queued);}},380);
         break;
@@ -517,7 +517,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     String text=value.toLowerCase(Locale.ROOT).replaceAll("[\\s，,。：:！!？?]+","");
     return text.equals("停")||text.equals("停止")||text.equals("停下")||text.equals("取消")||text.equals("别做了")||text.equals("请停止")||text.equals("停止任务")||text.equals("停止当前任务");
   }
-  void stop(){screenSharing=false;updateScreenShareControl();pendingTaskPrompt=null;localFiles.clear();updateDraftAttachment();voice.stopSession(true);showStatus("已停止");VoiceWakeService.resume(this);}
+  void stop(){screenSharing=false;updateScreenShareControl();pendingTaskPrompt=null;localFiles.clear();updateDraftAttachment();voice.stopSession(true);showStatus(runtime.busy?"正在停止…":"已停止");VoiceWakeService.resume(this);}
   void toggleWake(){
     ArrayList<String> missing=new ArrayList<>();
     if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)missing.add(Manifest.permission.RECORD_AUDIO);

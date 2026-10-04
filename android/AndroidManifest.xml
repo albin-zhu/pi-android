@@ -61,6 +61,7 @@
     <instrumentation android:name=".SandboxInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold Node sandbox check" />
     <instrumentation android:name=".RuntimeExecInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold writable binary execution check" />
     <instrumentation android:name=".RuntimeResponsivenessInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold runtime main-thread responsiveness check" />
+    <instrumentation android:name=".RuntimeLifecycleInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold runtime cancellation and liveness check" />
     <instrumentation android:name=".RuntimePackInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold runtime pack install and execution check" />
     <instrumentation android:name=".PackageManagerInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold package manager install and execution check" />
     <instrumentation android:name=".PtyInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold Termux PTY check" />

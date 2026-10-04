@@ -2,6 +2,12 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {PhoneTurnGuard} from '../runtime/phone-turn-guard.mjs';
 
+test('background runtime calls neither consume the screen budget nor inherit a screen target',()=>{
+  const guard=new PhoneTurnGuard();guard.observed('screen_read',{packageName:'test.app',nodes:[]});
+  for(let i=0;i<150;i++)assert.deepEqual(guard.before('runtime_exec',{argv:['git']}),{argv:['git']});
+  assert.doesNotThrow(()=>guard.before('screen_capture',{}));
+});
+
 test('an empty target tree prevents detours into unrelated apps and binds visual actions',()=>{
   const guard=new PhoneTurnGuard();
   guard.observed('screen_read',{packageName:'com.tencent.mm',nodes:[]});

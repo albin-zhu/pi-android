@@ -114,8 +114,7 @@ final class UnifiedOverlay {
       body.addView(new Ui.Action(app, R.drawable.ic_x, "", "结束实时通话", 0xffff4553, Color.TRANSPARENT,
           () -> {
             VoiceTurnController controller = MainActivity.activeVoice();
-            if (controller != null) controller.stopSession(true);
-            else runtime.send(PiRuntime.json("type", "stop"));
+            if (controller != null) controller.stopSession(false);
             hideLocked();
           }), new LinearLayout.LayoutParams(Ui.dp(app, 40), Ui.dp(app, 40)));
       body.setOnClickListener(view -> {hideLocked(); VoiceCallActivity.show(app);});

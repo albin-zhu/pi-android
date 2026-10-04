@@ -1,7 +1,9 @@
 /** Bound recovery after a target app exposes no accessibility controls. */
+const phoneTools=new Set(['screen_read','screen_capture','ui_act','ui_tap','ui_input','ui_input_focused','ui_swipe','ui_back','app_open','split_screen']);
 export class PhoneTurnGuard {
   constructor(){this.packageName=null;this.emptyReads=0;this.calls=0;this.unverifiedInputs=new Set();this.splitActive=false;}
   before(name,args={}){
+    if(!phoneTools.has(name))return args;
     if(++this.calls>90)throw new Error('本轮手机工具调用过多，已停止；请根据当前页面重新开始');
     if(this.packageName&&(name==='app_open'||name==='split_screen'&&args.action==='launch')&&args.packageName!==this.packageName&&!this.splitActive)throw new Error('目标应用读屏受限，且尚未确认进入分屏；不能打开其他应用代替操作；本轮已停止');
     if(name==='ui_input'&&this.unverifiedInputs.has(JSON.stringify([args.packageName||this.packageName,args.text])))throw new Error('文字已经提交但无法回读；为避免重复输入，本轮已停止，请检查截图中的实际文字');

@@ -37,9 +37,9 @@ final class SkillManager implements PiRuntime.Listener {
     brand.addView(new Ui.Action(context,R.drawable.ic_arrow_clockwise,"","刷新本地 Skills",theme.muted,Color.TRANSPARENT,this::refresh),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
     brand.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭 Skill 管理",theme.muted,Color.TRANSPARENT,this::close),new LinearLayout.LayoutParams(Ui.dp(context,44),Ui.dp(context,44)));
     drawer.addView(brand);
-    TextView help=Ui.text(context,"Skills 存放在应用私有 .pi/skills。内容可指导 agent 执行能力，安装前请确认来源。",12,theme.muted);help.setLineSpacing(Ui.dp(context,3),1f);LinearLayout.LayoutParams helpParams=new LinearLayout.LayoutParams(-1,-2);helpParams.setMargins(0,Ui.dp(context,10),0,0);drawer.addView(help,helpParams);
+    TextView help=Ui.text(context,"项目 Skill 存放在项目 .pi/skills，全局 Skill 对所有项目生效。实际路径见下方目录信息。",12,theme.muted);help.setLineSpacing(Ui.dp(context,3),1f);LinearLayout.LayoutParams helpParams=new LinearLayout.LayoutParams(-1,-2);helpParams.setMargins(0,Ui.dp(context,10),0,0);drawer.addView(help,helpParams);
     LinearLayout buttons=new LinearLayout(context);buttons.setOrientation(LinearLayout.HORIZONTAL);
-    buttons.addView(new Ui.Action(context,R.drawable.ic_chat_circle_text,"新建工作区","写入 workspace/.pi/skills",theme.accent,theme.accentSoft,()->edit(null,"project")),new LinearLayout.LayoutParams(0,-2,1));
+    buttons.addView(new Ui.Action(context,R.drawable.ic_chat_circle_text,"新建项目 Skill","写入 workspace/.pi/skills",theme.accent,theme.accentSoft,()->edit(null,"project")),new LinearLayout.LayoutParams(0,-2,1));
     LinearLayout.LayoutParams firstParams=(LinearLayout.LayoutParams)buttons.getChildAt(0).getLayoutParams();firstParams.rightMargin=Ui.dp(context,7);buttons.getChildAt(0).setLayoutParams(firstParams);
     buttons.addView(new Ui.Action(context,R.drawable.ic_arrows_out_simple,"新建全局","写入 pi/skills",theme.ink,theme.field,()->edit(null,"global")),new LinearLayout.LayoutParams(0,-2,1));
     drawer.addView(buttons,new LinearLayout.LayoutParams(-1,-2));LinearLayout.LayoutParams buttonParams=(LinearLayout.LayoutParams)buttons.getLayoutParams();buttonParams.topMargin=Ui.dp(context,14);buttons.setLayoutParams(buttonParams);

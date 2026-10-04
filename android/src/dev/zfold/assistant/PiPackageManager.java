@@ -54,6 +54,7 @@ public final class PiPackageManager {
   }
 
   public static synchronized JSONObject install(Context context,String name)throws Exception {
+    NativeToolExecution.checkpoint();
     if(name==null||!name.matches("[a-z0-9][a-z0-9+._-]{0,63}"))throw new Exception("包名非法");
     JSONObject index=readIndex(context),target=index.optJSONObject(name);
     if(target==null)throw new Exception("仓库中找不到 "+name);
@@ -66,7 +67,8 @@ public final class PiPackageManager {
       JSONObject item=index.optJSONObject(base);
       if(item!=null&&state.optJSONObject(base)==null&&!order.contains(base))resolve(context,index,base,order,new HashSet<>());
     }
-    for(String item:order)if(!item.equals(name))installOne(context,index,item);
+    for(String item:order)if(!item.equals(name)){NativeToolExecution.checkpoint();installOne(context,index,item);}
+    NativeToolExecution.checkpoint();
     JSONObject result=installOne(context,index,name);
     return PiRuntime.json("name",name,"version",result.optString("version"),"installed",result,"state",installed(context));
   }
@@ -87,6 +89,7 @@ public final class PiPackageManager {
   }
 
   private static JSONObject installOne(Context context,JSONObject index,String name)throws Exception {
+    NativeToolExecution.checkpoint();
     JSONObject item=index.optJSONObject(name);if(item==null)throw new Exception("仓库中找不到 "+name);
     File deb=download(context,item);
     File stage=Files.createTempDirectory(cacheDir(context).toPath(),"extract-").toFile();
@@ -104,6 +107,8 @@ public final class PiPackageManager {
       File source=new File(stage,"data/data/com.termux/files/usr");
       if(!source.isDirectory())throw new Exception(name+" 包缺少 usr 目录");
       File usr=usr(context);usr.mkdirs();
+      // Once replacement starts, finish this package's state before cancelling.
+      NativeToolExecution.checkpoint();
       removeOwnedFiles(context,state,name);
       copyTree(source,usr);
       rewritePrefix(context);
@@ -167,7 +172,7 @@ public final class PiPackageManager {
       if(connection.getResponseCode()/100!=2)throw new Exception("仓库索引 HTTP "+connection.getResponseCode());
       try(InputStream input=connection.getInputStream();OutputStream out=new FileOutputStream(partial)) {transfer(input,out,MAX_INDEX);}
       connection.disconnect();
-    }catch(IOException e){connection.disconnect();throw e;}
+    }finally{connection.disconnect();}
     parsePackages(Files.readString(partial.toPath(),StandardCharsets.UTF_8));
     if(output.exists())output.delete();Files.move(partial.toPath(),output.toPath());
     return readIndex(context);
@@ -221,7 +226,7 @@ public final class PiPackageManager {
       if(connection.getResponseCode()/100!=2)throw new Exception("下载 HTTP "+connection.getResponseCode());
       try(InputStream input=connection.getInputStream();OutputStream out=new FileOutputStream(partial)) {transfer(input,out,MAX_DEB);}
       connection.disconnect();
-    }catch(IOException e){connection.disconnect();throw e;}
+    }finally{connection.disconnect();}
     String actual=sha256(partial);
     if(!item.optString("sha256").equalsIgnoreCase(actual))throw new Exception(name(item)+" SHA-256 不匹配，安装已拒绝");
     if(output.exists())output.delete();Files.move(partial.toPath(),output.toPath());
@@ -394,7 +399,7 @@ public final class PiPackageManager {
 
   private static void transfer(InputStream input,OutputStream out,long max)throws IOException {
     byte[] buffer=new byte[65536];long total=0;int n;
-    while((n=input.read(buffer))>=0) {total+=n;if(total>max)throw new IOException("文件超过大小限制");out.write(buffer,0,n);}
+    while((n=input.read(buffer))>=0) {NativeToolExecution.checkpoint();total+=n;if(total>max)throw new IOException("文件超过大小限制");out.write(buffer,0,n);}
   }
 
   private static int indexOf(byte[] value,byte[] needle) {
