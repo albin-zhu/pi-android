@@ -29,13 +29,14 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
   VoiceTurnController voice;Bitmap imagePreview,sentBitmap;
   boolean speakingMode,disposed,expandedImage,renderPending,compact,screenSharing,capturingScreen;
   boolean expanded;
+  final Runnable screenListener=()->{screenSharing=ScreenContext.enabled();updateScreenShareControl();if(!screenSharing&&imageLabel!=null&&imageLabel.startsWith("屏幕 ·"))removeImage();};
   int voiceConfigWaits;
   String pendingTaskPrompt;
   String lastSentFiles="";
   final ArrayList<LocalFileAttachment> localFiles=new ArrayList<>();
 
   AssistantPanel(Context context,Host host){
-    super(context);this.host=host;runtime=PiRuntime.get(context);theme=new Ui.Theme(context);
+    super(context);this.host=host;screenSharing=ScreenContext.enabled();runtime=PiRuntime.get(context);theme=new Ui.Theme(context);
     voice=new VoiceTurnController(context,new VoiceTurnController.Callback(){
       public boolean active(){return speakingMode&&!disposed;}
       public void status(String text){state.setText(text);}
@@ -53,13 +54,13 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     if(!runtime.lastPromptText.isEmpty()||runtime.lastPromptHasImage){lastSentText=runtime.lastPromptText;lastSentImage=runtime.lastPromptImage;showSent(lastSentText,lastSentImage,runtime.lastPromptHasImage);}
     if(!runtime.lastResponse.isEmpty())showReply(runtime.lastResponse);
     restoreTools();
-    runtime.listen(this);runtime.restoreConfiguration();updateControls();requestFocus();
+    runtime.listen(this);ScreenContext.listen(screenListener);screenListener.run();runtime.restoreConfiguration();updateControls();requestFocus();
   }
   int dp(float n){return Ui.dp(getContext(),n);}
   void setBottomInset(int inset){int bottom=dp(10)+Math.max(0,inset);if(getPaddingBottom()!=bottom)setPadding(dp(14),dp(14),dp(14),bottom);}
   @Override protected void onMeasure(int widthSpec,int heightSpec){
     boolean next=MeasureSpec.getMode(heightSpec)!=MeasureSpec.UNSPECIFIED&&MeasureSpec.getSize(heightSpec)<dp(340);
-    if(state!=null&&attachment!=null&&next!=compact){compact=next;state.setVisibility(compact?GONE:VISIBLE);attachment.setVisibility(image!=null&&!compact?VISIBLE:GONE);input.setHint(compact&&image!=null?"想对这张图做什么？":"想问什么，或让我做什么？");}
+    if(state!=null&&attachment!=null&&next!=compact){compact=next;state.setVisibility(VISIBLE);attachment.setVisibility(image!=null&&!compact?VISIBLE:GONE);input.setHint(compact&&image!=null?"想对这张图做什么？":"想问什么，或让我做什么？");}
     super.onMeasure(widthSpec,heightSpec);
   }
   TextView text(String s,int size,int color){return Ui.text(getContext(),s,size,color);}
@@ -75,7 +76,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     expandAction=action(R.drawable.ic_arrows_out_simple,"",expanded?"收缩为半屏":"展开全屏",theme.muted,Color.TRANSPARENT,host::toggleExpansion);
     head.addView(expandAction,new LayoutParams(dp(44),dp(44)));
     head.addView(action(R.drawable.ic_minus,"","最小化助手",theme.muted,Color.TRANSPARENT,()->{hideKeyboard();host.minimize();}),new LayoutParams(dp(48),dp(48)));
-    head.addView(action(R.drawable.ic_x,"","关闭助手",theme.muted,Color.TRANSPARENT,()->{stop();host.close();}),new LayoutParams(dp(48),dp(48)));addView(head);
+    head.addView(action(R.drawable.ic_x,"","关闭助手",theme.muted,Color.TRANSPARENT,()->{hideKeyboard();voice.stopSession(false);host.close();}),new LayoutParams(dp(48),dp(48)));addView(head);
     identity.setOnTouchListener(new OnTouchListener(){float origin;boolean moving;
       public boolean onTouch(View v,MotionEvent e){switch(e.getActionMasked()){
         case MotionEvent.ACTION_DOWN:animate().cancel();origin=e.getRawY()-getTranslationY();moving=false;return true;
@@ -154,7 +155,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
   }
   void removeImage(){image=null;imageLabel=null;attachment.setVisibility(GONE);thumbnail.setImageDrawable(null);preview.setImageDrawable(null);if(imagePreview!=null){imagePreview.recycle();imagePreview=null;}}
   Draft draft(){return new Draft(input.getText().toString(),image,imageLabel,screenSharing,new ArrayList<>(localFiles));}
-  void restore(Draft d){if(d==null)return;screenSharing=d.sharedScreen;updateScreenShareControl();localFiles.clear();if(d.files!=null)localFiles.addAll(d.files);renderFiles();input.setText(d.text);if(d.image!=null)attachImage(d.image,d.label==null?"当前屏幕":d.label);}
+  void restore(Draft d){if(d==null)return;screenSharing=ScreenContext.enabled();updateScreenShareControl();localFiles.clear();if(d.files!=null)localFiles.addAll(d.files);renderFiles();input.setText(d.text);if(d.image!=null)attachImage(d.image,d.label==null?"当前屏幕":d.label);}
   void setExpanded(boolean value){
     expanded=value;
     if(expandAction!=null){
@@ -204,33 +205,24 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     showSent(text,image,image!=null);input.setText("");removeImage();localFiles.clear();renderFiles();hideKeyboard();errorActions.setVisibility(GONE);errorLabel.setVisibility(GONE);answerMeta.setVisibility(GONE);resultArea.setVisibility(GONE);rawReply="";state.setText("正在思考…");runtime.send(command);updateControls();
   }
   void toggleScreenShare(){
-    if(capturingScreen)return;
-    if(screenSharing){screenSharing=false;updateScreenShareControl();state.setText("屏幕共享已关闭");return;}
-    if(PhoneAccessibility.instance==null){state.setText("共享屏幕需要先连接读屏与操作服务");return;}
-    screenSharing=true;updateScreenShareControl();
-    captureScreen("屏幕共享已开启 · 正在看当前屏幕",null);
+    if(ScreenContext.enabled()){ScreenContext.setEnabled(false);if(imageLabel!=null&&imageLabel.startsWith("屏幕 ·"))removeImage();state.setText("看屏幕已关闭");return;}
+    if(PhoneAccessibility.instance==null){state.setText("需要先开启读屏与操作服务");getContext().startActivity(new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));return;}
+    ScreenContext.setEnabled(true);captureScreen("正在查看其他应用…",null);
   }
   private void captureScreen(String waiting,Runnable ready){
-    if(capturingScreen)return;PhoneAccessibility service=PhoneAccessibility.instance;
-    if(service==null){screenSharing=false;updateScreenShareControl();state.setText("共享屏幕需要先连接读屏与操作服务");return;}
-    capturingScreen=true;state.setText(waiting);
-    boolean hidden=getVisibility()!=GONE;if(hidden)setVisibility(GONE);
-    service.capture((bitmap,error)->handler.post(()->{
-      if(hidden)setVisibility(VISIBLE);
-      capturingScreen=false;
+    if(capturingScreen)return;capturingScreen=true;state.setText(waiting);hideKeyboard();
+    ScreenContext.capture(getContext(),(encoded,label,error)->{
+      capturingScreen=false;if(disposed)return;
       if(error!=null){removeImage();state.setText(error);updateControls();return;}
-      String encoded=PhoneAccessibility.encode(bitmap);
-      android.util.Log.i("ZfoldSpeech","Screen share captured chars="+encoded.length());
-      attachImage(encoded,"共享屏幕");
-      updateScreenShareControl();
-      if(ready!=null)ready.run();else state.setText("屏幕共享已开启 · 每轮发送前看屏幕");
-    }));
+      attachImage(encoded,"屏幕 · "+label);updateScreenShareControl();
+      if(ready!=null)ready.run();else state.setText("正在看 "+label+" · 每次发送刷新");
+    });
   }
   private void updateScreenShareControl(){
-    if(screenShare==null)return;
-    int tint=screenSharing?theme.accent:theme.muted;
-    screenShare.tint=tint;screenShare.image.setImageDrawable(Ui.icon(getContext(),R.drawable.ic_screen_share,tint));
-    screenShare.setContentDescription(screenSharing?"关闭共享屏幕":"开启共享屏幕聊天");
+    if(screenShare==null)return;screenSharing=ScreenContext.enabled();
+    int tint=screenSharing?theme.accent:theme.muted;screenShare.tint=tint;
+    screenShare.setText("看屏幕");screenShare.image.setImageDrawable(Ui.icon(getContext(),R.drawable.ic_screen_share,tint));
+    screenShare.setContentDescription(screenSharing?"关闭看屏幕 · "+ScreenContext.label():"开启看屏幕，每次发送读取其他应用");
   }
   private void updateAgentIdentity(){
     if(identityTitle!=null)identityTitle.setText(runtime.agentName);
@@ -242,13 +234,14 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     if(actionToolbar==null)return;
     int width=actionToolbar.getWidth()>0?actionToolbar.getWidth():getResources().getDisplayMetrics().widthPixels;
     int widthDp=Math.round(width/getResources().getDisplayMetrics().density);
-    int mode=widthDp>=520?0:widthDp>=430?1:widthDp>=350?2:3;
+    int mode=widthDp>=680?0:widthDp>=570?1:widthDp>=420?2:3;
     modelChip.label.setMaxWidth(mode==3?dp(52):mode==2?dp(66):dp(78));
-    mic.setCompact(mode>=1);sidebar.setCompact(true);select.setCompact(mode>=1);screenShare.setCompact(true);fileButton.setCompact(mode>=1);overflow.setCompact(true);primary.setCompact(false);
-    boolean sharePinned=screenSharing;
+    modelChip.setCompact(mode>=3);screenShare.label.setMaxWidth(dp(mode>=2?42:100));
+    mic.setCompact(mode>=1);sidebar.setCompact(true);select.setCompact(mode>=1);screenShare.setCompact(false);fileButton.setCompact(mode>=1);overflow.setCompact(true);primary.setCompact(false);
+
     sidebar.setVisibility(mode==0?VISIBLE:GONE);
     select.setVisibility(mode<=1?VISIBLE:GONE);
-    screenShare.setVisibility(mode==0||sharePinned?VISIBLE:GONE);
+    screenShare.setVisibility(VISIBLE);
     fileButton.setVisibility(mode<=1?VISIBLE:GONE);
     overflow.setVisibility(mode==0?GONE:VISIBLE);
     overflow.setContentDescription("更多工具"+(mode>=3?"：会话、圈选、文件、共享":"：会话、共享"));
@@ -274,7 +267,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
       case "tool_execution":showTool(e);state.setText("running".equals(e.optString("status"))?PhoneHud.action(e):"正在处理…");
         if(voice.sessionActive()&&"running".equals(e.optString("status")))voice.toolAnnounce(PhoneHud.action(e));break;
       case "turn_end":{
-        showReply(runtime.lastResponse);if(e.optBoolean("aborted"))state.setText(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");voice.turnEnded(e.optBoolean("aborted"));
+        showReply(runtime.lastResponse);if(e.optBoolean("aborted"))state.setText(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");voice.turnEnded(e.optBoolean("aborted"));if(!e.optBoolean("aborted")&&!voice.sessionActive())state.setText(ScreenContext.enabled()?ScreenContext.label():"随时待命");
         String queued=pendingTaskPrompt;pendingTaskPrompt=null;
         if(queued!=null&&!disposed)handler.postDelayed(()->{if(!disposed){voice();send(queued);}},380);
         break;
@@ -351,8 +344,8 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
       public void prompt(String text){send(text);}
     },section);
   }
-  void stop(){screenSharing=false;updateScreenShareControl();pendingTaskPrompt=null;localFiles.clear();renderFiles();voice.stopSession(true);VoiceWakeService.resume(getContext());if(runtime.busy){runtime.send(PiRuntime.json("type","stop"));state.setText("正在停止…");primary.setEnabled(false);}else state.setText("随时待命");}
-  void dispose(){if(disposed)return;disposed=true;voice.destroy();runtime.unlisten(this);handler.removeCallbacksAndMessages(null);if(imagePreview!=null){thumbnail.setImageDrawable(null);preview.setImageDrawable(null);imagePreview.recycle();imagePreview=null;}if(sentBitmap!=null){sentThumbnail.setImageDrawable(null);sentExpanded.setImageDrawable(null);sentBitmap.recycle();sentBitmap=null;}pendingTaskPrompt=null;}
+  void stop(){pendingTaskPrompt=null;localFiles.clear();renderFiles();voice.stopSession(true);VoiceWakeService.resume(getContext());if(runtime.busy){runtime.send(PiRuntime.json("type","stop"));state.setText("正在停止…");primary.setEnabled(false);}else state.setText("随时待命");}
+  void dispose(){if(disposed)return;disposed=true;voice.destroy();runtime.unlisten(this);ScreenContext.unlisten(screenListener);handler.removeCallbacksAndMessages(null);if(imagePreview!=null){thumbnail.setImageDrawable(null);preview.setImageDrawable(null);imagePreview.recycle();imagePreview=null;}if(sentBitmap!=null){sentThumbnail.setImageDrawable(null);sentExpanded.setImageDrawable(null);sentBitmap.recycle();sentBitmap=null;}pendingTaskPrompt=null;}
   void pickFiles(){
     FilePickActivity.request(getContext(),uris->{
       if(uris.isEmpty())return;

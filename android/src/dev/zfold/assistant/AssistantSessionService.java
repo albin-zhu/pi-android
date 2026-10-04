@@ -37,7 +37,7 @@ public final class AssistantSessionService extends VoiceInteractionSessionServic
     void createPanel(){
       if(panel!=null)panel.dispose();
       panel=new AssistantPanel(context,new AssistantPanel.Host(){
-        public void close(){minimizePanel();}
+        public void close(){ScreenContext.setEnabled(false);AssistantOverlay.preserveDraft(panel.draft());panel.voice.stopSession(false);hideKeyboard();CircleOverlay.hideBubble();hide();}
         public void minimize(){minimizePanel();}
         public void toggleExpansion(){if(expanded)restorePanel();else expandPanel();}
         public void select(){selectRegion();}
@@ -55,7 +55,7 @@ public final class AssistantSessionService extends VoiceInteractionSessionServic
       panel.setLayoutParams(lp);panel.setExpanded(true);container.requestApplyInsets();
     }
     void minimizePanel(){
-      panel.voice.stopSession(false);hideKeyboard();expanded=false;
+      AssistantOverlay.preserveDraft(panel.draft());panel.voice.stopSession(false);hideKeyboard();expanded=false;
       CircleOverlay.ensureBubble(context);
       if(CircleOverlay.hasBubble())hide();
       else{container.removeAllViews();Ui.Bubble mini=new Ui.Bubble(context);mini.setOnClickListener(v->restorePanel());FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(dp(52),dp(52),Gravity.BOTTOM|Gravity.END);container.addView(mini,lp);touchSurface=mini;container.requestApplyInsets();}
@@ -74,7 +74,7 @@ public final class AssistantSessionService extends VoiceInteractionSessionServic
       if(selecting){if(touchSurface instanceof CircleOverlay.Selection){Bitmap bitmap=((CircleOverlay.Selection)touchSurface).screenshot;if(!bitmap.isRecycled())bitmap.recycle();}restorePanel();}
       else if(touchSurface!=panel)restorePanel();
       else if(expanded)restorePanel();
-      else{panel.stop();minimizePanel();}
+      else{minimizePanel();}
     }
     @Override public void onHide(){if(active==this)active=null;if(panel!=null)panel.dispose();if(screen!=null){screen.recycle();screen=null;}super.onHide();}
     @Override public void onDestroy(){if(active==this)active=null;if(panel!=null)panel.dispose();if(screen!=null)screen.recycle();super.onDestroy();}

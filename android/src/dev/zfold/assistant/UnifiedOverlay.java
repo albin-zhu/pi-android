@@ -15,6 +15,7 @@ import android.widget.LinearLayout;
 
 /** One compact overlay slot shared by background calls and phone tasks. */
 final class UnifiedOverlay {
+  static View captureView(){return card;}
   enum Mode {TASK, CALL}
 
   private static Mode mode;

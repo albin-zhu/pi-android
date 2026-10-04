@@ -126,6 +126,15 @@ public final class PhoneAccessibility extends AccessibilityService {
     return PiRuntime.json("windows",rows);
   }
   String foregroundPackage(){AccessibilityNodeInfo root=applicationRoot();if(root==null)return "";try{return String.valueOf(root.getPackageName());}finally{root.recycle();}}
+  String screenApplicationPackage(){
+    String best="";int layer=Integer.MIN_VALUE;
+    for(AccessibilityWindowInfo window:getWindows()){
+      if(window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION||window.getLayer()<layer)continue;
+      AccessibilityNodeInfo root=window.getRoot();if(root==null)continue;
+      try{if(window.isActive()||window.isFocused())return String.valueOf(root.getPackageName());best=String.valueOf(root.getPackageName());layer=window.getLayer();}finally{root.recycle();}
+    }
+    return best;
+  }
   private Display currentDisplay(){return ((android.hardware.display.DisplayManager)getSystemService(DISPLAY_SERVICE)).getDisplay(Display.DEFAULT_DISPLAY);}
   private void visualGesture(JSONObject args,boolean swipe,AndroidTools.Result result)throws Exception{
     VisualFrame frame=visualFrame;if(frame==null)throw new Exception("请先读取截图，使用 screenshotId 和图片像素坐标");
@@ -248,14 +257,26 @@ public final class PhoneAccessibility extends AccessibilityService {
     if(!accepted)result.done(null,"系统未接受手势");
   }
   interface Capture {void done(Bitmap bitmap,String error);}
-  void capture(Capture callback){
-    takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),new TakeScreenshotCallback(){
+  void capture(Capture callback){takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),screenshotCallback(callback));}
+  void captureApplication(String app,Capture callback){
+    if(Build.VERSION.SDK_INT<34){capture(callback);return;}
+    int id=-1,layer=Integer.MIN_VALUE;
+    for(AccessibilityWindowInfo window:getWindows()){
+      if(window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION||window.getLayer()<layer)continue;
+      AccessibilityNodeInfo root=window.getRoot();if(root==null)continue;
+      try{if(app.equals(String.valueOf(root.getPackageName()))){id=window.getId();layer=window.getLayer();}}finally{root.recycle();}
+    }
+    if(id<0){callback.done(null,"目标应用窗口已关闭，请重新发送");return;}
+    takeScreenshotOfWindow(id,getMainExecutor(),screenshotCallback(callback));
+  }
+  private TakeScreenshotCallback screenshotCallback(Capture callback){
+    return new TakeScreenshotCallback(){
       @Override public void onSuccess(ScreenshotResult result){
         Bitmap hardware=Bitmap.wrapHardwareBuffer(result.getHardwareBuffer(),result.getColorSpace());
         Bitmap image=hardware.copy(Bitmap.Config.ARGB_8888,false);hardware.recycle();result.getHardwareBuffer().close();callback.done(image,null);
       }
       @Override public void onFailure(int code){callback.done(null,"屏幕无法截取（"+code+"），可能是受保护页面或请求过于频繁");}
-    });
+    };
   }
   static String encode(Bitmap bitmap){
     int limit=1400;Bitmap image=bitmap;

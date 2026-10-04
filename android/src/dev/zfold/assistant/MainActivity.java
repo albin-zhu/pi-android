@@ -24,6 +24,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   static volatile MainActivity current;
   PiRuntime runtime; LinearLayout conversation,root,intro,draftAttachment,fileList,composerSurface,statusRow,actionToolbar; android.view.View slashSuggest; FrameLayout composerFrame;ScrollView scroll; TextView status,draftLabel; Ui.RichBlock answer; Ui.Action voiceButton,modelButton,circleButton,attachButton,screenShareButton,sendButton,sessionButton,overflowButton; EditText input; ImageView draftThumbnail,draftExpanded; Bitmap draftBitmap; Ui.Theme theme;
   StringBuilder response=new StringBuilder(); boolean continuous,compactHeader,screenSharing,capturingScreen,composerCompact;
+  final Runnable screenListener=()->{screenSharing=ScreenContext.enabled();updateScreenShareControl();};
   String lastSentFiles="";
   int statusToken;
   VoiceTurnController voice;
@@ -46,7 +47,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       public void sessionEnded(String reason){continuous=false;voiceButton.setText("说话");showStatus(reason);VoiceCallActivity.onSessionEnded(reason);}
     });
     foregroundVoice=voice;
-    buildUI();
+    buildUI();ScreenContext.listen(screenListener);screenListener.run();
     if(runtime.ready&&!runtime.configured)runtime.restoreConfiguration();
     else if(runtime.configured)runtime.send(PiRuntime.json("type","history"));
     if(getIntent().getBooleanExtra("open_models",false)){getIntent().removeExtra("open_models");settings();}
@@ -227,7 +228,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       showStatus(stopOnly?"收到停止指令 · 正在停止":"收到新指令 · 停止旧任务后执行");
       runtime.send(PiRuntime.json("type","stop"));updateSend();return;
     }
-    if(screenSharing){captureScreen("正在读取共享屏幕…",()->dispatchText(text));return;}
+    if(ScreenContext.enabled()){openScreenWorkspace(text,true);return;}
     dispatchText(text);
   }
   private void dispatchText(String text){
@@ -299,20 +300,21 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   void updateComposerToolbar(float width){
     if(actionToolbar==null)return;
     int widthDp=width>0?Math.round(width/getResources().getDisplayMetrics().density):composerCompact?360:520;
-    int mode=widthDp>=520?0:widthDp>=430?1:widthDp>=350?2:3;
+    int mode=widthDp>=680?0:widthDp>=570?1:widthDp>=420?2:3;
     composerCompact=mode>=1;
     modelButton.label.setMaxWidth(mode==3?dp(56):mode==2?dp(70):dp(84));
+    modelButton.setCompact(mode>=3);screenShareButton.label.setMaxWidth(dp(mode>=2?42:100));
     voiceButton.setCompact(mode>=1);
     sessionButton.setCompact(true);
     circleButton.setCompact(mode>=1);
     attachButton.setCompact(mode>=1);
-    screenShareButton.setCompact(true);
+    screenShareButton.setCompact(false);
     sendButton.setCompact(false);overflowButton.setCompact(true);
-    boolean sharePinned=screenSharing;
+
     sessionButton.setVisibility(mode==0?View.VISIBLE:View.GONE);
     circleButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
     attachButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
-    screenShareButton.setVisibility(mode==0||sharePinned?View.VISIBLE:View.GONE);
+    screenShareButton.setVisibility(View.VISIBLE);
     overflowButton.setVisibility(mode==0?View.GONE:View.VISIBLE);
     overflowButton.setContentDescription("更多工具"+(mode>=3?"：会话、圈选、文件、共享":"：会话、共享"));
     updateModelChip();updateScreenShareControl();
@@ -488,36 +490,28 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   void notice(String message){Toast.makeText(this,message,Toast.LENGTH_LONG).show();}
   private String draftLabelText(){return pendingImageLabel==null?"圈选区域":pendingImageLabel;}
   private void toggleScreenShare(){
-    if(capturingScreen)return;
-    if(screenSharing){screenSharing=false;updateScreenShareControl();updateComposerToolbar(composerSurface.getWidth());showStatus("屏幕共享已关闭");return;}
-    if(PhoneAccessibility.instance==null){showStatus("共享屏幕需要先连接读屏与操作服务");return;}
-    screenSharing=true;updateScreenShareControl();updateComposerToolbar(composerSurface.getWidth());
-    captureScreen("屏幕共享已开启 · 正在看当前屏幕",null);
+    if(ScreenContext.enabled()){ScreenContext.setEnabled(false);showStatus("看屏幕已关闭");return;}
+    if(PhoneAccessibility.instance==null){new AlertDialog.Builder(this).setTitle("开启读屏与操作").setMessage("从悬浮窗查看其他应用，需要先在系统设置开启 Zfold 的无障碍服务。").setNegativeButton("返回",null).setPositiveButton("前往设置",(d,w)->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))).show();return;}
+    ScreenContext.setEnabled(true);openScreenWorkspace(input.getText().toString(),false);
   }
-  private void captureScreen(String waiting,Runnable ready){
-    if(capturingScreen)return;PhoneAccessibility service=PhoneAccessibility.instance;
-    if(service==null){screenSharing=false;updateScreenShareControl();showStatus("共享屏幕需要先连接读屏与操作服务");return;}
-    capturingScreen=true;showStatus(waiting);
-    service.capture((bitmap,error)->runOnUiThread(()->{
-      capturingScreen=false;
-      if(error!=null){pendingImage=null;pendingImageLabel=null;updateDraftAttachment();showStatus(error);updateScreenShareControl();return;}
-      String encoded=PhoneAccessibility.encode(bitmap);
-      android.util.Log.i("ZfoldSpeech","Main screen share captured chars="+encoded.length());
-      pendingImage=encoded;pendingImageLabel="共享屏幕";updateDraftAttachment();updateScreenShareControl();
-      if(ready!=null)ready.run();else showStatus("屏幕共享已开启 · 每轮发送前看屏幕");
-    }));
+  private void openScreenWorkspace(String text,boolean send){
+    if(capturingScreen)return;capturingScreen=true;
+    AssistantOverlay.preserveDraft(new AssistantPanel.Draft(text,pendingImage,pendingImageLabel,true,new ArrayList<>(localFiles)));
+    input.setText("");pendingImage=null;pendingImageLabel=null;localFiles.clear();updateDraftAttachment();
+    ((android.view.inputmethod.InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(),0);
+    moveTaskToBack(true);
+    handler.postDelayed(()->{capturingScreen=false;AssistantOverlay.show(this);AssistantPanel panel=AssistantOverlay.currentPanel();if(panel!=null){panel.state.setText("切换到要查看的应用，再发送消息");if(send)panel.send(text);}},400);
   }
   private void updateScreenShareControl(){
-    if(screenShareButton==null)return;
-    int tint=screenSharing?theme.accent:theme.muted;
-    screenShareButton.tint=tint;screenShareButton.image.setImageDrawable(Ui.icon(this,R.drawable.ic_screen_share,tint));
-    screenShareButton.setContentDescription(screenSharing?"关闭共享屏幕":"开启共享屏幕聊天");
+    if(screenShareButton==null)return;screenSharing=ScreenContext.enabled();int tint=screenSharing?theme.accent:theme.muted;
+    screenShareButton.tint=tint;screenShareButton.setText("看屏幕");screenShareButton.image.setImageDrawable(Ui.icon(this,R.drawable.ic_screen_share,tint));
+    screenShareButton.setContentDescription(screenSharing?"关闭看屏幕":"在其他应用上打开悬浮助手并看屏幕");
   }
   private static boolean isStopCommand(String value){
     String text=value.toLowerCase(Locale.ROOT).replaceAll("[\\s，,。：:！!？?]+","");
     return text.equals("停")||text.equals("停止")||text.equals("停下")||text.equals("取消")||text.equals("别做了")||text.equals("请停止")||text.equals("停止任务")||text.equals("停止当前任务");
   }
-  void stop(){screenSharing=false;updateScreenShareControl();pendingTaskPrompt=null;localFiles.clear();updateDraftAttachment();voice.stopSession(true);showStatus(runtime.busy?"正在停止…":"已停止");VoiceWakeService.resume(this);}
+  void stop(){pendingTaskPrompt=null;localFiles.clear();updateDraftAttachment();voice.stopSession(true);showStatus(runtime.busy?"正在停止…":"已停止");VoiceWakeService.resume(this);}
   void toggleWake(){
     ArrayList<String> missing=new ArrayList<>();
     if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)missing.add(Manifest.permission.RECORD_AUDIO);
@@ -563,5 +557,5 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==21&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)toggleVoice();if(request==22)toggleWake();}
   @Override protected void onPause(){super.onPause();if(voice.sessionActive()&&!VoiceCallActivity.isActive()){VoiceWakeService.resume(this);}}
   @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);if(new Ui.Theme(this).dark!=theme.dark){recreate();return;}}
-  @Override protected void onDestroy(){if(current==this)current=null;runtime.unlisten(this);screenSharing=false;pendingTaskPrompt=null;if(VoiceCallActivity.isActive());else{continuous=false;foregroundVoice=null;voice.destroy();}if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
+  @Override protected void onDestroy(){if(current==this)current=null;runtime.unlisten(this);ScreenContext.unlisten(screenListener);pendingTaskPrompt=null;if(VoiceCallActivity.isActive());else{continuous=false;foregroundVoice=null;voice.destroy();}if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
 }

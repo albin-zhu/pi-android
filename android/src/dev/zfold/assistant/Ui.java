@@ -230,20 +230,21 @@ final class Ui {
   static void arrive(View v){if(!motion())return;v.animate().cancel();v.setAlpha(0);v.setTranslationY(dp(v.getContext(),10));v.animate().alpha(1).translationY(0).setDuration(180).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();}
   static void click(View v){v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);}
   static final class Action extends LinearLayout {
-    final ImageView image;final TextView label;int tint;
+    final ImageView image;final TextView label;int tint;private boolean compact;private boolean compactApplied;
     Action(Context c,int resource,String text,String description,int foreground,int fill,Runnable action){super(c);tint=foreground;setOrientation(HORIZONTAL);setGravity(Gravity.CENTER);setMinimumHeight(dp(c,48));setMinimumWidth(dp(c,48));setPadding(dp(c,text.isEmpty()?12:14),dp(c,10),dp(c,text.isEmpty()?12:14),dp(c,10));
       image=new ImageView(c);image.setImageDrawable(icon(c,resource,foreground));image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);addView(image,new LinearLayout.LayoutParams(dp(c,21),dp(c,21)));
       label=Ui.text(c,text,13,foreground);label.setTypeface(Typeface.create("sans-serif-medium",0));label.setSingleLine(true);label.setEllipsize(android.text.TextUtils.TruncateAt.END);label.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,-2);lp.leftMargin=dp(c,7);addView(label,lp);label.setVisibility(text.isEmpty()?GONE:VISIBLE);
       setContentDescription(description);setBackground(ripple(c,fill,14,foreground));setClickable(true);setFocusable(true);setOnClickListener(v->{if(isEnabled()){click(v);action.run();}});
     }
     void setIcon(int resource){image.setImageDrawable(icon(getContext(),resource,tint));}
-    void setText(String text){label.setText(text);label.setVisibility(text.isEmpty()?GONE:VISIBLE);if(!text.isEmpty())setContentDescription(text);}
+    void setText(String text){if(!text.contentEquals(label.getText()))label.setText(text);label.setVisibility(compact||text.isEmpty()?GONE:VISIBLE);if(!text.isEmpty())setContentDescription(text);}
     void setCompact(boolean value){
+      if(compactApplied&&compact==value)return;compact=value;compactApplied=true;
       boolean hasText=!label.getText().toString().isEmpty();
       label.setVisibility(value||!hasText?GONE:VISIBLE);
       int horizontal=dp(getContext(),value?5:14);
       setPadding(horizontal,dp(getContext(),value?6:10),horizontal,dp(getContext(),value?6:10));
-      setMinimumWidth(dp(getContext(),value?40:48));
+      setMinimumWidth(dp(getContext(),48));
       LinearLayout.LayoutParams imageParams=(LinearLayout.LayoutParams)image.getLayoutParams();
       imageParams.width=dp(getContext(),value?18:21);imageParams.height=imageParams.width;
       image.setLayoutParams(imageParams);

@@ -617,3 +617,14 @@
 - 多 provider 测试修正为等待选中的 gateway 目录，避免把上一个 configure 的异步目录当成本次结果；模型代码未因该测试改动。
 - 模板来源：GitHub 官方 MCP Server、modelcontextprotocol/servers 文件与记忆工具，以及官方 Registry。模板不代表已登录或已安装服务。
 - 本阶段完成连接工作流。跨应用看屏幕、浮窗与全局导航仍在继续，完整目标尚未完成。
+
+## 2026-10-05 · 跨应用看屏幕
+
+- Android 16 `emulator-5554` 上，`ScreenShareInstrumentation` 全部 7 项通过：主界面带草稿进入浮窗、收起恢复、独立应用的红/蓝两种画面、捕获失败保留草稿且不发送旧图、关闭后下一条消息不带新图、关闭入口与收起区分。
+- 实际使用 bundled Pi 向本地模型 fixture 发出请求；模型返回收到图片的 SHA-256，与 Android 端发送的图片逐字节核对。PNG 指定像素颜色同时确认是外部目标应用，排除把白色助手浮窗截进图片。不是仅检查成功回调。
+- 受保护测试窗口启用 FLAG_SECURE。整屏 API 会产生黑图，因此 API 34+ 改为目标窗口接口，系统明确返回失败后保留草稿；未尝试读取受保护内容。官方 API 说明：https://developer.android.com/reference/android/accessibilityservice/AccessibilityService#takeScreenshotOfWindow(int,java.util.concurrent.Executor,android.accessibilityservice.AccessibilityService.TakeScreenshotCallback) 。
+- `artifacts/interaction-redesign/screen-android.txt` 记录 `INSTRUMENTATION_CODE: -1`；`screen-sharing-external.png` 保存浮窗在独立测试应用上的画面。最终版本编号升至 0.2.68。
+- 尚未验证 API 30–33 回退、系统助手入口专项、旋转/大字体/键盘避让组合、关闭时已有任务持续运行；完整目标尚未完成。
+
+- 0.2.68 最终 APK 再次通过上述 7 项，截图已核对：浮窗位于独立目标应用之上，顶部显示 `Screen QA Target`，看屏幕按钮完整可见，完成后恢复发送状态。
+- 另跑旧 `KeyboardInstrumentation` 未通过：`imeInsetVisible=true`、`panelBottom=1517`、`sendBottom=1478`，但 `keyboardTop=-1`，未取得输入法窗口，不能据此判断键盘遮挡已经解决。日志 `artifacts/interaction-redesign/screen-keyboard.txt`，这项继续列为未完成。测试需在 instrumentation 重启后重新绑定模拟器无障碍服务；本次仅开启本测试应用服务。

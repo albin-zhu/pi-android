@@ -21,15 +21,15 @@ public final class AssistantOverlay {
     show(context);AssistantPanel panel=currentPanel();if(panel!=null)panel.wakeVoice();
   }
   static void show(Context context,String image){
-    if(panel!=null){if(image!=null)panel.attachImage(image,"已附上圈选内容");return;}
+    if(panel!=null){if(savedDraft!=null){panel.restore(savedDraft);savedDraft=null;}if(image!=null)panel.attachImage(image,"已附上圈选内容");return;}
     Context app=context.getApplicationContext();
     PhoneAccessibility service=PhoneAccessibility.instance;
     if(service==null&&!Settings.canDrawOverlays(app)){Toast.makeText(app,"请先允许 Zfold 显示悬浮窗",Toast.LENGTH_LONG).show();app.startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,android.net.Uri.parse("package:"+app.getPackageName())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));return;}
     Context windowContext=service!=null?service:app;
     CircleOverlay.hideBubble();manager=(WindowManager)windowContext.getSystemService(Context.WINDOW_SERVICE);
     panel=new AssistantPanel(new android.view.ContextThemeWrapper(windowContext,R.style.AppTheme),new AssistantPanel.Host(){
-      public void close(){savedDraft=panel.draft();hide();CircleOverlay.showBubble(app);}
-      public void minimize(){savedDraft=panel.draft();hide();CircleOverlay.showBubble(app);}
+      public void close(){ScreenContext.setEnabled(false);savedDraft=panel.draft();hide();CircleOverlay.hideBubble();}
+      public void minimize(){savedDraft=panel.draft();hide();CircleOverlay.ensureBubble(app);}
       public void select(){savedDraft=panel.draft();hide();CircleOverlay.begin(app,(data)->show(app,data));}
       public void toggleExpansion(){setExpanded(!expanded);}
     });
@@ -46,7 +46,7 @@ public final class AssistantOverlay {
   }
   private static void applySurfaceMode(Context app,boolean full){
     if(params==null)return;
-    if(panel==null||manager==null||!panel.isAttachedToWindow())return;
+    if(panel==null||manager==null)return;
     android.graphics.Rect bounds=((WindowManager)app.getSystemService(Context.WINDOW_SERVICE)).getMaximumWindowMetrics().getBounds();
     params.gravity=full?Gravity.CENTER:Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL;
     params.width=full?WindowManager.LayoutParams.MATCH_PARENT:WindowManager.LayoutParams.MATCH_PARENT;
@@ -54,7 +54,7 @@ public final class AssistantOverlay {
     params.x=0;params.y=0;
     if(full)params.setFitInsetsTypes(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout()|WindowInsets.Type.ime());
     else params.setFitInsetsTypes(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout()|WindowInsets.Type.ime());
-    manager.updateViewLayout(panel,params);
+    if(panel.isAttachedToWindow())manager.updateViewLayout(panel,params);
   }
   static void hide(){if(panel==null)return;AssistantPanel old=panel;panel=null;old.dispose();try{manager.removeView(old);}catch(IllegalArgumentException ignored){}manager=null;accessibilityPanel=false;}
   static void accessibilityDisconnected(Context context){if(accessibilityPanel){savedDraft=panel.draft();hide();if(Settings.canDrawOverlays(context))CircleOverlay.ensureBubble(context);}}

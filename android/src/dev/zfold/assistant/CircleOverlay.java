@@ -11,6 +11,7 @@ import android.widget.*;
 import java.util.ArrayList;
 
 public final class CircleOverlay {
+  static View captureView(){return bubble;}
   static volatile String selectedImage;
   static View bubble;static WindowManager manager;static boolean accessibilityBubble;
   static int bubbleX=20,bubbleY=280;
