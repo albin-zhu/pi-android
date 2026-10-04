@@ -4,9 +4,18 @@
 
 ## 当前版本
 
+### 0.2.67 连接管理
+
+- `/mcp` 直接打开连接页面，可添加远程 HTTP / SSE 地址、本机 stdio 命令，或导入 `mcpServers` / `servers` JSON。
+- 支持 Bearer Token、自定义 Headers、OAuth 浏览器登录（PKCE，动态注册或预注册的公共 Client ID）。配置和令牌只保存在应用私有目录。
+- 连接卡片展示连接状态和工具数量，可查看输入结构、手动调用、编辑、断开、重连和删除。启动时恢复已启用连接；长时间无响应会超时，可以取消连接。
+- Agent 通过 `connector_tools` 按需发现工具，再用 `connector_call` 调用；不预塞入每个服务的全部 schema。
+- 内置 GitHub、本机文件与记忆的接入模板，以及官方 Registry 入口。本机模板需要安装 Node.js / npm；软件包入口可直接从表单打开。配置导入中的 `${...}` 是字面量，需要替换成自己的配置值。
+- 已使用受控 MCP / OAuth 服务验证协议与私有配置；未连接用户的真实第三方账号。各服务的账户策略、权限和 OAuth 注册要求以其官方说明为准。
+
 ### 0.2.66 交互重做进行中
 
-完整范围与未完成验收见 [INTERACTION_REDESIGN.md](INTERACTION_REDESIGN.md)。当前已推进真实终端，Connector、跨应用共享与浮窗统一流程仍在实施。
+完整范围与未完成验收见 [INTERACTION_REDESIGN.md](INTERACTION_REDESIGN.md)。当前已推进真实终端和 Connector；跨应用共享与浮窗统一流程仍在实施。
 
 - 终端直接输入，支持 ANSI/VT、中文、选择、控制键与全屏应用，使用内嵌的 Termux 终端组件，不依赖另装 Termux App。
 - 返回会保留终端会话，显式“结束当前会话及进程”才结束；运行中的终端有前台服务与通知。应用进程被杀后的恢复不在当前保证内。

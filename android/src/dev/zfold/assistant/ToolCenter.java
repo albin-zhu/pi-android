@@ -193,8 +193,9 @@ final class ToolCenter implements PiRuntime.Listener {
   }
 
   private void renderMcp(String query){
-    heading(anchor.getContext(),"MCP · 外部工具连接");
-    boolean connected=mcp.optBoolean("connected");String message=mcp.optString("message","MCP server 尚未接入。");
+    heading(anchor.getContext(),"连接 · MCP 外部工具");
+    actionCard(anchor.getContext(),"管理与添加连接","添加远程地址、本机命令或导入 JSON",R.drawable.ic_arrows_out_simple,()->ConnectorActivity.open(anchor.getContext()));
+    boolean connected=mcp.optBoolean("connected");String message=connected?mcp.optInt("toolCount")+" 个外部工具可通过连接调用":"尚无已连接的服务，点击上方添加连接。";
     if(matches("mcp model context protocol "+message,query)){
       card(connected?"MCP 已连接":"MCP 未接入",message,connected?"已连接":"未连接","MCP",R.drawable.ic_arrows_out_simple,null,null);
     }
@@ -221,7 +222,7 @@ final class ToolCenter implements PiRuntime.Listener {
     switch(name){
       case "tools":close();break;
       case "skills":section=1;renderChips();render();break;
-      case "mcp":section=4;renderChips();render();break;
+      case "mcp":close();ConnectorActivity.open(anchor.getContext());break;
       case "packages":close();host.openPackages();break;
       case "model":close();host.openModelSettings();break;
       case "agent":close();host.openAgentSettings();break;

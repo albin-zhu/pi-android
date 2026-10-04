@@ -605,3 +605,15 @@
 - 原有 `npm test` 49/49 通过；真实 Pi 的 35 秒原生命令、PTY、环境一致性、取消、子进程组终止和输出限额回归通过。PTY fixture 按实际流式结果继续读取，不再假定一次 read 就收到全部进程输出。
 - 尚待验收：干净模拟器从系统 Shell 安装 Bash、选择复制、旋转/字体放大、常规非 instrumentation 后台运行、会话菜单。独立干净 AVD `Pi_Workbench_QA` 已创建，未启动。
 - 详细结果在本地忽略目录 artifacts/interaction-redesign，包含 terminal-final.txt、foreign-prefix-before.txt、foreign-prefix-after.txt 和 runtime-lifecycle.txt。此阶段不代表完整交互目标完成。
+
+## 2026-10-05 · 0.2.67 Connector
+
+只使用 `emulator-5554`，未使用已被用户拿走的真机。
+
+- 57 个桌面测试通过。新增 HTTP、显式 SSE / HTTP 回退、stdio、私有文件与重启恢复、OAuth PKCE/state 与登录中重启、超时/取消、原子导入、错误脱敏测试。真实 bundled Pi 先查询 `connector_tools` 再调用 `connector_call`，fixture 收到真实 MCP 请求，模型上下文不包含保存的认证 Token。
+- `ConnectorInstrumentation` 在 Android 16 模拟器通过实际表单添加、错误 Token 修正、工具列表与手动调用、断开/重连/删除、JSON 导入、本机已安装 Node 的 stdio 调用、OAuth 回调 Activity 和返回连接页面。`INSTRUMENTATION_CODE: -1`，8 项结果均为 true。
+- OAuth 使用本机受控 issuer 的真实 PKCE 交换，将其重定向交给 Android VIEW intent；未登录真实第三方账号，也未验证所有浏览器的首次启动流程。
+- `ZFOLD_TARGET_SDK=28 npm run build` 成功，生成 `artifacts/Zfold-0.2.67-compat28-debug.apk` 并安装在模拟器。记录位于 `artifacts/interaction-redesign/connector-android.txt`、`all-tests.txt`、`connector-build.log`。
+- 多 provider 测试修正为等待选中的 gateway 目录，避免把上一个 configure 的异步目录当成本次结果；模型代码未因该测试改动。
+- 模板来源：GitHub 官方 MCP Server、modelcontextprotocol/servers 文件与记忆工具，以及官方 Registry。模板不代表已登录或已安装服务。
+- 本阶段完成连接工作流。跨应用看屏幕、浮窗与全局导航仍在继续，完整目标尚未完成。

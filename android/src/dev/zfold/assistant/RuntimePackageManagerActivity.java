@@ -46,6 +46,7 @@ public final class RuntimePackageManagerActivity extends Activity {
           else run("install",name,"正在安装/升级 "+name+" 及依赖…");
         }).show();
     });
+    if(getIntent().hasExtra("search"))search.setText(getIntent().getStringExtra("search"));
     runSearch(true);
   }
 

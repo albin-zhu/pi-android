@@ -139,7 +139,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     switch(name){
       case "tools":showToolCenter(sessionButton);return true;
       case "skills":showToolCenter(sessionButton,1);return true;
-      case "mcp":showToolCenter(sessionButton,4);return true;
+      case "mcp":ConnectorActivity.open(this);return true;
       case "packages":startActivity(new Intent(this,RuntimePackageManagerActivity.class));return true;
       case "model":settings();return true;
       case "agent":AgentSettings.show(sessionButton,runtime);return true;

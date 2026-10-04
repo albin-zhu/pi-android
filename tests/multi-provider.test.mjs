@@ -37,7 +37,8 @@ test('runtime preserves multiple custom providers and switches without recreatin
       const timer=setTimeout(()=>reject(new Error('multi-provider timeout')),20000);
       child.stdout.on('close',()=>clearTimeout(timer));
       const poll=setInterval(()=>{
-        if(configured>=2&&catalog){clearTimeout(timer);clearInterval(poll);resolve();}
+        // A catalog emitted for the first configure may arrive before the second catalog.
+        if(configured>=2&&catalog?.selected?.provider==='gateway'){clearTimeout(timer);clearInterval(poll);resolve();}
       },30);
     });
     assert.equal(configured,2);

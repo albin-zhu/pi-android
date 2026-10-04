@@ -315,7 +315,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     switch(name){
       case "tools":showToolCenter();return true;
       case "skills":showToolCenter(1);return true;
-      case "mcp":showToolCenter(4);return true;
+      case "mcp":ConnectorActivity.open(getContext());return true;
       case "packages":getContext().startActivity(new Intent(getContext(),RuntimePackageManagerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));return true;
       case "model":setup();return true;
       case "agent":AgentSettings.show(sidebar,runtime);return true;

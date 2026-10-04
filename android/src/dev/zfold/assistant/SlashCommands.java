@@ -23,7 +23,7 @@ final class SlashCommands {
     List<Command> items=new ArrayList<>();
     items.add(new Command("tools","","工具中心","查看 Skills、Agent 工具、MCP 和命令","界面",false));
     items.add(new Command("skills","","Skills","查看和管理工作区/全局 Skill","能力",false));
-    items.add(new Command("mcp","","MCP","查看 MCP server 与工具连接状态","能力",false));
+    items.add(new Command("mcp","","连接","添加、连接和管理 MCP 外部工具","能力",false));
     items.add(new Command("packages","","软件包","搜索和安装 Runtime 软件包","Runtime",false));
     items.add(new Command("model","","模型设置","切换或配置模型服务","设置",false));
     items.add(new Command("agent","","Agent 身份","修改名字、头像和系统提示词","设置",false));
