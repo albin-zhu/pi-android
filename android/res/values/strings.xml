@@ -1,0 +1,4 @@
+<resources>
+ <string name="app_name">Zfold</string>
+ <string name="accessibility_description">让你自己的 Pi 助手读取当前界面，并按你的指令点击、滑动和输入。可随时在系统设置关闭。</string>
+</resources>

@@ -1,0 +1,4 @@
+<resources>
+  <item name="jev_fixture_toggle" type="id" />
+  <item name="jev_fixture_input" type="id" />
+</resources>

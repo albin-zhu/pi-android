@@ -1,0 +1,17 @@
+node_modules/
+.build/
+vendor/
+android/assets/runtime/
+android/assets/licenses/
+artifacts/*.apk
+artifacts/*.idsig
+*.keystore
+*.jks
+runtime/defaults.local.mjs
+.DS_Store
+__pycache__/
+*.py[cod]
+javac.*.args
+artifacts/
+# Local handoff notes contain credentials; keep them off Git.
+todo.md

@@ -1,0 +1,402 @@
+# Zfold — 手机本地 Pi 助手
+
+独立 Android APK。Pi 0.85.1 依赖嵌入式 Node 引擎并在应用进程中运行，界面与系统权限使用原生 Android API，通过匿名管道/JNI 连接 Pi。用户侧 `node/npm/npx` 不再内置；需要时通过 Runtime 包管理安装。没有本机 HTTP 控制端口，不依赖 Termux App、Office、电脑端 Agent 或 root。电脑只用于构建和测试。
+
+## 当前版本
+
+- 原生对话、流式回复、停止任务，以及 Pi 会话本地持久化；支持新建、查看、切换会话并恢复上次选中的会话。
+- 自定义 OpenAI 兼容模型：接口地址、模型 ID、API Key，在应用“模型”中设置。
+- 默认语音助手服务、系统助手入口；首次需在系统设置选中 Zfold。唤起后直接浮在当前应用上，可输入、语音、圈选、停止、最小化和关闭，回复留在卡片内。
+- 悬浮入口：可拖动，点击展开悬浮操作卡片，长按后松开进入圈选。应用“手机能力”可显示或关闭它。
+- 屏幕圈选：沿手指轨迹画出闭合选区，圈外像素透明；确认后先在输入区预览，发送后图片留在对应消息与最近历史中。图像理解需要所选模型支持图片。
+- 无障碍工具：读取界面、截图、点击节点或坐标、滑动、输入文字、返回；另有应用列表、打开应用和设备状态工具。
+- 本地 Skills 管理：使用 Pi 标准 `.pi/skills` 目录，可在侧边栏新建、编辑、删除并立即重载。
+- 连续语音原型：本机 VAD 参与 turn-taking，系统语音识别 → Pi → 系统 TTS → 下一轮识别。“停止”结束对话并取消 Pi 后续操作。
+- 用户可安装的 Lark 工具：Zfold 不再内置 lark-cli 或 Lark API 网关；可通过 Runtime 软件包、Node/npm 或用户自带的可执行工具接入。
+- 多供应商模型：恢复 Pi 的 provider/model 双层选择。`custom` 供应商支持 OpenAI Responses / OpenAI Completions / Anthropic Messages / Google Generative AI；内置供应商使用 Pi 官方目录和 auth.json。模型选择器按供应商分组。
+- 供应商登录：侧边栏新增“供应商登录”，支持 Pi 内置 OAuth 流程；授权 URL 会打开浏览器，设备码可复制并跳转，手动回调码可直接粘贴。xAI、OpenAI/Codex、OpenRouter、Anthropic、GitHub Copilot、Kimi 等以 Pi 当前目录为准。
+- Runtime 软件包管理：使用 Termux 官方 stable aarch64 仓库索引，用户可在 App 内搜索、确认、安装、升级和删除 CLI 包；包解压到应用私有 runtime，不依赖 Termux App，也不把 `/storage/pi` 当作可执行目录。
+- 工具中心与 Slash Commands：Skills、Agent 工具、MCP 状态和本地命令统一展示；输入框输入 `/` 可直达工具、Skill、软件包、模型、语音、停止等入口。
+- 功能中心分层：侧边栏只保留新会话、功能中心与会话历史；模型/供应商、Skills、手机语音、Runtime 和软件包统一从功能中心进入，总览页展示快捷入口，其余分页继续展示 Skills / Tools / MCP / Commands。
+- 私有工具目录与 open：脚本用 `tool_install` 从 `/storage/pi` 复制到应用私有 `files/runtime/tools` 后加入 bash PATH；`open` 用 Android 原生 VIEW/DocumentsProvider 打开 URL、文件和目录。
+- 长任务不设 90 秒总超时；手机控制只受显式步数、单次工具响应、用户停止和安全保护限制，避免安装包或复杂页面操作被误杀。
+- 真实 PTY：Agent 可通过 `pty` 连接 App 内 Termux runtime，启动交互式 bash/tmux/vim；会话保持控制终端、窗口尺寸和退出状态，同一时刻最多 4 个。
+- Termux 终端：功能中心新增"Termux 终端"入口，用户可直接打开 PTY 交互终端页面，手动输入命令，支持 Tab 补全、↑↓ 历史、Ctrl+C 中断和常用快捷键。
+
+
+## 0.2.56 Android Node 运行时
+
+`node`、`npm` 和 `npx` 改为原生 launcher 子进程，弃用 nodejs-mobile 上不可靠的 Worker，也不再依赖 JS 轮询。Android 打包补丁会禁用 npm 的 `module.enableCompileCache()`，并在 Android 上跳过 `process.title='npm'`；后者是 Fold7/模拟器 SIGSEGV 的直接原因。
+
+`sandbox_status` 如实区分能力与边界：当前子进程仍使用 app UID 和 app 存储，能执行 Node 项目和包管理，但不是 POSIX 安全沙箱。下一步无 root 强化方向是 `isolatedProcess` runtime broker；不把 chroot/proot 或 AVF/Microdroid 包装成当前已有能力。
+
+## 0.2.57 Lark API 网关
+
+移除 `@larksuite/cli` 依赖，新增内置 `lark_status` / `lark_api`。凭据保存在应用私有 `/storage/pi/.pi/agent/lark.json`，支持 tenant app secret 和用户手动提供的 user access token；状态输出不暴露 secret。内置 `lark-api` skill 会引导 Pi 按 Open API path 组装请求，非零 code 不会被伪装成成功。
+
+当前支持 JSON API，不支持二进制上传/下载，也不尝试复刻官方 lark-cli 的登录向导。
+
+## 0.2.58 收听期本地 VAD
+
+普通连续收听不再只等 Android ASR 的 final 或固定 1.6 秒 partial 兜底。同一路 16 kHz PCM 同时进入 Silero VAD：约 190 ms 连续人声进入“正在听”，有 ASR partial 且静音约 900 ms 时请求 final；无文字的短语音只收尾重听，不会提交噪声。VAD 初始化失败时自动退回原来的 RMS + partial 兜底。
+
+## 0.2.59 ASR 空结果保护
+
+修复 VAD 已正确判定句尾，但 Android ASR 在收尾阶段用空 partial 清掉此前 `你好呀` 这类可用结果，导致 final 为空后重听的问题。现在空 partial 不再覆盖有效 live partial，final 结果会记录 raw/using 便于诊断。
+
+## 0.2.60 统一悬浮状态窗
+
+实时通话 mini 和手机任务 HUD 收敛到同一个 `UnifiedOverlay` 单槽位：同一时刻只有一个 compact 悬浮窗，点主体回到对应前台，按钮随状态变化。实时通话打开其它应用时，通话页进入后台即显示通话 mini；手机操作不会另开一个任务 HUD。修复旧逻辑把 `VoiceCallActivity` 的 stopped 状态误判为前台导致 mini 不显示的问题。
+
+沙箱能力边界也更明确：`/storage/pi` 保存工作区和 Skills，但 Android 共享存储是 `noexec`；目标 SDK 29+ 的 W^X 策略也不把下载的 ELF 当作受支持的运行时。`sandbox_status` 现在返回 `binaryExecution`，区分数据目录、私有目录和 APK `nativeLibraryDir`。Termux 能执行，靠的是 targetSdk 28、私有 `/data/data` 前缀和专门为 Android 构建的包，不是普通下载二进制天然可执行。
+
+## 0.2.63 移除内置 Lark
+
+移除内置 `lark_status` / `lark_api`、`lark-api` skill、私有凭据读取和旧 Lark API client。Zfold 不再自带 lark-cli 安装器，也不再把飞书/Lark 当作第一方工具。你可以用自己的 Node/npm 包、Runtime 软件包或自装 CLI 接入；Agent 只按普通外部工具执行。历史版本中的 Lark 网关说明仅保留在验证记录里。
+
+同一版本加入工具中心：侧边栏新增“工具中心”，输入 `/` 会弹出命令面板。`/tools`、`/skills`、`/mcp` 打开目录；`/skill name`、`/pkg package` 转成明确 Agent prompt；`/model`、`/voice`、`/share`、`/new`、`/stop` 执行本地动作。MCP 当前如实显示“未接入”，不伪造工具。
+
+### 0.2.63 模型连接修复与 Termux PTY
+
+- 修复供应商登录后模型选择器显示“模型还没有连接”的根因：Pi 拒绝 `models.json` 中的空内置 provider 配置（例如 `"xai": {}`）。启动时自动修复旧配置，添加供应商时写入 Pi 可接受的最小 overlay，因此 OAuth 登录完成后可以直接切换。
+- 新增原生 PTY broker 和 Pi `pty` 工具，使用 `posix_openpt/fork/execve` 建立真实控制终端；可 `open/write/read/status/resize/close`。相对命令先解析到私有 Termux `pkg/usr/bin`，只允许执行 Runtime Pack、用户软件包或 `tool_install` 安装的私有工具；工作目录仍限制在 `/storage/pi`。
+- PTY 会话最多 4 个，单次读最多 256KB、单次写最多 64KB；关闭会先 SIGTERM 进程组，超时后 SIGKILL。它解决的是 vim、tmux、进度条和 shell 作业控制需要的终端语义，不新增 UID 隔离。
+- Android 16 arm64 模拟器实测：App 自动安装 Termux bash 5.3 后，PTY 输出 `bash-5.3$`，`tty` 返回 `/dev/pts/1`，退出状态和关闭正常。
+
+模型配置不再每次覆盖为单一 `custom`。`models.json` 现在保留多个 provider，每个 provider 保留自己的模型、API Key 和消息格式；运行时通过 Pi `ModelRuntime` 选择 `provider/model`，切换模型不再重建会话。旧的单供应商配置自动映射到 `custom`。
+
+供应商登录通过 Pi `ModelRuntime.login()` 完成，OAuth token 写入 `/storage/pi/.pi/agent/auth.json`。登录界面不显示、不导出 token；刷新仍由 Pi 的 credential store 处理。
+
+用户侧 `node`、`npm`、`npx` 专用工具与 17 MB 内置 npm 发行包已移除；嵌入式 Node 引擎仍保留，因为 Pi 本体运行在它上面。需要 JavaScript runtime 时用 `pkg install nodejs`、`pkg install npm`，安装后 bash 可直接调用。`tool_install` 把 workspace 脚本复制到私有 `files/runtime/tools`，bash PATH 顺序为 tools、软件包 bin、Runtime Pack bin、系统 bin；`/storage/pi` 始终只作数据区。新增原生 `open` 工具处理 URI、文件和目录，文件无 handler 时回退打开所在目录。
+
+## 0.2.62 GNU GCC Runtime Pack
+
+在 `compat28` 通道新增实验性 `gcc-gnu` Runtime Pack：真实 GNU GCC/G++ 14.2.1、GNU binutils 2.44、GNU Make、glibc loader 和 scoped runtime 环境。顶层 `gcc` / `g++` 由静态 launcher 接管，自动选择 App 私有 glibc loader；C/C++ 产物默认指向私有 loader，`runtime_exec` 注入对应 `LD_LIBRARY_PATH`。GNU coreutils、Git、Go、Node/npm/npx 继续由既有 Runtime Pack 或内置运行时提供。安装仍需用户在“手机能力 → Runtime Packs”确认；详细边界见 `RUNTIME_PACKS.md`。
+
+新增 `compat28` 实验构建通道（`ZFOLD_TARGET_SDK=28`），在模拟器 Android 16 上验证 target28 真实 App 进程可以执行私有 runtime cache 中的 Android/arm64 ELF。新增 Java `runtime_exec` broker 和 Pi `runtime_exec` 工具：命令只允许来自私有 cache，输出、超时、工作目录和环境由 App 控制。
+
+`scripts/runtime-pack.py` 可从 Termux main 仓库生成版本化、哈希校验的 Pi Runtime Pack，并重写 Termux shebang。Git、GNU userland、Clang/Clang++ toolchain 和 Go 1.27 包均已产出；target28 模拟器已验证 Git、GNU coreutils、Clang++ 编译执行和 Go。App 的“手机能力 → Runtime Packs”提供用户确认安装入口；`sandbox_status` 报告已装包，`runtime_exec` 支持裸命令名。详细边界见 `RUNTIME_PACKS.md`。
+
+### 0.2.62 App 内软件包管理
+
+新增“手机能力 → 软件包管理”，不再为 kubectl、vim 这类工具逐个手做 Runtime Pack。它读取 Termux 官方 stable aarch64 `Packages` 索引，搜索可用 CLI，展示仓库版本和安装状态；用户确认后解析依赖、下载 `.deb`、校验 SHA-256、解压到应用私有 runtime，并把 Termux prefix 重写到 App 私有目录。
+
+Pi 侧新增 `pkg` 工具（`search/list/update/install/remove`），`runtime_exec` 可解析包管理器安装的裸命令，包括 `usr/libexec` 和 alternatives 生成的入口。干净安装包含一个小的 `xz + liblzma` bootstrap，用来解开 Termux `.deb`，不需要先安装 GNU Runtime Pack。已验证 `vim`、`vi`、`kubectl version --client=true` 在 Android 16 arm64 模拟器的真实安装和执行。`kubectl` 属于 Termux main 官方包，不是内置二进制。
+
+## 0.2.0 界面与交互
+
+- 暖白、墨色、陶土橙；系统深色模式使用同一套语义色。主界面、悬浮卡片、圈选与模型设置统一样式。
+- Phosphor 矢量图标、48dp 点击区域、原生按压反馈；入场动画尊重系统动画设置。
+- 截图缩略图可展开预览、单独移除。空间不足时收起次要说明，保留输入与操作。
+- 空输入禁用发送，执行中主按钮切换为停止；回复可复制，用户离开底部后不强制滚动。
+- 圈选改为“画出范围 → 预览 → 使用选区”，支持重选与取消，避免松手误提交。
+- 失败保留文字与图片草稿，显示可读原因，并提供重试和模型设置入口。
+- 独立悬浮层收起会保留草稿。系统助手内的下拉手势也可收起面板。
+
+设计规范在 `design-system/MASTER.md`。
+
+## 0.2.1 底部形态
+
+悬浮面板仅保留顶部圆角，底部直角贴边；移除外部底部间隙，将手势条安全留白放入面板内部。
+
+## 0.2.2 圈选与消息图片
+
+圈选按实际手绘轮廓裁切，不再把外接矩形整块发送。悬浮卡片和主界面都显示待发送的选区，发送后消息保留图片缩略图；重新打开对话会从 Pi 会话历史恢复近期图片。Galaxy 手势导航下，从屏幕左下角或右下角向内划可唤起默认助手；导航条正中长按由系统「圈选即搜」处理，应用内“手机能力”说明了这一区别。
+
+## 0.2.3 会话管理
+
+主界面顶部的“会话”和悬浮卡片里的会话图标可打开本地会话列表。可新建对话、切回旧对话；模型上下文与聊天历史随会话切换，重启后仍打开上次选中的会话。旧版本的单条会话自动保留在列表中。列表默认以第一条提问作为标题；当前版本尚无重命名和删除入口。
+
+## 0.2.4 本机语音
+
+语音播报优先选择手机已安装、无需网络的中文声线。语音输入先检查本机中文 ASR 语言包：有包时使用 Android 本机识别器，缺包时明确标记系统默认识别可能联网。“手机能力 → 本机语音”可检测状态，并由用户主动下载语言包。Fold7 的 `cmn-Hans-CN` 已安装，应用探测确认会选择本机识别器；路线、真机探测结果与独立模型备选见 `VOICE_OPTIONS.md`。
+
+## 0.2.5 本机 VAD 与播报打断
+
+内嵌 Silero int8 VAD 和 sherpa-onnx Android 运行库。在语音会话播报期间，可点“打断”立即回到收听；“手机能力 → 本机语音”可开启实验性的自动插话。开启后，VAD 在 TTS 播报时短暂监测本机麦克风并使用系统回声消除，连续检测到人声才停播并交给本机 ASR。停止播报或退出语音会话后即释放录音。自动打断后首个很短的词可能要再说一次；仍需在安静/噪声/蓝牙场景调校。详细状态设计见 `VOICE_TURN_TAKING.md`。
+
+## 0.2.6 对话界面
+
+参考 Wodouyao Office 的内容优先聊天布局：用户消息靠右，助手回复作为正文，阅读列在折叠内屏居中；附件、文字输入、说话、圈选与发送收在同一底部输入区。悬浮卡片采用同样层级，窄屏会收起次要说明。保留此前确定的暖白与少量橙色；深色模式改为中性灰背景。这里只参考 Office 的界面设计，不依赖其服务器或会话数据。
+
+## 0.2.7 会话侧边栏
+
+“会话”现在从左侧滑出导航栏，显示新建入口、当前会话和历史会话；点遮罩、关闭按钮或返回键均可收起。主界面与系统助手悬浮卡片使用同一侧栏。只改变导航呈现，Pi 会话文件及上次选择保持原样。
+
+## 0.2.8 内置手机操作 skill
+
+APK 随包提供 `phone-control` Pi skill。用户要求操作其他应用时，Pi 可读取这份说明，按“读屏 → 定位节点 → 操作 → 再读屏”的流程使用无障碍工具。`read` 工具只允许读取这份内置文件，不开放手机文件系统；skill 本身不会增加 Android 权限。点击、输入、滑动与返回仍由 Zfold 的原生工具执行。
+
+## 0.2.9 跨应用持续悬浮
+
+Pi 使用读屏、截图、点击、输入、滑动、返回或打开应用工具时，展开的助手会自动收成可拖动小浮标，让目标应用保持可操作。点浮标可重新展开对话并停止任务；下一步手机操作前会再次收起大面板。无障碍服务已连接时，浮标和展开面板使用无障碍覆盖窗口，能在隐藏普通悬浮窗的应用上显示。打开应用后，工具等待目标窗口就绪再继续读屏；系统保护页面仍可能限制显示或读取。
+
+## 0.2.10 键盘避让
+
+展开的跨应用悬浮面板会避让底部输入法窗口，输入区、说话/圈选和发送/停止按钮留在键盘上方。系统助手窗口沿用自身的键盘避让布局。Fold7 默认停靠式输入法的两种入口均通过真机位置检查；用户手动切换的悬浮/分离式键盘不提供标准 IME inset，仍需单独适配。
+
+## 0.2.11 快速选择
+
+新增 `ui_select` 手机工具：Pi 给出明确的可见按钮文字，工具在手机上读屏、定位唯一的可点击节点、点击并返回新页面，省去中间两次模型选择/复查往返。找不到、多个目标同名或只有不可点击文字时不执行点击，并把屏幕结构交回 Pi 处理。此路径只使用现有无障碍服务，不把屏幕内容发往 Laya A100。
+
+评估过 `laya-a100-service.md` 的 A100 决策接口：合成界面上推理只需数十毫秒，但曾把“打开蓝牙”选成 Wi-Fi；目标不存在时仍高置信度误选 Wi-Fi。它目前不适合直接决定手机点击目标，尤其服务默认没有鉴权。测试与取舍见 `VERIFICATION.md`。
+
+## 0.2.12 工具调用记录
+
+主界面与悬浮面板显示工具记录，包含执行中、已返回、失败、未执行、停止或中断状态。点击可展开参数与返回内容；长内容截断显示，截图结果用图片标记代替 base64。Pi 会话恢复会保留工具记录，悬浮窗收起再展开也能看到本轮执行情况。工具返回不等于任务目标已验证。
+
+Android 自动化后续方案见 [ANDROID_AUTOMATION.md](ANDROID_AUTOMATION.md)：优先参考用户指定的 `droidrun/mobile-jev`，以本机无障碍适配器承接动作，Pi 规划、Jev 选择、视觉模型处理结构缺失。当前版本尚未接入 Jev。
+
+## 0.2.13 Jev 手机执行循环
+
+在“手机能力 → Jev 手机操作”中配置独立密钥。Pi 可通过 `phone_task` 把明确子任务交给 Jev，在指定应用范围内读取界面、选择实际支持的节点动作、执行和验证。工具卡显示逐步进展；低置信度、页面失效、重复动作和未知结果会停止并交回 Pi。默认固定 `jev-1.13.0`，没有使用 Mobilerun 云手机。配置方法、真实 API 测试和当前边界见 [JEV_INTEGRATION.md](JEV_INTEGRATION.md)。
+
+## 0.2.14 真机快照校验
+
+Fold7 上的无关或延迟无障碍事件可能让 0.2.13 连续误判快照过期。现在在执行前重新比较前台窗口、可见界面结构及目标控件状态；页面实际变化仍会拒绝旧动作，无关事件不再直接使所有节点失效。真实 Jev 的真机测试页已完成开关与中文输入回读。
+
+## 0.2.16 空节点应用的视觉操作
+
+微信等应用不提供无障碍节点时，读屏直接返回截图与图片坐标信息，Jev 不再尝试从空候选中选动作。视觉点击和滑动绑定 screenshotId，由工具换算图片像素到真实屏幕；动作后自动返回新截图。
+
+Android 13+ 使用无障碍输入连接完成聚焦和中文输入，无须切换用户键盘或借其他应用输入。支持回读时验证完整文本；不支持回读时通过编辑器的全选/替换提交，明确要求从截图核对，禁止盲目重复输入。任务最多持续 90 秒；空树反复读取或跳去无关应用会提前停止。
+
+0.2.15 的首次微信实测因输入回读不可用而停止，0.2.16 补上上述视觉核对路径；最终安装/真机结果以 `VERIFICATION.md` 为准。
+
+## 0.2.17 准确控制核心
+
+节点动作不再要求整棵无障碍树逐字段不变。控件身份改用包名、窗口、资源 ID、类名、标签/描述/hint 和控件能力组成的稳定语义 key；无关倒计时、广告或兄弟控件刷新不会误杀目标。动作前仍实检当前包/窗口、目标唯一性、可见性、启用状态、bounds 和声明动作；目标身份真变化或离开当前窗口会拒绝。
+
+节点点击失败不再偷偷降级为坐标点击；输入动作在系统接受后立即回读并返回 verified/unverified。前台读取优先使用 focused application window，避免键盘或助手 overlay 抢占 active root 后误判当前应用。
+
+## 0.2.18 实时语音与执行可见性
+
+语音回答不再等整段生成结束：Pi 流式输出按完整中文/英文句子切段，第一句凑齐就交给已安装的 Android 离线中文 TTS，后续句子顺序排队；代码块、链接和 Markdown 装饰不进入语音。自动插话开启后，播报期使用一路 16 kHz `AudioRecord` + Android AEC + Silero VAD 确认真人声音，并保留约 2 秒最近音频；确认插话后把预缓冲和实时 PCM 一起交给 Android 本机识别，避免旧方案“先停 TTS 再启动识别”丢掉首词。
+
+手机操作增加执行 HUD：无障碍或手机工具运行时，目标应用上方显示当前动作和停止按钮；`phone_task` 的每一步显示“点击 / 输入 / 滚动 / 打开应用”等人类语言。任务结束或停止后 HUD 移除。运行中的浮标长按改为停止任务；普通状态长按仍进入圈选。
+
+当前边界：Android 本机 ASR/TTS 的真实开口延迟、插话识别准确率、误打断率和首词保留仍需真人、噪声、外放与蓝牙实测；用户手指接管目标应用时还不能可靠自动暂停。
+
+## 0.2.19 “小派”唤醒与懒加载
+
+新增可开关的离线唤醒词「小派」（`xiao pai / xiao pi`）。它使用 sherpa-onnx 中文 Zipformer KWS int8 小模型（int8 模型约 4.8 MiB），以麦克风前台服务常驻；系统会显示“小派正在监听”通知。唤醒词命中后先释放唤醒麦克风，再展开助手并按需加载 Pi、ASR、TTS。主界面也改为首次语音会话才创建 TTS；语音会话结束或切后台 5 分钟后释放 TTS、ASR 和 VAD。Pi/Node 会话仍在应用进程内，当前版本还不能在结束后强制卸载 Pi 运行时；完整“只留唤醒”需要把 KWS 与 Pi/Agent 拆成独立进程。
+
+在“手机能力 → 本机语音”中开启或关闭唤醒。开启需要麦克风和通知权限；语音会话会暂停唤醒监听，结束后自动恢复。
+
+## 0.2.20 用户接管与安全停止
+
+手机任务执行中，无障碍服务会监听真实触摸交互。用户触碰目标应用时，Zfold 立即停止后续手机动作，并提示“检测到用户接管手机”；已派发给系统的动作可能完成，但不会继续下一轮规划。助手自己派发的视觉手势有 1.2 秒保护窗口，不会把自身动作误判为用户接管。触屏接管是“停止任务”，不是自动恢复；用户可从面板重新发起任务。
+
+## 0.2.21 识别状态重查
+
+连续启动/销毁 Android 本机识别器后，一次 `checkRecognitionSupport` 可能短暂返回空结果。现在 Zfold 会自动重查一次，避免把已安装的中文本机识别误降级为可能联网的系统识别。
+
+## 0.2.22 连续语音状态修复
+
+修复连续对话中的一个关键竞态：Pi 可能在 TTS 队列还没播完时就发出 `turn_end`。旧逻辑会在这种情况下立刻重启识别，导致识别器听到自己的播报，再误当成用户输入。现在 `turn_end` 只补播残句；如果 TTS 仍在播，界面显示“正在播报 · 播完自动听”，等最后一句自然结束后再切换 ASR。手动打断也先释放播报/麦克风管线，约 360ms 后再进入收听。
+
+## 0.2.23 共享语音状态机
+
+主界面和悬浮面板的手写 TTS/ASR/VAD 状态收敛到同一个 `VoiceTurnController`。现在两个入口使用同一套连续对话状态、TTS 队列归属、`turn_end` 竞态保护、回声门、ASR busy 重试和空闲卸载逻辑；主界面与悬浮面板不会再出现状态漂移。工具调用前后的多段 assistant 消息会保留同一条播报回声参考；最后一句播完有 320ms 音频释放冷却，手动打断有 360ms 冷却。Pi 回归的 SmokeInstrumentation 也改为每次新建隔离会话，避免上一轮工具历史让 fixture 不再触发新工具请求。
+
+## 0.2.24 唤醒监听修复
+
+修复「小派」唤醒服务的关键生命周期错误：监听线程的 `running` 标志没有置位，导致模型加载后立即退出循环，前台通知仍显示但不会真正采音。现在服务会报告真实 listening 状态，系统重启时保持 sticky，停止语音会话后能恢复唤醒。验收也改为等待 KWS 模型、麦克风和推理循环全部就绪。
+
+## 0.2.25 唤醒后直接听
+
+「小派」不再只展开面板。命中唤醒词后，先释放 KWS 麦克风，再展开助手并直接进入语音收听；如果系统助手或悬浮面板已打开，也会从当前面板直接切到语音。未配置模型时仍会先给出模型设置入口，不会假装已经可以对话。
+
+## 0.2.26 唤醒后连续语音
+
+语音会话不再因为短暂静音或系统识别超时而退回文字面板。`no match / speech timeout` 后会显示“我在听，请说指令…”，自动回到收听，直到用户主动结束或发生不可恢复错误。模型配置在唤醒后异步恢复时，语音入口也会等待配置就绪，不再落到文字输入；「小派」唤醒服务切换到助手面板前多留 250ms 释放 KWS 麦克风。
+
+唤醒词后的短命令不再被截断。KWS 服务保留最近约 6 秒的 16 kHz PCM；命中「小派」后，这段音频会直接交给 Android 本机 ASR。识别结果会剥掉开头的“小派 / xiao pi / xiao pai”，只把真实指令送入模型。音频只保留在应用内存中，识别启动后即清空。
+
+## 0.2.27 只唤醒不误提交
+
+修复只说「小派」时的空指令问题：现在会剥掉开头一个或多个唤醒词/读法；如果没有剩余指令，就显示“我在听，请说指令…”并自动回到连续收听，不再把空字符串送入模型或卡在 THINKING。`小派，打开设置`、`xiao pi 停止`、`小派小派 帮我看看状态` 都会剥掉全部唤醒词后提交真实指令。
+
+## 0.2.28 唤醒词后接命令
+
+KWS 解码改为 4 条 active path，关键词阈值降到 0.25，提升「小派 + 命令」这类连续语句的命中率。命中后继续缓存最多 5 秒尾音；本机 ASR 会把唤醒词剥离后只提交真实命令。`WakeTtsInstrumentation` 已在 Fold7 验证「小派，你能和我连续对话吗」能识别并提交为该命令。
+
+## 0.2.29 唤醒后只进语音
+
+修复两个会让「小派」看起来退回文字输入的问题。唤醒入口不再复用面板上可切换语音/结束的 `voice()`，而是专用 `wakeVoice()`：已有语音会话先安静停止再重启，没有会话则直接进入收听，避免唤醒被误判成“结束对话”。唤醒 PCM 现在有 10 秒有效期，服务销毁、关闭唤醒和下一次启动都会清理，跨触发的旧音频不会被提交。
+
+更重要的是，连续语音不再等待可能长时间不返回的 `checkRecognitionSupport`。现在直接尝试本机识别，失败后按语言包错误码降级到系统识别。只说「小派」不再卡在“检查本机中文识别…”。
+
+## 0.2.30 播报打断音频场景
+
+新增 `AudioModeOwner`：播报期间的自动插话识别申请 Android `MODE_IN_COMMUNICATION`，结束后恢复普通模式，让 AEC 路径更稳定，减少 TTS 回声被当成真人插话。唤醒和普通收听保持系统默认音频场景。
+
+唤醒 KWS 保持 `VOICE_RECOGNITION`，不能进入通信/AEC 场景。Fold7 合成回归证明：KWS 进入 `VOICE_COMMUNICATION` 后两次都听不到“小派”；回退后只唤醒立即恢复。
+
+唤醒后的 PCM 指令也加了安全门：ASR 结果必须能识别出开头附近的「小派 / xiao pi / xiao pai」，才剥离唤醒词并提交；否则视为没听清，继续收听。这能防止 KWS 预缓冲里的回声残片被误当成新任务。
+
+## 0.2.31 手机任务语音接管
+
+手机任务执行中，麦克风不再被禁用。用户可以点语音进入收听，说“停”只停止当前任务；说“先别这样，回上一页”这类新指令时，Zfold 先停止后续动作，等当前轮确认停止后再自动执行新指令。主界面和悬浮面板使用同一契约。
+
+这不会暂停已经派发给无障碍的单个手势；停止语义仍然区分“未派发会取消”和“已派发可能物理完成”。
+
+## 0.2.32 识别释放与共享屏幕
+
+修复一个 Fold7 上的识别竞态：唤醒命令识别刚返回就立刻启动下一次识别，旧识别器尚未完全释放，系统日志会出现 `cancel received for a listener which has not started`，界面误报“语音识别暂时不可用”。现在唤醒命令后等待约 260ms 再重听；音频、网络超时类错误会先重建识别器并重试，失败提示也带上 Android 错误码。
+
+新增“共享屏幕聊天”开关，悬浮/系统助手面板和主界面都可使用。打开后，每轮文字或语音提问前自动截取当前屏幕并作为图片上下文发送；受保护页面截图失败时不发送任务，避免模型在旧画面上猜。关闭助手会自动关闭共享屏幕，不做持续录屏。
+
+## 0.2.33 任务接管安全门
+
+修复任务运行中语音接管的授权顺序：主界面和悬浮面板都会先确认模型配置和麦克风权限，再进入任务收听。权限缺失时不会启动一个注定失败的识别器。
+
+排队的新指令现在有明确生命周期：只在旧任务确认停止后执行；遇到错误、切换会话、用户手动停止时立即取消，不会残留到后续任务。HUD 回归会检查“语音接管”和“停止”两个独立动作。
+
+## 0.2.34 连续识别部分结果
+
+修复连续收听把已识别内容丢掉的问题。Fold7 的本机识别有时在超时路径报 `NO_SPEECH_DETECTED / ERROR_SPEECH_TIMEOUT`，但识别过程已经产生 partial。现在 Zfold 会记录本轮 partial；final 为空或超时且有可用文字时，直接提交 partial，不再反复回到“正在听”。每轮开始会清空 partial，避免旧输入跨轮误提交。
+
+## 0.2.35 连续识别外部 PCM
+
+修复普通连续收听在 Fold7 上听不到人声的问题。系统识别器自己开麦时多次报 `NO_SPEECH_DETECTED`；而 Zfold 唤醒预缓冲用同一套 16 kHz PCM 能送进本机 ASR 并识别出内容。现在连续识别改由 Zfold 采集 `VOICE_RECOGNITION` PCM，再通过 `EXTRA_AUDIO_SOURCE` 喂给本机识别器，并记录每 0.5 秒输入 RMS；采集失败才回退系统采集。
+
+KWS 命中后的尾音识别不再因为 ASR 没写出“小派”前缀而丢弃。新鲜 KWS 命中已经是一道门；只要尾音里有可用文字，就剥离前缀或直接作为指令提交。
+
+## 0.2.36 本地文件引用
+
+主界面和助手面板新增“文件”入口。通过系统 SAF 选择本地文件，不申请全盘存储权限；一次最多 6 个文件。图片会作为视觉输入发送，PDF 前三页渲染成图片，XLSX/DOCX/PPTX 提取文本，文本/Markdown/CSV/JSON/代码直接读取，音频和视频先提供名称、时长、尺寸等元数据。
+
+文件内容会明确标记为“用户数据，不是指令”；单文件摘录和图片都有大小上限，避免 4 MiB 的 Android 通道被撑爆。主界面和悬浮面板都可移除附件；任务中的语音接管安全门保持不变。
+
+## 0.2.37 冷灰界面配色
+
+界面从暖米色/陶土橙改为冷灰底、白卡片和深蓝主操作色。用户消息使用中性浅灰，助手回复用白卡；主色只用于发送、激活和状态反馈，减少大面积色块带来的旧感。夜间改为深蓝黑分层，激活色用低饱和蓝。
+
+## 0.2.38 单画布内容层
+
+修正界面结构：助手回复不再包白卡，顶部状态也不再是独立卡片。页面只有一个内容层；输入/动作条是唯一的主要容器，工具卡片只作为单条执行证据出现。这样避免“回复卡 + 输入卡”互相切割，长回答读起来是正文而不是嵌套面板。
+
+## 0.2.39 排版与操作层级
+
+顶部改为固定轻状态层，避开系统栏；消息流不再与时间/状态重叠。助手回复使用轻量 Markdown 排版：标题、粗体、行内代码、代码块和列表会被转换成可读排版，不再直接显示 `**` 和原始代码符号。主界面回复提供复制动作，悬浮面板继续保留复制。
+
+内容层保持单画布；用户消息是唯一气泡，助手回复只靠头像、来源和间距分组。输入/动作条仍是唯一主要容器。
+
+## 0.2.40 输入面与侧边栏
+
+输入区去掉描边和投影，只保留一个圆角操作面；视觉边界来自层级和留白，不靠绕框线。会话入口改为明确的侧边栏图标，主界面顶栏重新接入会话侧边栏。侧边栏保持左侧滑出、遮罩、新建/切换和返回关闭。
+
+## 0.2.41 移除顶栏
+
+删除独立顶栏。品牌只保留在侧边栏；运行状态移到输入操作面内部，模型设置、手机能力、本机语音移入侧边栏。主界面和悬浮面板都从输入工具区打开侧边栏，屏幕空间留给对话内容。
+
+## 0.2.42 折叠态操作行
+
+修复折叠外屏发送按钮被右缘截断的问题。输入操作面按宽度切换密度：折叠外屏隐藏动作文字，动作压缩为图标；会话侧边栏移到状态行右侧，底部只保留语音、圈选、文件、共享和发送。展开屏仍显示文字标签。发送按钮去掉投影，保证在窄屏下完整落在输入面内。
+
+## 0.2.43 状态不占行
+
+输入面移除常驻状态行。空闲时只剩输入框和动作区；只有任务、识别、播报或错误需要反馈时才短暂显示状态，结束后自动收起。这样不牺牲反馈，也不让待命状态占用输入空间。
+
+## 0.2.44 本地 Skills
+
+Skills 不再只是随 APK 打包。Zfold 现在使用 Pi 的标准目录：
+
+- 项目级：`no_backup/agent/workspace/.pi/skills`
+- 全局级：`no_backup/agent/pi/skills`
+- 内置级：APK 内 `phone-control`，始终可用且不可被本地同名 Skill 覆盖
+
+侧边栏的“本地 Skills”可以新建、编辑、删除本地 `SKILL.md`；已配置模型时保存或删除会立即重载 Pi 资源，`configured.skills` 会包含新能力。所有内容仍只保存在应用私有目录，不申请全盘存储权限。Skill 内容进入模型上下文时按不可信数据处理；它不会自动扩大 Android 权限，真正点击、输入和读屏仍受无障碍与现有安全门约束。
+
+## 0.2.45 悬浮三态
+
+悬浮入口现在收敛为三个明确状态：点击浮标进入约 58% 屏高的半屏助手；半屏右上角可放大为整屏；整屏右上角只能缩回半屏。半屏或整屏点“最小化”、下拉手势或关闭，都会回到可拖动浮标并保留草稿。系统助手入口使用同一套三态语义；整屏按返回先回半屏，再按返回回浮标。
+
+## 0.2.46 主界面侧边栏入口
+
+修正主界面侧边栏入口被放进隐藏状态行的问题。现在它固定显示在输入框动作区麦克风旁边，窄屏自动变成图标；悬浮助手面板保持同一入口语义。
+
+## 0.2.47 悬浮崩溃修复
+
+系统助手窗口不再从非可视 Context 获取 Display；半屏高度改用当前窗口的 maximum window metrics。修复 0.2.46 唤起系统助手即闪退的问题。
+
+## 0.2.48 标准 Shell 与 storage/pi
+
+默认数据根迁移为 Android 用户可见的 `/storage/emulated/0/pi`；全局 Skill 位于 `/storage/pi/.pi/skills`，项目 Skill 位于 `/storage/pi/workspace/.pi/skills`。授权所有文件访问后，旧 workspace、sessions 和 skills 会迁移到新根；模型和 Jev 凭据仍留在应用私有目录。
+
+Pi 现在启用标准 `read/write/edit/ls/bash`。`bash` 使用 Android 自带 toybox `/system/bin/sh`，不是远端 shell，也不需要 BusyBox；PATH 固定到 `/system/bin`，工作目录落在 `storage/pi`。
+
+## 0.2.50 快速模型切换
+
+主界面和悬浮面板输入动作区新增当前模型 chip。点开可直接切换常用模型，包括 `deepseek-flash`、`glm-5.3-flash`、`glm-5.3-flashx`、`doubao-seed-evolving` 等；模型设置页继续支持手输和自动补全。任务执行中会锁定切换，避免打断工具循环。默认凭据写入 Pi 标准目录 `/storage/pi/.pi/agent/auth.json` 和 `models.json`；密钥来源文件在 `.gitignore`，不进入 git。
+
+## 使用
+
+安装 `artifacts/Zfold-0.2.58-debug.apk` 后：
+
+1. 在“模型”中填写自己的接口，例如 `https://your-provider.example/v1`，以及模型 ID、API Key。保存只表示配置加载成功，不代表已验证服务连通性。
+2. 点击“看看手机的状态”，验证真实模型能调用 Android 工具。
+3. 在“手机能力”中按需选择默认助手、启用 Zfold 无障碍服务、授予悬浮窗权限。
+4. 在目标 App 上唤起助手，点卡片里的“圈选”，完成后回到同一卡片输入处理要求。系统助手入口的圈选与最小化保留在系统助手窗口内；独立悬浮入口仍受目标 App 隐藏悬浮层的限制。
+
+模型设置、密钥和会话保存在应用私有 `no_backup` 目录。目前密钥采用应用私有文件保存，没有额外 Keystore 加密。不会导入电脑上的 Pi 凭据。Android 不允许读取的受保护界面仍然不能读取。
+
+## 构建
+
+当前脚本面向 macOS + arm64 Android 真机，使用本机 Android Studio 的 JDK、SDK 35、Build Tools 35.0.0 和 NDK 28.0.13004108，不需要 Gradle。
+
+```sh
+npm ci --ignore-scripts
+npm run bundle
+npm test
+npm run build
+adb install --no-incremental -r artifacts/Zfold-0.2.58-debug.apk
+adb shell am start -n dev.zfold.assistant/.MainActivity
+```
+
+构建下载固定版本的 Node Android 运行时，并校验 SHA-256；来源与许可见 `THIRD_PARTY_NOTICES.md`。开发签名保存在 `.build/debug.keystore`，保留它才能无损更新已有安装。
+
+## 验证
+
+`npm test` 覆盖 JSON 分帧/中文、模型地址校验、真实 Pi SDK 加载内置 skill 并调用工具、停止时取消等待中的工具并阻止下一次模型请求、图片消息的历史恢复，以及多会话隔离与重启恢复。模型响应是确定性 fixture，不能作为真实模型能力证据。
+
+Android 原生集成测试也采用确定性模型端点；Pi 和 Android 工具始终在手机上执行：
+
+```sh
+node scripts/model-fixture.mjs
+# 另一终端
+adb reverse tcp:18868 tcp:18868
+adb shell am instrument -w dev.zfold.assistant/.SmokeInstrumentation
+adb shell am instrument -w dev.zfold.assistant/.LassoInstrumentation
+adb shell am instrument -w dev.zfold.assistant/.VadInstrumentation
+adb shell am instrument -w dev.zfold.assistant/.BargeEchoInstrumentation
+adb shell appops set dev.zfold.assistant SYSTEM_ALERT_WINDOW allow
+adb shell am instrument -w dev.zfold.assistant/.HudInstrumentation
+adb shell am instrument -w -e install true dev.zfold.assistant/.PtyInstrumentation
+# 仅在需要录音验收时：adb shell am instrument -w -e mic true dev.zfold.assistant/.VadInstrumentation
+adb reverse --remove tcp:18868
+```
+
+集成测试使用独立 `agent-smoke` 数据目录，保留用户的模型配置与正式会话。调试 APK 带有 instrumentation；正式发布前需拆到独立 test APK 并关闭 debuggable。
+
+## 明确的当前边界
+
+- 这是可运行的开发版，尚未完成全天候后台、折叠/旋转、蓝牙耳机与长时间语音稳定性验收。
+- 连续语音已有播报期间的 VAD 自动插话实验选项和手动“打断”；系统本机 ASR 的转接仍可能漏掉开头很短的词。切后台时不持续录音，尚无自定义唤醒词。
+- 中文语言包已安装时，语音输入使用系统本机识别服务；未安装或本机服务失效时回退到系统默认识别，可能联网。Pi 本地运行不等于所选推理模型离线。
+- 调试包里的 `SpeechProbeInstrumentation` 可读取本机 ASR 语言包与离线 TTS 声线状态；它不录音，也不自动下载语言包。
+- 暂只提供 OpenAI 兼容推理配置和 `SKILL.md` 文本管理。本地 Skill 可指导现有手机能力，但不能安装原生扩展、MCP server 或请求新的 Android 权限；重名本地 Skill 会被跳过，需先改名或删除。
+- 控件语义身份真变化或离开观测窗口会让旧动作失效；无关内容变化不应误杀，但频繁变化的第三方页面仍需继续实测。坐标手势已绑定截图帧，受保护界面仍不可读取。
+- APK 内的 Pi/Node 主运行时与 UI 暂在同一应用进程；Node/npm/npx 工具已是独立子进程，但仍共享 app UID。后续应使用独立 Service 进程和 `isolatedProcess` broker 隔离运行时异常与不可信代码。
+- 权限已声明和功能已实现不等于所有场景均已实测。实际测试记录见 `VERIFICATION.md`。
+
+## 结构
+
+- `runtime/agent.mjs`：真正的 Pi SDK 会话、自定义模型和 Android 工具定义。
+- `native/bridge.cpp`：嵌入 Node、双向匿名管道。
+- `android/src/dev/zfold/assistant/`：原生 UI、默认助手、语音、无障碍和圈选。
+- `PRODUCT_INTERACTION.md`：自主 agent 的任务状态、授权、打断、接管和证据反馈交互契约。
+- `scripts/`：打包、固定运行时与测试端点。
+
+本项目独立放在 `/Users/mt/workspace/pi-android`。原 `/Users/mt/workspace/zfold` 的 Laya 服务、`upstream/`、Python 环境及其他脚本保持原位。

@@ -1,0 +1,4 @@
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+ android:sessionService="dev.zfold.assistant.AssistantSessionService"
+ android:recognitionService="dev.zfold.assistant.RecognitionProxyService"
+ android:supportsAssist="true" android:supportsLocalInteraction="false" />
