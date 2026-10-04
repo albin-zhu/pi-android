@@ -5,7 +5,7 @@ const out='android/assets/runtime';
 fs.mkdirSync(out,{recursive:true});
 await build({entryPoints:['runtime/agent.mjs'],outfile:`${out}/agent.cjs`,bundle:true,platform:'node',format:'cjs',target:'node24',
   plugins:[{name:'runtime-defaults',setup(builder){builder.onResolve({filter:/^\.\/defaults\.local\.mjs$/},()=>({
-    path:path.resolve(process.env.ZFOLD_DEFAULTS_FILE||(fs.existsSync('runtime/defaults.local.mjs')?'runtime/defaults.local.mjs':'runtime/defaults.example.mjs'))
+    path:path.resolve(process.env.ZFOLD_DEFAULTS_FILE||'runtime/defaults.example.mjs')
   }));}}],
   external:['@mariozechner/clipboard'],define:{'import.meta.url':'__zfoldModuleUrl'},
   banner:{js:'const __zfoldModuleUrl = require("node:url").pathToFileURL(__filename).href;'},

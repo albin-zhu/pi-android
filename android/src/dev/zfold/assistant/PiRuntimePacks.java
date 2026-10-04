@@ -35,7 +35,9 @@ public final class PiRuntimePacks {
     JSONObject state=installed(context);
     for(java.util.Iterator<String> iterator=state.keys();iterator.hasNext();) {
       String name=iterator.next();
-      JSONObject env=state.optJSONObject(name)==null?null:state.optJSONObject(name).optJSONObject("environment");
+      JSONObject record=state.optJSONObject(name);
+      if(record==null||record.optJSONObject("environmentScope")!=null)continue;
+      JSONObject env=record.optJSONObject("environment");
       if(env==null)continue;
       for(java.util.Iterator<String> envIterator=env.keys();envIterator.hasNext();){String key=envIterator.next();if(!merged.has(key))putQuiet(merged,key,String.valueOf(env.opt(key)));}
     }
@@ -44,10 +46,13 @@ public final class PiRuntimePacks {
 
   /** Scoped packs own conflicting values such as glibc versus bionic LD_LIBRARY_PATH. */
   public static JSONObject environmentForExecutable(Context context,File executable)throws IOException {
+    JSONObject scoped=scopedEnvironment(context,executable);return scoped==null?environment(context):scoped;
+  }
+  static JSONObject scopedEnvironment(Context context,File executable)throws IOException {
     File cache=cache(context);
     String relative=executable.getCanonicalPath();
     String cachePath=cache.getCanonicalPath();
-    if(!relative.startsWith(cachePath+File.separator))return environment(context);
+    if(!relative.startsWith(cachePath+File.separator))return null;
     relative=relative.substring(cachePath.length()+1);
     JSONObject state=installed(context);
     for(java.util.Iterator<String> iterator=state.keys();iterator.hasNext();) {
@@ -68,7 +73,7 @@ public final class PiRuntimePacks {
         }
       }
     }
-    return environment(context);
+    return null;
   }
 
   public static JSONObject available(Context context)throws Exception {

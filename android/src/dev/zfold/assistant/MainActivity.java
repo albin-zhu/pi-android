@@ -283,7 +283,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       }
       case "assistant_start":answer=null;voice.assistantStart();break;
       case "delta":boolean follow=followsBottom();String delta=event.optString("text");response.append(delta);if(answer==null)bubble("",false);answer.setText(response.toString());followBottom(follow);voice.append(delta);break;
-      case "tool_execution":boolean followTool=followsBottom();showTool(event);answer=null;showStatus("running".equals(event.optString("status"))?PhoneHud.action(event):"正在处理…");if("running".equals(event.optString("status")))VoiceCallActivity.onControllerStatus(PhoneHud.action(event));followBottom(followTool);break;
+      case "tool_execution":boolean followTool=followsBottom();showTool(event);answer=null;showStatus("running".equals(event.optString("status"))?PhoneHud.action(event):"正在处理…");if("running".equals(event.optString("status"))&&!voice.listeningForInput())VoiceCallActivity.onControllerStatus(PhoneHud.action(event));followBottom(followTool);break;
       case "turn_end":{
         if(event.optBoolean("aborted"))showStatus(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");voice.turnEnded(event.optBoolean("aborted"));
         String queued=pendingTaskPrompt;pendingTaskPrompt=null;

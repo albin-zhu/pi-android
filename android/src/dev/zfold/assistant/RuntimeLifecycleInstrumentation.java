@@ -21,8 +21,7 @@ public final class RuntimeLifecycleInstrumentation extends Instrumentation {
   private volatile boolean cancelOnStart,aborted;
   private final PiRuntime.Listener listener=event->{
     String type=event.optString("type");
-    if(type.equals("ready"))runtime.send(PiRuntime.json("type","configure","config",PiRuntime.json(
-      "baseUrl",options.getString("endpoint","http://127.0.0.1:18872/v1"),"model","runtime-fixture","apiKey","fixture","api","openai-completions")));
+    if(type.equals("ready"))configure();
     if(type.equals("configured"))ready.countDown();
     if(type.equals("delta"))answer+=event.optString("text");
     if(type.equals("tool_request")&&event.optString("name").equals("runtime_exec")&&cancelOnStart){
@@ -31,13 +30,15 @@ public final class RuntimeLifecycleInstrumentation extends Instrumentation {
     if(type.equals("turn_end")){aborted=event.optBoolean("aborted");if(turn!=null)turn.countDown();}
     if(type.equals("error")){failure=event.optString("message");ready.countDown();if(turn!=null)turn.countDown();}
   };
-  @Override public void onCreate(Bundle arguments){options=arguments;start();}
+  @Override public void onCreate(Bundle arguments){PiRuntime.testMode=true;options=arguments;start();}
   @Override public void onStart(){
     Bundle outcome=new Bundle();String error="";
     try {
+      runOnMainSync(()->{runtime=PiRuntime.get(getTargetContext());if(!runtime.isTestRuntime()){failure="Refusing to configure a production runtime";ready.countDown();return;}runtime.listen(listener);if(runtime.ready)configure();});
+      check(failure==null,"Test isolation failed: "+failure);
       directory=new File(getTargetContext().getFilesDir(),"runtime/tools/lifecycle-"+SystemClock.uptimeMillis());
       check(directory.mkdirs(),"Cannot create fixture directory");script=new File(directory,"probe.sh");
-      Files.writeString(script.toPath(),"#!/system/bin/sh\ncase \"$1\" in\nlong) /system/bin/sleep 35; /system/bin/echo RUNTIME_LONG_OK;;\ntree) (/system/bin/sleep 2; /system/bin/echo SURVIVED > \"$2\") & wait;;\nflood) /system/bin/head -c 524288 /dev/zero; /system/bin/head -c 524288 /dev/zero >&2;;\nstdin) /system/bin/cat; /system/bin/echo EOF_OK;;\ndirect) /system/bin/echo RAN > \"$2\";;\npty) /system/bin/echo RUNTIME_PTY_OK; /system/bin/tty;;\nesac\n",StandardCharsets.UTF_8);
+      Files.writeString(script.toPath(),"#!/system/bin/sh\ncase \"$1\" in\nlong) /system/bin/sleep 35; /system/bin/echo RUNTIME_LONG_OK;;\ntree) (/system/bin/sleep 2; /system/bin/echo SURVIVED > \"$2\") & wait;;\nflood) /system/bin/head -c 524288 /dev/zero; /system/bin/head -c 524288 /dev/zero >&2;;\nstdin) /system/bin/cat; /system/bin/echo EOF_OK;;\ndirect) /system/bin/echo RAN > \"$2\";;\npty) /system/bin/echo RUNTIME_PTY_OK; /system/bin/tty;;\nenv) /system/bin/toybox printf '%s|%s|%s|%s|%s' \"$HOME\" \"$PATH\" \"$TMPDIR\" \"$LD_LIBRARY_PATH\" \"$PWD\";;\nesac\n",StandardCharsets.UTF_8);
       check(script.setExecutable(true),"Fixture cannot execute");
       File marker=new File(directory,"cancelled-child");
       Reply cancelled=call("cancel-active",args("tree",marker.getPath(),10000),500,false);
@@ -59,7 +60,6 @@ public final class RuntimeLifecycleInstrumentation extends Instrumentation {
       Reply stdin=call("stdin",args("stdin","unused",3000),-1,false);
       check(stdin.error==null&&stdin.value.optString("stdout").contains("EOF_OK"),"Command stdin did not receive EOF");outcome.putBoolean("stdinClosed",true);
 
-      runOnMainSync(()->{PiRuntime.testMode=true;runtime=PiRuntime.get(getTargetContext());runtime.listen(listener);});
       check(ready.await(20,TimeUnit.SECONDS)&&failure==null,"Pi configure failed: "+failure);
       long started=SystemClock.elapsedRealtime();run(args("long","unused",60000),false);
       check(answer.contains("LIFECYCLE_VERIFIED")&&!aborted,"Full Pi long command failed: "+answer);
@@ -67,6 +67,11 @@ public final class RuntimeLifecycleInstrumentation extends Instrumentation {
       run(PiRuntime.json("tool","pty","argv",new JSONArray().put(script.getPath()).put("pty")),false);
       check(answer.contains("LIFECYCLE_VERIFIED"),"Full Pi PTY open/read/close failed: "+answer);
       outcome.putBoolean("fullPiPty",true);
+      JSONObject environment=RuntimeEnvironment.base(getTargetContext());
+      String expected=environment.getString("HOME")+"|"+environment.getString("PATH")+"|"+environment.getString("TMPDIR")+"|"+environment.getString("LD_LIBRARY_PATH")+"|"+RuntimeEnvironment.workingDirectory(getTargetContext(),null).getPath();
+      run(PiRuntime.json("tool","environment","argv",new JSONArray().put(script.getPath()).put("env"),"expected",expected),false);
+      check(answer.contains("LIFECYCLE_VERIFIED"),"Shell, exec and PTY environments differ: "+answer);
+      outcome.putBoolean("consistentExecutionEnvironment",true);
       marker=new File(directory,"pi-cancelled-child");run(args("tree",marker.getPath(),10000),true);
       check(aborted,"Pi did not report cancellation");Thread.sleep(2200);check(!marker.exists(),"Pi stop left its child running");
       outcome.putBoolean("fullPiCancellation",true);
@@ -78,6 +83,8 @@ public final class RuntimeLifecycleInstrumentation extends Instrumentation {
     finish(error.isEmpty()?-1:0,outcome);
   }
   private JSONObject args(String mode,String target,int timeout){return PiRuntime.json("argv",new JSONArray().put(script.getPath()).put(mode).put(target),"timeoutMs",timeout);}
+  private void configure(){runtime.send(PiRuntime.json("type","configure","config",PiRuntime.json(
+    "baseUrl",options.getString("endpoint","http://127.0.0.1:18872/v1"),"model","runtime-fixture","apiKey","fixture","api","openai-completions")));}
   private void run(JSONObject args,boolean cancel)throws Exception{
     answer="";aborted=false;cancelOnStart=cancel;turn=new CountDownLatch(1);
     main.post(()->runtime.send(PiRuntime.json("type","prompt","id","lifecycle-"+SystemClock.uptimeMillis(),"text","RUNTIME_FIXTURE "+args)));

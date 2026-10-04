@@ -1,7 +1,7 @@
 /** Persistent PTY sessions backed by the app-private Termux runtime broker. */
 import path from 'node:path';
 
-export function createPtyTool({ Type, android, compatExec, resolveRuntimeCommand }) {
+export function createPtyTool({ Type, android, compatExec, resolveRuntimeCommand, defaultCwd }) {
   return {
     name:'pty',
     label:'连接 Termux Runtime PTY',
@@ -14,7 +14,7 @@ export function createPtyTool({ Type, android, compatExec, resolveRuntimeCommand
       id:Type.Optional(Type.Integer({minimum:1})),
       argv:Type.Optional(Type.Array(Type.String(),{minItems:1,maxItems:64})),
       cwd:Type.Optional(Type.String()),
-      env:Type.Optional(Type.Record(Type.String(),Type.String())),
+      env:Type.Optional(Type.Record(Type.String(),Type.Union([Type.String(),Type.Null()]))),
       rows:Type.Optional(Type.Integer({minimum:2,maximum:200})),
       cols:Type.Optional(Type.Integer({minimum:20,maximum:500})),
       data:Type.Optional(Type.String({maxLength:65536})),
@@ -27,6 +27,7 @@ export function createPtyTool({ Type, android, compatExec, resolveRuntimeCommand
         const argv=[...(args.argv||['bash','--noprofile','--norc'])];
         if(!path.isAbsolute(argv[0]))argv[0]=resolveRuntimeCommand(argv[0]);
         args={...args,action,argv};
+        if(!args.cwd&&defaultCwd)args.cwd=defaultCwd();
       }
       const result=await android('pty',args,signal);
       return {content:[{type:'text',text:JSON.stringify(result)}],details:result};

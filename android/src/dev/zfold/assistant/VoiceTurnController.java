@@ -32,7 +32,7 @@ final class VoiceTurnController {
   private final StringBuilder spoken=new StringBuilder();
   private boolean ttsReady,listening,asrChecking,recognizerLocal,forceSystemAsr;
   private int emptySpeech,unsupported,retries,transientErrors,epoch;private long serial,audioCooldownUntil,recognizerReleasedAt;private volatile String wakePartial="",livePartial="";
-  private boolean taskVoice;
+  private boolean taskVoice,speechSuppressed;
   private volatile long lastLiveVoiceAt;private long partialFinalToken;
   private final VoiceEndpointGate endpointGate=new VoiceEndpointGate(this::handleEndpoint);
   private long endpointFinalToken;
@@ -42,6 +42,7 @@ final class VoiceTurnController {
   }
   boolean sessionActive(){return mode!=Mode.IDLE&&mode!=Mode.PAUSED&&callback.active();}
   boolean speaking(){return mode==Mode.SPEAKING||engineSpeaking();}
+  boolean listeningForInput(){return sessionActive()&&mode==Mode.LISTENING;}
   private boolean engineSpeaking(){return activeUtterance!=null;}
   void beginSession(){
     if(sessionActive())return;
@@ -51,6 +52,7 @@ final class VoiceTurnController {
     if(recognizer!=null){recognizer.destroy();recognizer=null;}
     recognizerReleasedAt=SystemClock.elapsedRealtime();
     epoch++;emptySpeech=0;unsupported=0;retries=0;transientErrors=0;forceSystemAsr=false;asrChecking=false;spoken.setLength(0);activeUtterance=null;speechPending="";livePartial="";
+    speechSuppressed=false;
     partialFinalToken=0;
     endpointFinalToken=0;
     endpointGate.reset();
@@ -80,11 +82,14 @@ final class VoiceTurnController {
   void forceInterrupt(){interrupt(true);}
   private void interrupt(boolean force){
     if(!force&&!speaking())return;
+    if(mode==Mode.LISTENING&&(listening||asrChecking)){callback.status("正在听，请说话…");return;}
+    speechSuppressed=true;taskVoice=runtime.busy;asrChecking=false;listening=false;
     epoch++;activeUtterance=null;speechPending="";stopBarge(false);if(tts!=null)tts.stop();
+    cancelWakeCommand();stopLiveAsr();livePartial="";partialFinalToken++;endpointFinalToken++;
     if(recognizer!=null){SpeechRecognizer old=recognizer;recognizer=null;old.cancel();cleanupRecognizer(old);}
     mode=Mode.LISTENING;callback.voiceState(true,false);callback.status("已打断，正在切换收听…");
     audioCooldownUntil=SystemClock.elapsedRealtime()+800;int token=epoch;
-    main.postDelayed(()->{if(token==epoch&&sessionActive()&&!runtime.busy&&!engineSpeaking())listen();},800);
+    main.postDelayed(()->{if(token==epoch&&sessionActive()&&!engineSpeaking())listen();},800);
   }
   void stopSession(boolean cancelTask){
     epoch++;mode=Mode.IDLE;activeUtterance=null;ttsSpeakingReset();speechPending="";spoken.setLength(0);stopBarge(false);
@@ -99,6 +104,7 @@ final class VoiceTurnController {
     releaseLater();
   }
   void beginPrompt(){
+    speechSuppressed=false;
     epoch++;activeUtterance=null;speechPending="";spoken.setLength(0);stopBarge(false);
     if(tts!=null)tts.stop();
     stopLiveAsr();
@@ -117,7 +123,7 @@ final class VoiceTurnController {
     speechPending="";spoken.setLength(0);
   }
   void append(String delta){
-    if(!sessionActive()||!ttsReady||tts==null||delta==null||delta.isEmpty())return;
+    if(speechSuppressed||!sessionActive()||!ttsReady||tts==null||delta==null||delta.isEmpty())return;
     String trimmed=delta.trim();
     if(trimmed.startsWith("{")||trimmed.startsWith("["))return;
     StringBuilder pending=new StringBuilder(speechPending+delta);
@@ -125,7 +131,7 @@ final class VoiceTurnController {
     speechPending=pending.toString();
   }
   void toolAnnounce(String action){
-    if(!sessionActive()||!ttsReady||tts==null||action==null||action.isEmpty())return;
+    if(speechSuppressed||!sessionActive()||!ttsReady||tts==null||action==null||action.isEmpty())return;
     String label=PhoneSpeech.speakable(action);
     if(label.length()>40)label=label.substring(0,40);
     if(!label.endsWith("。")&&!label.endsWith("！")&&!label.endsWith("？"))label+="。";
@@ -134,6 +140,7 @@ final class VoiceTurnController {
   void turnEnded(boolean aborted){
     if(aborted){stopSession(false);callback.status(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");return;}
     if(!sessionActive())return;
+    if(mode==Mode.LISTENING&&(listening||asrChecking)){callback.status("正在听…");return;}
     if(ttsReady&&finishResidual())return;
     if(engineSpeaking()){mode=Mode.SPEAKING;callback.status("正在播报 · 播完自动听");return;}
     if(SystemClock.elapsedRealtime()<audioCooldownUntil){mode=Mode.LISTENING;callback.status("正在播报 · 播完自动听");return;}
@@ -163,6 +170,7 @@ final class VoiceTurnController {
     return !sentence.isEmpty()&&queue(sentence);
   }
   private boolean queue(String sentence){
+    if(speechSuppressed)return false;
     boolean fresh=activeUtterance==null;activeUtterance=(mode==Mode.IDLE?"voice":"turn")+"-"+(++serial);
     int result=tts.speak(sentence,fresh?TextToSpeech.QUEUE_FLUSH:TextToSpeech.QUEUE_ADD,null,activeUtterance);
     if(result!=TextToSpeech.SUCCESS){
@@ -210,6 +218,7 @@ final class VoiceTurnController {
     barge=new VoiceBargeIn(context,new VoiceBargeIn.Callback(){
       public void speech(String partial){
         if(!sessionActive()||!speaking())return;
+        speechSuppressed=true;
         activeUtterance=null;speechPending="";if(tts!=null)tts.stop();mode=Mode.LISTENING;
         callback.voiceState(true,false);
         callback.status(partial.isEmpty()?"已识别到插话 · 正在听…":"正在听 · "+partial);

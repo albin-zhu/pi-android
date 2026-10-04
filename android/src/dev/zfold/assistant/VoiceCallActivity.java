@@ -54,7 +54,12 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     root.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());root.setPadding(bars.left,bars.top+Ui.dp(this,18),bars.right,bars.bottom+Ui.dp(this,16));return insets;});
 
     LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.VERTICAL);top.setGravity(Gravity.CENTER_HORIZONTAL);top.setPadding(Ui.dp(this,24),Ui.dp(this,16),Ui.dp(this,24),0);
-    orb=new CallOrb(this);top.addView(orb,new LinearLayout.LayoutParams(Ui.dp(this,228),Ui.dp(this,228)));
+    orb=new CallOrb(this);
+    orb.setClickable(true);orb.setFocusable(true);orb.setContentDescription("点击头像，打断播报并说话");
+    orb.setForeground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x288fb8ff),null,Ui.circle(this,Color.WHITE,0)));
+    orb.setOnClickListener(view->{view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);tapMicrophone();});
+    top.addView(orb,new LinearLayout.LayoutParams(Ui.dp(this,228),Ui.dp(this,228)));
+    TextView interruptHint=Ui.text(this,"点头像打断",12,0xff9db0c7);interruptHint.setGravity(Gravity.CENTER);top.addView(interruptHint);
     liveText=Ui.text(this,"",14,0xff9db0c7);liveText.setLineSpacing(Ui.dp(this,3),1f);liveText.setGravity(Gravity.CENTER);liveText.setMaxLines(3);liveText.setEllipsize(android.text.TextUtils.TruncateAt.END);LinearLayout.LayoutParams liveParams=new LinearLayout.LayoutParams(-1,-2);liveParams.topMargin=Ui.dp(this,10);top.addView(liveText,liveParams);
     TextView name=Ui.text(this,runtime.agentName,22,0xffeef4ff);name.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));name.setGravity(Gravity.CENTER);LinearLayout.LayoutParams nameParams=new LinearLayout.LayoutParams(-1,-2);nameParams.topMargin=Ui.dp(this,20);top.addView(name,nameParams);
     stateText=Ui.text(this,"正在准备实时通话…",14,0xff9db0c7);stateText.setGravity(Gravity.CENTER);LinearLayout.LayoutParams stateParams=new LinearLayout.LayoutParams(-1,-2);stateParams.topMargin=Ui.dp(this,7);top.addView(stateText,stateParams);
@@ -70,7 +75,11 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     runtime.listen(this);
     VoiceMiniOverlay.hide();
     liveText.setText("实时通话已就绪");
-    orb.setState("preparing");
+    VoiceTurnController controller=MainActivity.activeVoice();
+    if(controller!=null&&controller.sessionActive()){
+      session=true;speaking=controller.speaking();orb.setState(speaking?"speaking":controller.listeningForInput()?"listening":"thinking");
+      setStateText(speaking?"正在播报 · 点头像可打断":controller.listeningForInput()?"正在听…":"正在思考…");
+    }else orb.setState("preparing");
     if(runtime.agentAvatar!=null&&!runtime.agentAvatar.isEmpty())orb.setAvatar(runtime.agentAvatar);
     startedAt=System.currentTimeMillis();
   }
@@ -79,7 +88,7 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     LinearLayout button=new LinearLayout(this);button.setOrientation(LinearLayout.VERTICAL);button.setGravity(Gravity.CENTER);button.setBackground(Ui.circle(this,fill,0));button.setClickable(true);button.setFocusable(true);
     button.setOnClickListener(v->{button.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);action.run();});
     ImageView image=new ImageView(this);image.setImageDrawable(Ui.icon(this,icon,fill==0xffff4553?0xffffffff:0xffdce8f8));image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);button.addView(image,new LinearLayout.LayoutParams(Ui.dp(this,24),Ui.dp(this,24)));
-    if(!label.isEmpty()){TextView text=Ui.text(this,label,10,0xffaebdce);text.setPadding(0,Ui.dp(this,4),0,0);button.addView(text);}
+    if(!label.isEmpty()){TextView text=Ui.text(this,label,10,0xffaebdce);text.setGravity(Gravity.CENTER);text.setPadding(0,Ui.dp(this,4),0,0);button.addView(text);}
     button.setContentDescription(description);return button;
   }
 
@@ -106,13 +115,15 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     if(type.equals("agent_identity")){main.post(()->{if(orb!=null)orb.setAvatar(runtime.agentAvatar);});return;}
     if(type.equals("turn_start")){main.post(()->{session=true;speaking=false;assistantText="";liveText.setText(runtime.lastPromptText);setStateText("正在思考…");orb.setState("thinking");});return;}
     if(type.equals("assistant_start"))return;
-    if(type.equals("delta")){main.post(()->{session=true;speaking=true;orb.setState("speaking");setStateText(runtime.agentName+" 正在说话");
+    if(type.equals("delta")){main.post(()->{VoiceTurnController vc=MainActivity.activeVoice();
+      if(vc==null||!vc.listeningForInput()){session=true;speaking=vc!=null&&vc.speaking();orb.setState(speaking?"speaking":"thinking");if(speaking)setStateText(runtime.agentName+" 正在说话");}
       String latest=runtime.lastResponse;int cut=Math.max(0,latest.length()-200);
       liveText.setText(cut>0?"…"+latest.substring(cut):latest);});return;}
-    if(type.equals("tool_execution")){main.post(()->{setStateText(PhoneHud.action(event));orb.setState("thinking");
+    if(type.equals("tool_execution")){main.post(()->{
       VoiceTurnController vc=MainActivity.activeVoice();
+      if(vc==null||!vc.listeningForInput()){setStateText(PhoneHud.action(event));orb.setState("thinking");}
       if(vc!=null&&"running".equals(event.optString("status")))vc.toolAnnounce(PhoneHud.action(event));});return;}
-    if(type.equals("turn_end")){main.post(()->{session=true;speaking=false;assistantText=runtime.lastResponse;setStateText("播报完成后自动听你说话");orb.setState("listening");});return;}
+    if(type.equals("turn_end")){main.post(()->{VoiceTurnController vc=MainActivity.activeVoice();session=vc!=null&&vc.sessionActive();speaking=vc!=null&&vc.speaking();assistantText=runtime.lastResponse;orb.setState(!session?"ended":speaking?"speaking":"listening");if(speaking)setStateText("播报完成后自动听你说话");});return;}
     if(type.equals("error")){main.post(()->{setStateText("通话出现错误，请看状态");orb.setState("error");});return;}
   }
 
@@ -120,6 +131,7 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     private final Paint fill=new Paint(Paint.ANTI_ALIAS_FLAG),ring=new Paint(Paint.ANTI_ALIAS_FLAG),avatarPaint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG),letter=new Paint(Paint.ANTI_ALIAS_FLAG);
     private Bitmap avatar;private String mode="preparing";private long frame;
     CallOrb(Context context){super(context);ring.setStyle(Paint.Style.STROKE);ring.setStrokeCap(Paint.Cap.ROUND);letter.setColor(0xffdce8f8);letter.setTextAlign(Paint.Align.CENTER);letter.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));}
+    @Override public CharSequence getAccessibilityClassName(){return android.widget.Button.class.getName();}
     void setAvatar(String encoded){Bitmap next=Ui.thumbnail(encoded,512);avatar=next==null?null:circle(next);invalidate();}
     void setState(String value){mode=value==null?"preparing":value;invalidate();}
     @Override protected void onDraw(Canvas canvas){

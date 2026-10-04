@@ -14,7 +14,7 @@ import java.util.concurrent.ExecutorService;
 
 public final class PiRuntime {
   interface Listener { void event(JSONObject event); }
-  private static PiRuntime instance;
+  private static volatile PiRuntime instance;
   static boolean testMode;
   static boolean instanceStopped(){return instance!=null&&instance.stopped;}
   static boolean phoneBusy(){return instance!=null&&instance.phoneActive;}
@@ -27,6 +27,8 @@ public final class PiRuntime {
     PhoneHud.takeover(context,"已由你接管 · 任务正在停止");
   }
   public final Context context;
+  private final boolean testing;
+  private volatile File selectedDataRoot;
   private final Handler main = new Handler(Looper.getMainLooper());
   private final ExecutorService writer = Executors.newSingleThreadExecutor();
   private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
@@ -64,8 +66,14 @@ public final class PiRuntime {
     if(instance == null) instance = new PiRuntime(context.getApplicationContext());
     return instance;
   }
-  private static File agentRoot(Context context) {
-    if(testMode)return new File(context.getNoBackupFilesDir(),"agent-smoke");
+  static File agentRoot(Context context) {
+    PiRuntime running=instance;
+    if(running!=null&&running.selectedDataRoot!=null)return running.selectedDataRoot;
+    return chooseDataRoot(context,testMode);
+  }
+  boolean isTestRuntime(){return testing;}
+  private static File chooseDataRoot(Context context,boolean testing) {
+    if(testing)return new File(context.getNoBackupFilesDir(),"agent-smoke");
     if(Environment.isExternalStorageManager()) {
       File storage=new File(Environment.getExternalStorageDirectory(),"pi");
       if(storage.isDirectory()||storage.mkdirs())return storage;
@@ -87,7 +95,7 @@ public final class PiRuntime {
     if(!target.exists())java.nio.file.Files.copy(source.toPath(),target.toPath());
   }
   private PiRuntime(Context context) {
-    this.context=context;
+    this.context=context;this.testing=testMode;
     new Thread(() -> {
       try {
         File runtime=new File(context.getFilesDir(),"runtime"); runtime.mkdirs();
@@ -96,8 +104,9 @@ public final class PiRuntime {
         System.loadLibrary("node"); System.loadLibrary("zfold");
         if(!prepare(context.getCacheDir().getAbsolutePath())) throw new IOException("无法建立本机通信");
         new Thread(this::readLoop,"pi-events").start();
-        File data=agentRoot(context);data.mkdirs();
-        File credentials=new File(data,".pi/agent");credentials.mkdirs();
+        File data=chooseDataRoot(context,testing);data.mkdirs();selectedDataRoot=data;
+        File credentials=CredentialStore.prepare(context,data,testing);
+        java.nio.file.Files.write(new File(runtime,"environment.json").toPath(),RuntimeEnvironment.base(context).toString().getBytes(StandardCharsets.UTF_8));
         if(!testMode)migrateLegacyData(new File(context.getNoBackupFilesDir(),"agent"),data);
         int exit=startNode(new File(runtime,"agent.cjs").getAbsolutePath(),data.getAbsolutePath(),credentials.getAbsolutePath(),context.getApplicationInfo().nativeLibraryDir);
         dispatch(json("type","error","message","Pi 运行时已退出（"+exit+"），请重新打开应用"));

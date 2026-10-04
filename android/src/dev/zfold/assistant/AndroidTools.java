@@ -26,7 +26,7 @@ public final class AndroidTools {
     // PiRuntime dispatches on the UI thread. Process waits, PTY I/O and file
     // staging must leave that thread before doing any potentially blocking work.
     if(Looper.myLooper()==Looper.getMainLooper()&&
-        (name.equals("runtime_exec")||name.equals("runtime_stage")||name.equals("pty")||name.equals("pkg"))){
+        (name.equals("runtime_exec")||name.equals("runtime_stage")||name.equals("pty")||name.equals("pkg")||name.equals("runtime_environment"))){
       new Thread(operation,"pi-tool-"+name).start();
       return;
     }
@@ -36,6 +36,7 @@ public final class AndroidTools {
     String name=request.optString("name");
     JSONObject args=request.optJSONObject("args");if(args==null)args=new JSONObject();
     try {
+      if(name.equals("runtime_environment")){result.done(RuntimeEnvironment.base(context),null);return;}
       if(name.equals("device_info")) {
         Intent battery=context.registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         int level=battery==null?-1:battery.getIntExtra(BatteryManager.EXTRA_LEVEL,-1),scale=battery==null?100:battery.getIntExtra(BatteryManager.EXTRA_SCALE,100);
@@ -97,7 +98,7 @@ public final class AndroidTools {
         List<String> command=new ArrayList<>();
         for(int i=0;i<argv.length();i++) {
           String value=argv.optString(i);
-          if(value==null||value.isEmpty()||value.length()>4096)throw new Exception("argv 非法");
+          if(value==null||value.isEmpty()||value.length()>4096||value.indexOf('\0')>=0)throw new Exception("argv 非法");
           command.add(value);
         }
         File executable=new File(command.get(0));
@@ -106,18 +107,9 @@ public final class AndroidTools {
         boolean trustedTools=canonical.startsWith(toolsRoot.getPath()+File.separator);
         if(!trustedCache&&!trustedPackage&&!trustedTools)throw new Exception("只能执行 Runtime Pack、用户软件包或 tool_install 安装的私有工具");
         ProcessBuilder builder=new ProcessBuilder(command).redirectErrorStream(false);
-        File root=new File(Environment.getExternalStorageDirectory(),"pi").getCanonicalFile();
-        File cwd=args.has("cwd")?new File(args.getString("cwd")):root;
-        String cwdPath=cwd.getCanonicalPath();
-        if(args.has("cwd")&&!cwdPath.equals(root.getPath())&&!cwdPath.startsWith(root.getPath()+File.separator))throw new Exception("runtime_exec 工作目录必须在 /storage/pi 内");
+        File cwd=RuntimeEnvironment.workingDirectory(context,args.optString("cwd",null));
         builder.directory(cwd);
-        JSONObject defaults=trustedPackage?PiPackageManager.environmentForExecutable(context,executable):trustedTools?PiRuntime.json(
-          "PATH",toolsRoot.getPath()+":"+new File(pkgRoot,"usr/bin").getPath()+":"+new File(cache,"usr/bin").getPath()+":/system/bin:/system/xbin:/vendor/bin",
-          "HOME",root.getPath(),"TMPDIR",new File(root,".tmp").getPath(),"TERM","xterm-256color"
-        ):PiRuntimePacks.environmentForExecutable(context,executable);
-        for(java.util.Iterator<String> iterator=defaults.keys();iterator.hasNext();){String key=iterator.next();if(!args.has("env")||!args.optJSONObject("env").has(key))builder.environment().put(key,String.valueOf(defaults.opt(key)));}
-        JSONObject env=args.optJSONObject("env");
-        if(env!=null)for(java.util.Iterator<String> iterator=env.keys();iterator.hasNext();){String key=iterator.next();builder.environment().put(key,String.valueOf(env.opt(key)));}
+        RuntimeEnvironment.apply(builder.environment(),RuntimeEnvironment.forExecutable(context,executable),args.optJSONObject("env"));
         long timeout=Math.min(Math.max(args.optLong("timeoutMs",60000),1000),600000);
         result.done(RuntimeProcess.execute(builder,timeout),null);return;
       }
@@ -127,30 +119,23 @@ public final class AndroidTools {
         File cache=new File(context.getFilesDir(),"runtime/runtime-exec-test").getCanonicalFile();
         File pkgRoot=PiPackageManager.root(context).getCanonicalFile();
         File toolsRoot=new File(context.getFilesDir(),"runtime/tools").getCanonicalFile();
-        File root=new File(Environment.getExternalStorageDirectory(),"pi").getCanonicalFile();
         if(action.equals("open")) {
           JSONArray input=args.optJSONArray("argv");
           if(input==null||input.length()<1||input.length()>64)throw new Exception("PTY 需要 1 到 64 个 argv");
           List<String> command=new ArrayList<>();
           for(int i=0;i<input.length();i++) {
             String value=input.optString(i);
-            if(value==null||value.isEmpty()||value.length()>4096)throw new Exception("PTY argv 非法");
+            if(value==null||value.isEmpty()||value.length()>4096||value.indexOf('\0')>=0)throw new Exception("PTY argv 非法");
             command.add(value);
           }
           File executable=new File(command.get(0));
           String canonical=executable.getCanonicalPath();
           boolean trusted=canonical.startsWith(cache.getPath()+File.separator)||canonical.startsWith(pkgRoot.getPath()+File.separator)||canonical.startsWith(toolsRoot.getPath()+File.separator);
           if(!trusted)throw new Exception("PTY 只能执行 Runtime Pack、用户软件包或 tool_install 安装的私有工具");
-          File cwd=args.has("cwd")?new File(args.getString("cwd")):root;
+          File cwd=RuntimeEnvironment.workingDirectory(context,args.optString("cwd",null));
           String cwdPath=cwd.getCanonicalPath();
-          if(!cwdPath.equals(root.getPath())&&!cwdPath.startsWith(root.getPath()+File.separator))throw new Exception("PTY 工作目录必须在 /storage/pi 内");
-          JSONObject defaults=canonical.startsWith(pkgRoot.getPath()+File.separator)?PiPackageManager.environmentForExecutable(context,executable):PiRuntime.json(
-            "PATH",toolsRoot.getPath()+":"+new File(pkgRoot,"usr/bin").getPath()+":"+new File(cache,"usr/bin").getPath()+":/system/bin:/system/xbin:/vendor/bin",
-            "HOME",root.getPath(),"TMPDIR",new File(root,".tmp").getPath(),"TERM","xterm-256color");
           ProcessBuilder environmentSource=new ProcessBuilder("true");
-          for(java.util.Iterator<String> iterator=defaults.keys();iterator.hasNext();){String key=iterator.next();environmentSource.environment().put(key,String.valueOf(defaults.opt(key)));}
-          JSONObject custom=args.optJSONObject("env");
-          if(custom!=null)for(java.util.Iterator<String> iterator=custom.keys();iterator.hasNext();){String key=iterator.next();environmentSource.environment().put(key,String.valueOf(custom.opt(key)));}
+          RuntimeEnvironment.apply(environmentSource.environment(),RuntimeEnvironment.forExecutable(context,executable),args.optJSONObject("env"));
           List<String> env=new ArrayList<>();
           for(java.util.Map.Entry<String,String> entry:environmentSource.environment().entrySet())env.add(entry.getKey()+"="+entry.getValue());
           int rows=Math.min(Math.max(args.optInt("rows",40),2),200),cols=Math.min(Math.max(args.optInt("cols",120),20),500);
@@ -202,7 +187,7 @@ public final class AndroidTools {
         File source=new File(sourcePath).getCanonicalFile(),tools=new File(context.getFilesDir(),"runtime/tools").getCanonicalFile(),target=new File(tools,name2);
         String sourcePathCanonical=source.getPath();
         boolean trustedDiagnostic=sourcePathCanonical.startsWith("/system/bin/")||sourcePathCanonical.startsWith("/system/xbin/");
-        File storageRoot=new File(Environment.getExternalStorageDirectory(),"pi").getCanonicalFile();
+        File storageRoot=PiRuntime.agentRoot(context).getCanonicalFile();
         boolean workspaceSource=sourcePathCanonical.startsWith(storageRoot.getPath()+File.separator);
         if(!trustedDiagnostic&&!workspaceSource)throw new Exception("runtime_stage 来源必须经过 Runtime Pack 安装器或位于 /storage/pi");
         tools.mkdirs();

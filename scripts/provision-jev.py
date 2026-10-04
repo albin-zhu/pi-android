@@ -17,7 +17,7 @@ def main():
     parser.add_argument('--test',action='store_true',help='Use only the isolated agent-smoke configuration')
     args=parser.parse_args()
     key=key_from_fish()
-    directory='agent-smoke' if args.test else 'agent'
+    directory='agent-smoke-credentials' if args.test else 'credentials'
     payload=json.dumps({'enabled':True,'model':'jev-1.13.0','apiKey':key}).encode()
     # The secret is never a shell argument, host file, or stdout value.
     command=f'umask 077; mkdir -p no_backup/{directory}; cat > no_backup/{directory}/jev.json.tmp; chmod 600 no_backup/{directory}/jev.json.tmp; mv no_backup/{directory}/jev.json.tmp no_backup/{directory}/jev.json'

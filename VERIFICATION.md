@@ -582,3 +582,15 @@
 - 两种最终 APK 构建通过：compat28 SHA-256 `a00e4a092bec02f106218cc52516d77c6e3ec9eab41cf4583d0bbfa90ce12a82`；modern SHA-256 `a8be74846aed9aa8a99c8867ecd31a477607adc06a0452ac754aae1549865f2f`。最终 compat28 已安装 Fold7。日志保存在本地忽略目录 `artifacts/runtime-foundation/`。
 
 复现完整调用链：启动 `node scripts/runtime-lifecycle-fixture.mjs`，设置 `adb reverse tcp:18872 tcp:18872`，再运行 `adb shell am instrument -w dev.zfold.assistant/.RuntimeLifecycleInstrumentation`。该检查使用 `PiRuntime.testMode` 的独立测试会话。
+
+## 0.2.65 头像打断与私有运行配置 · 2026-10-04
+
+- 语音页头像成为可聚焦、可点击的按钮，增加 ripple、触感反馈和“点头像打断”提示，与底部麦克风共用手动打断入口。忙碌回合允许进入任务收听；当前回答的后续 delta、工具播报和残留语句被抑制，新指令开始时恢复。已经在收听时重复点击不重建识别器。界面进入时同步现有语音状态，流式文本与工具事件不再把收听状态改回播报。
+- `VoiceAvatarInstrumentation` 在真实 Activity 上点击头像，验证可访问按钮、打断状态、忙碌回合收听资格、旧播报抑制，四项均为 true，`INSTRUMENTATION_CODE=-1`。测试使用合成忙碌回合，在识别器启动前停用测试控制器，不录制麦克风；截图已检查提示、头像和按钮布局。真人插话率、ASR busy 与蓝牙路由仍不以该测试替代。
+- 新增 `RuntimeEnvironment`，统一 HOME、PATH、TMPDIR、库路径和默认项目 cwd。shell 每次从原生端读取环境，环境值以 env 映射传递而不是拼接 shell；裸命令统一按 tools → pkg → Runtime Pack 的顺序解析，跳过不可执行的同名文件。允许通过 `env` 的 null 值清除变量。glibc scoped 环境不再进入全局环境。
+- `RuntimeLifecycleInstrumentation` 扩展为对同一脚本分别调用 Agent `runtime_exec`、PTY 和 bash，比较 HOME、PATH、TMPDIR、LD_LIBRARY_PATH 和 PWD，`consistentExecutionEnvironment=true`。35 秒命令耗时 35202 ms；PTY 闭环、取消、排队取消、超时终止普通子进程、输出上限与 stdin EOF 继续全部通过。
+- 新增 `CredentialStore`，正式配置固定放在私有 `no_backup/credentials`，测试固定放在 `agent-smoke-credentials`。迁移先原子保存并校验私有恢复副本，已有私有文件优先，旧值冲突也保留在恢复目录，核对后清理旧位置。私有文件权限 0600、目录 0700；不输出凭据内容。运行时冻结启动时的数据根，避免后续存储授权变化悄悄改变执行目录。
+- `RuntimeConfigurationInstrumentation` 验证迁移字节保持、恢复副本、冲突优先级、重复迁移、同目录保护、失败时保留源文件、私有权限、环境覆盖与 cwd 越界拒绝，全部通过。正式手机迁移报告为 6 个文件复制、0 个冲突、0 个未清理旧文件；保留了 auth、models、Jev、身份、提示词和头像的私有恢复副本。
+- 默认构建不再自动导入个人 `defaults.local.mjs`，最终 bundle 中旧个人密钥字面量的匹配数为 0。个人调试配置只能通过显式 `ZFOLD_DEFAULTS_FILE` 指定。正式模型入口配置仍在原有私有文件中。
+- 修正集成测试启动竞态：测试模式在 instrumentation onCreate 设置，监听后补查已就绪状态，并拒绝配置正式 runtime。最终回归使用独立测试数据根，避免系统助手预先启动造成漏收 ready 或误用正式配置。
+- `npm test` 49/49 通过；compat28 与 modern 构建通过。最终 compat28 SHA-256 `c8f604f465a85e6995687f364ce5a2c516de6382f1433823616688add8b5c9c4`；modern SHA-256 `9781f775afd78475351ab8330a4756debeebf901956b3206e8f9d6ddc1899762`。compat28 已安装 Fold7，正式数据根的 Pi 发出 ready，无启动 FATAL。日志与截图在本地忽略目录 `artifacts/runtime-config/`。

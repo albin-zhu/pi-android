@@ -4,6 +4,15 @@
 
 ## 当前版本
 
+### 0.2.65 头像打断与统一运行环境
+
+- 语音页可直接点头像打断，带触感、按下反馈和无障碍按钮说明。忙碌回合也可进入收听；打断后旧回复的新增文字与工具播报保持静音，新的指令开始后恢复播报。
+- Agent shell、`runtime_exec` 和 PTY 共用执行环境：HOME 为私有 `files/runtime/pkg/home`，TMPDIR 为其 `tmp`；PATH 优先级为用户 tools、软件包、Runtime Packs、系统命令。默认 cwd 为当前项目；显式 cwd 仍需位于数据根内。
+- shell 每次调用向原生端取得最新环境；环境值直接传给子进程，不经过 shell 字符串展开。实验 glibc 环境只对其作用域内的程序生效。
+- 凭据与 Agent 配置固定保存到私有 `no_backup/credentials`，与共享存储权限无关。旧文件迁移前保存私有恢复副本；已存在的私有值优先，冲突旧值也保留在恢复目录。
+
+历史 CLI 配置若放在旧的共享 HOME 中，可显式指定 HOME 使用旧位置；本轮统一执行环境，不自动合并用户的 shell 配置文件。独立运行时服务、任务恢复与 MCP 仍按设计分阶段实施。
+
 ### 0.2.64 运行时基础
 
 设计与实施顺序见 [RUNTIME_DESIGN.md](RUNTIME_DESIGN.md)。当前仍为单活动 Agent 会话；独立 supervisor、任务恢复、多会话并发、完整终端模拟和 MCP 接入属于后续阶段。
@@ -353,7 +362,9 @@ Pi 现在启用标准 `read/write/edit/ls/bash`。`bash` 使用 Android 自带 t
 3. 在“手机能力”中按需选择默认助手、启用 Zfold 无障碍服务、授予悬浮窗权限。
 4. 在目标 App 上唤起助手，点卡片里的“圈选”，完成后回到同一卡片输入处理要求。系统助手入口的圈选与最小化保留在系统助手窗口内；独立悬浮入口仍受目标 App 隐藏悬浮层的限制。
 
-当前拥有共享存储权限时，会话、Skills 和 `.pi/agent` 配置使用 `/storage/emulated/0/pi`；没有该权限时使用应用私有 `no_backup/agent`。因此当前凭据还不能统一称为“应用私有存储”。私有凭据迁移已列入 RUNTIME_DESIGN.md 的第二阶段。模型入口选择另存于私有 `no_backup/model.json`。不会导入电脑上的 Pi 凭据。Android 不允许读取的受保护界面仍然不能读取。
+会话和 Skills 在拥有共享存储权限时使用 `/storage/emulated/0/pi`，否则使用私有 `no_backup/agent`。从 0.2.65 起，`auth.json`、`models.json`、Jev、Agent 身份、系统提示词和头像统一使用私有 `no_backup/credentials`；模型入口选择仍在私有 `no_backup/model.json`。测试使用独立 `agent-smoke-credentials`。
+
+迁移会先原子保存并校验私有 `legacy-backup/文件名.SHA256`，再处理旧位置。已有私有文件优先；旧值不丢弃，冲突与未清理文件名记录在 `migration-status.json`，报告不包含凭据内容。回退到 0.2.64 及更早 APK 前，需要将当前私有配置或所需恢复副本恢复到旧版读取的位置。不会导入电脑上的 Pi 凭据；同 UID 的用户代码仍拥有应用自身权限，这不是对用户代码的独立安全沙箱。
 
 ## 构建
 
@@ -364,13 +375,13 @@ npm ci --ignore-scripts
 npm run bundle
 npm test
 ZFOLD_TARGET_SDK=28 npm run build
-adb install --no-incremental -r artifacts/Zfold-0.2.64-compat28-debug.apk
+adb install --no-incremental -r artifacts/Zfold-0.2.65-compat28-debug.apk
 adb shell am start -n dev.zfold.assistant/.MainActivity
 ```
 
 构建下载固定版本的 Node Android 运行时，并校验 SHA-256；来源与许可见 `THIRD_PARTY_NOTICES.md`。开发签名保存在 `.build/debug.keystore`，保留它才能无损更新已有安装。
 
-干净检出默认使用不含凭据的 `runtime/defaults.example.mjs`，模型在 App 中配置。本机可选的 `runtime/defaults.local.mjs` 不进入 Git；`ZFOLD_DEFAULTS_FILE=runtime/defaults.example.mjs` 可显式构建无个人默认配置的版本。省略 `ZFOLD_TARGET_SDK` 构建 modern 通道，工具目录会标明不支持的执行能力。
+构建默认使用不含凭据的 `runtime/defaults.example.mjs`，模型在 App 中配置。`runtime/defaults.local.mjs` 不进入 Git，也不再自动参与构建；仅显式设置 `ZFOLD_DEFAULTS_FILE` 才使用个人调试默认配置，该配置会随 APK 打包。省略 `ZFOLD_TARGET_SDK` 构建 modern 通道，工具目录会标明不支持的执行能力。
 
 ## 验证
 

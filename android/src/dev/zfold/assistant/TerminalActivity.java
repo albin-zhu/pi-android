@@ -148,24 +148,12 @@ public final class TerminalActivity extends Activity {
     outputContainer.removeAllViews();
     String executable;
     try { executable = bash.getCanonicalPath(); } catch (Exception e) { setStatus("bash 路径读取失败"); return; }
-    File storage = new File(Environment.getExternalStorageDirectory(), "pi");
-    if (!storage.isDirectory()) storage = getFilesDir();
-    File pkgRoot = PiPackageManager.root(this);
-    File usr = new File(pkgRoot, "usr");
-    new File(pkgRoot, "home").mkdirs();
-    new File(pkgRoot, "tmp").mkdirs();
     String[] argv = {executable, "--noprofile", "--norc"};
-    String[] env = {
-      "PATH=" + usr + "/bin:/system/bin:/system/xbin:/vendor/bin",
-      "HOME=" + new File(pkgRoot, "home"),
-      "TMPDIR=" + new File(pkgRoot, "tmp"),
-      "PREFIX=" + usr,
-      "TERM=xterm-256color",
-      "TERMINFO=" + usr + "/share/terminfo",
-      "LD_LIBRARY_PATH=" + usr + "/lib",
-    };
     try {
-      ptyId = PiRuntime.ptyOpen(argv, storage.getCanonicalPath(), env, 40, 120);
+      java.util.Map<String,String> environment=new ProcessBuilder("true").environment();
+      RuntimeEnvironment.apply(environment,RuntimeEnvironment.forExecutable(this,bash),null);
+      String[] env=environment.entrySet().stream().map(entry->entry.getKey()+"="+entry.getValue()).toArray(String[]::new);
+      ptyId = PiRuntime.ptyOpen(argv, RuntimeEnvironment.workingDirectory(this,null).getPath(), env, 40, 120);
     } catch (Throwable e) { setStatus("PTY 打开失败：" + e.getMessage()); return; }
     if (ptyId <= 0) { setStatus("PTY 打开失败"); return; }
     setStatus("会话 #" + ptyId + " · bash 已启动");
