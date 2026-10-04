@@ -5,7 +5,7 @@ export function createPtyTool({ Type, android, compatExec, resolveRuntimeCommand
   return {
     name:'pty',
     label:'连接 Termux Runtime PTY',
-    description:'打开真实 POSIX 伪终端并连接 App 内 Termux package runtime。open 默认 bash --noprofile --norc，避免旧 Termux prefix 的启动文件污染；write/read/status/resize/close 用返回的 id 继续会话。read 返回最多 256KB 输出，安静时可再读一次；一次最多 4 个会话。',
+    description:'打开真实 POSIX 伪终端并连接 App 内 Termux package runtime。open 默认 bash --noprofile --norc；write/read/status/resize/close 用返回的 id 继续会话。read 有输出即返回，最多 256KB；需要完整输出时结合 alive 状态继续 read，timeoutMs 是等待首段数据的上限。一次最多 4 个会话。',
     parameters:Type.Object({
       action:Type.Optional(Type.Union([
         Type.Literal('open'),Type.Literal('write'),Type.Literal('read'),Type.Literal('status'),

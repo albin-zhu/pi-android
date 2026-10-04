@@ -17,6 +17,15 @@ final class RuntimeEnvironment {
       "PATH",new File(runtime,"tools").getPath()+":"+new File(pkg,"usr/bin").getPath()+":"+new File(pack,"usr/bin").getPath()+":/system/bin:/system/xbin:/vendor/bin",
       "PREFIX",new File(pkg,"usr").getPath(),"TERMINFO",new File(pkg,"usr/share/terminfo").getPath(),"TERM","xterm-256color",
       "LD_LIBRARY_PATH",new File(pkg,"usr/lib").getPath()+":"+new File(pack,"usr/lib").getPath());
+    // Relocated CLI resources must follow the app prefix, not /data/data/com.termux.
+    File openssl=new File(pkg,"usr/etc/tls/openssl.cnf"),certificates=new File(pkg,"usr/etc/tls/cert.pem");
+    if(openssl.isFile())put(value,"OPENSSL_CONF",openssl.getPath());
+    if(certificates.isFile()){put(value,"SSL_CERT_FILE",certificates.getPath());put(value,"CURL_CA_BUNDLE",certificates.getPath());}
+    File[] vimDirectories=new File(pkg,"usr/share/vim").listFiles();File vimRuntime=null;int vimVersion=-1;
+    if(vimDirectories!=null)for(File directory:vimDirectories)if(directory.getName().matches("vim[0-9]+")&&new File(directory,"defaults.vim").isFile()){
+      int version=Integer.parseInt(directory.getName().substring(3));if(version>vimVersion){vimVersion=version;vimRuntime=directory;}
+    }
+    if(vimRuntime!=null)put(value,"VIMRUNTIME",vimRuntime.getPath());
     JSONObject additions=PiRuntimePacks.environment(context);
     for(Iterator<String> keys=additions.keys();keys.hasNext();){String key=keys.next();if(!COMMON.contains(key))put(value,key,additions.opt(key));}
     return value;

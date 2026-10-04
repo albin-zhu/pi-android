@@ -106,6 +106,7 @@ public final class PiRuntime {
         new Thread(this::readLoop,"pi-events").start();
         File data=chooseDataRoot(context,testing);data.mkdirs();selectedDataRoot=data;
         File credentials=CredentialStore.prepare(context,data,testing);
+        PiPackageManager.prepareBash(context);
         java.nio.file.Files.write(new File(runtime,"environment.json").toPath(),RuntimeEnvironment.base(context).toString().getBytes(StandardCharsets.UTF_8));
         if(!testMode)migrateLegacyData(new File(context.getNoBackupFilesDir(),"agent"),data);
         int exit=startNode(new File(runtime,"agent.cjs").getAbsolutePath(),data.getAbsolutePath(),credentials.getAbsolutePath(),context.getApplicationInfo().nativeLibraryDir);

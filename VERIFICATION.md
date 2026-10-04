@@ -594,3 +594,14 @@
 - 默认构建不再自动导入个人 `defaults.local.mjs`，最终 bundle 中旧个人密钥字面量的匹配数为 0。个人调试配置只能通过显式 `ZFOLD_DEFAULTS_FILE` 指定。正式模型入口配置仍在原有私有文件中。
 - 修正集成测试启动竞态：测试模式在 instrumentation onCreate 设置，监听后补查已就绪状态，并拒绝配置正式 runtime。最终回归使用独立测试数据根，避免系统助手预先启动造成漏收 ready 或误用正式配置。
 - `npm test` 49/49 通过；compat28 与 modern 构建通过。最终 compat28 SHA-256 `c8f604f465a85e6995687f364ce5a2c516de6382f1433823616688add8b5c9c4`；modern SHA-256 `9781f775afd78475351ab8330a4756debeebf901956b3206e8f9d6ddc1899762`。compat28 已安装 Fold7，正式数据根的 Pi 发出 ready，无启动 FATAL。日志与截图在本地忽略目录 `artifacts/runtime-config/`。
+
+## 0.2.66 终端交互阶段 · 2026-10-05
+
+- 按用户要求，本轮只使用 emulator-5554 / Android 16.0 API 36.1 arm64；不测试已拿走的手机。完整交互目标仍在 INTERACTION_REDESIGN.md 跟踪，尚未完成 Connector、共享和浮窗部分。
+- 内嵌 Termux v0.118.3 的 Apache 2.0 终端组件，并用 TerminalSession 适配器连接已有 PTY broker。输入不再经过逐行文本框，输出不再 stripAnsi；字节直接进入终端解析器。进程与 Activity 解耦，返回保留会话，前台服务维持运行中的终端。
+- 修复交互关键问题：视图显式获取触摸输入焦点；新布局按实际大小调整 PTY；Ctrl+C 可中断前台命令；子进程清除继承的 Java 线程信号屏蔽。PTY 读写使用独立 fd 生命周期，读接口有数据即返回，避免终端查询应答延迟到 Vim 退出后。
+- `TerminalInteractionInstrumentation` 从实际 InputConnection 输入，验证分片 UTF-8 中文、ANSI、46 列自适应、直接 bash、Ctrl+C、离开重进同一会话、Vim 实际写文件并干净回到提示符，以及真实软键盘可见。最终均通过，`INSTRUMENTATION_CODE=-1`。首次截图发现的是模拟器开机遗留的 System UI ANR 弹窗，处理后重新验证了键盘，未用有遮挡的截图判定完成。
+- 使用无代码 com.termux 测试包创建受保护私有目录，确实复现 `bash: /data/data/com.termux/files/usr/etc/bash.bashrc: Permission denied`。修复仅等长替换 Bash ELF 中两个精确 NUL 结尾的外来系统启动文件常量，不解码或重排 ELF；运行时初始化和安装 Bash 都会处理。旧 shell 运行时也可原子替换文件。复测无权限提示，自己的 HOME `.bashrc` 与 `.bash_profile` 仍执行成功。构建该隔离前提的工具为 scripts/terminal-prefix-fixture.py，限定模拟器，不覆盖既有 Termux。
+- 原有 `npm test` 49/49 通过；真实 Pi 的 35 秒原生命令、PTY、环境一致性、取消、子进程组终止和输出限额回归通过。PTY fixture 按实际流式结果继续读取，不再假定一次 read 就收到全部进程输出。
+- 尚待验收：干净模拟器从系统 Shell 安装 Bash、选择复制、旋转/字体放大、常规非 instrumentation 后台运行、会话菜单。独立干净 AVD `Pi_Workbench_QA` 已创建，未启动。
+- 详细结果在本地忽略目录 artifacts/interaction-redesign，包含 terminal-final.txt、foreign-prefix-before.txt、foreign-prefix-after.txt 和 runtime-lifecycle.txt。此阶段不代表完整交互目标完成。

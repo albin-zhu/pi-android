@@ -59,8 +59,10 @@ public final class PiPackageManager {
     JSONObject index=readIndex(context),target=index.optJSONObject(name);
     if(target==null)throw new Exception("仓库中找不到 "+name);
     JSONObject state=installed(context),installed=state.optJSONObject(name);
-    if(installed!=null&&target.optString("version").equals(installed.optString("version")))
+    if(installed!=null&&target.optString("version").equals(installed.optString("version"))){
+      if(name.equals("bash"))prepareBash(context);
       return PiRuntime.json("name",name,"version",installed.optString("version"),"alreadyInstalled",true,"state",state);
+    }
     List<String> order=new ArrayList<>();resolve(context,index,name,order,new HashSet<>());
     String[] basePackages={"coreutils","bash","libandroid-support"};
     for(String base:basePackages) {
@@ -112,6 +114,7 @@ public final class PiPackageManager {
       removeOwnedFiles(context,state,name);
       copyTree(source,usr);
       rewritePrefix(context);
+      if(name.equals("bash"))prepareBash(context);
       JSONArray files=new JSONArray();
       try(var paths=Files.walk(source.toPath())) {
         for(Path path:(Iterable<Path>)paths::iterator) {
@@ -352,6 +355,35 @@ public final class PiPackageManager {
       }
     }
     return best;
+  }
+
+  /** Bash must not source another app's private system startup files.
+   * Only exact, NUL-terminated constants are replaced, without changing ELF size.
+   * Normal $HOME/.bashrc and login profiles retain their standard semantics.
+   */
+  public static synchronized File prepareBash(Context context)throws IOException {
+    File bash=executable(context,"bash");if(bash==null)return null;
+    File target=bash.getCanonicalFile();
+    if(!target.getPath().startsWith(usr(context).getCanonicalPath()+File.separator)||target.length()>16_000_000)return bash;
+    byte[] bytes=Files.readAllBytes(target.toPath());
+    if(bytes.length<4||bytes[0]!=0x7f||bytes[1]!='E'||bytes[2]!='L'||bytes[3]!='F')return bash;
+    int changes=0;
+    for(String filename:new String[]{"bash.bashrc","profile"}){
+      byte[] old=("/data/data/com.termux/files/usr/etc/"+filename+"\0").getBytes(StandardCharsets.UTF_8);
+      byte[] replacement="/dev/null\0".getBytes(StandardCharsets.UTF_8);
+      int offset;
+      while((offset=indexOf(bytes,old))>=0){Arrays.fill(bytes,offset,offset+old.length,(byte)0);System.arraycopy(replacement,0,bytes,offset,replacement.length);changes++;}
+    }
+    if(changes>0){
+      File temporary=File.createTempFile(".bash-relocate-",".tmp",target.getParentFile());
+      try{
+        Files.write(temporary.toPath(),bytes);if(!temporary.setReadable(true,false)||!temporary.setExecutable(true,false))throw new IOException("无法设置 Bash 执行权限");
+        // Replacing the inode also works while an existing shell is executing it.
+        Files.move(temporary.toPath(),target.toPath(),java.nio.file.StandardCopyOption.ATOMIC_MOVE,java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+      }finally{temporary.delete();}
+      android.util.Log.i("ZfoldRuntime","Relocated Bash system startup paths: "+changes);
+    }
+    return bash;
   }
 
   public static JSONObject installed(Context context) {

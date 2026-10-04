@@ -119,7 +119,7 @@ def main():
         d.mkdir(exist_ok=True)
     run(tools/'aapt2','compile','--dir',ROOT/'android/res','-o',BUILD/'resources.zip')
     run(tools/'aapt2','link','-o',BUILD/'resources.apk','--manifest',manifest,'-I',android,'--java',generated,'-A',ROOT/'android/assets','-A',BUILD/'assets',BUILD/'resources.zip','--auto-add-overlay','--version-code',APP_VERSION_CODE,'--version-name',APP_RELEASE)
-    sources=list((ROOT/'android/src').rglob('*.java'))+list(generated.rglob('*.java'))
+    sources=list((ROOT/'android/src').rglob('*.java'))+list((ROOT/'third_party/termux-terminal/src').rglob('*.java'))+list(generated.rglob('*.java'))
     run(JAVA/'javac','-encoding','UTF-8','-source','11','-target','11','-classpath',os.pathsep.join(map(str,(android,sherpa_classes,kotlin))),'-d',classes,*sources)
     classfiles=list(classes.rglob('*.class'))
     run(JAVA/'java','-cp',tools/'lib/d8.jar','com.android.tools.r8.D8','--lib',android,'--min-api','30','--output',dex,*classfiles,sherpa_classes,kotlin)

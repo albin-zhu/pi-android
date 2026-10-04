@@ -21,12 +21,15 @@ http.createServer(async(req,res)=>{
     if(results.length===0)call('runtime_exec',{argv:plan.argv});
     else if(results.length===1)call('pty',{action:'open',argv:plan.argv});
     else if(!parsed(results[1]).id)answer(false);
-    else if(results.length===2)call('pty',{action:'read',id:parsed(results[1]).id,timeoutMs:1000});
-    else if(results.length===3)call('pty',{action:'close',id:parsed(results[1]).id});
-    else if(results.length===4)call('bash',{command:plan.argv.map(value=>"'"+value.replaceAll("'","'\\''")+"'").join(' ')});
     else {
-      const outputs=[parsed(results[0]).stdout,parsed(results[2]).output,toolText(results[4])].map(value=>String(value||'').replaceAll('\r','').trim());
-      answer(outputs.every(output=>output===plan.expected));
+      const closeIndex=results.findIndex((result,index)=>index>1&&parsed(result).closed);
+      const reads=results.slice(2,closeIndex<0?undefined:closeIndex).map(parsed);
+      const output=reads.map(read=>read.output||'').join('').replaceAll('\r','').trim();
+      if(closeIndex<0){
+        if(output===plan.expected||reads.length>=12)call('pty',{action:'close',id:parsed(results[1]).id});
+        else call('pty',{action:'read',id:parsed(results[1]).id,timeoutMs:1000});
+      }else if(results.length===closeIndex+1)call('bash',{command:plan.argv.map(value=>"'"+value.replaceAll("'","'\\''")+"'").join(' ')});
+      else answer([parsed(results[0]).stdout,output,toolText(results[closeIndex+1])].every(value=>String(value||'').replaceAll('\r','').trim()===plan.expected));
     }
   }else if(plan.tool==='pty'){
     if(results.length===0)call('pty',{action:'open',argv:plan.argv});
@@ -34,9 +37,13 @@ http.createServer(async(req,res)=>{
       const content=results[0].content;
       let opened;try{opened=JSON.parse(typeof content==='string'?content:content.find(part=>part.type==='text').text);}catch{}
       if(!opened?.id)answer(false);
-      else if(results.length===1)call('pty',{action:'read',id:opened.id,timeoutMs:1000});
-      else if(results.length===2)call('pty',{action:'close',id:opened.id});
-      else answer(JSON.stringify(results[1].content).includes('/dev/pts/')&&JSON.stringify(results[1].content).includes('RUNTIME_PTY_OK'));
+      else {
+        const output=results.slice(1).map(result=>parsed(result).output||'').join('');
+        const seen=output.includes('/dev/pts/')&&output.includes('RUNTIME_PTY_OK');
+        if(parsed(results.at(-1)).closed)answer(seen);
+        else if(seen||results.length>12)call('pty',{action:'close',id:opened.id});
+        else call('pty',{action:'read',id:opened.id,timeoutMs:1000});
+      }
     }
   }else if(!results.length){
     call('runtime_exec',plan);

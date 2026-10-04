@@ -15,3 +15,9 @@ The Android runtime is an embedded shared library. This application does not req
 The build places dependency license texts in APK assets under `licenses/`. The development runtime archive is downloaded from the release above and its SHA-256 is checked before packaging:
 
 `e3cd29a1be03405f11dd5c857af8cd3ad13f84f1409ea648f5328f0bada5bd76`
+# Embedded terminal
+
+Terminal emulator and view components from Termux v0.118.3 (commit
+5b657c6adf4304e5198951ce815fe0205dcac29c), under the upstream Apache 2.0 exception.
+See `third_party/termux-terminal/README.md`, `UPSTREAM-LICENSE.md` and
+`third_party/Termux-Terminal-LICENSE.txt` for provenance and local changes.

@@ -16,6 +16,7 @@
 #include <android/log.h>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
 
 namespace node { int Start(int argc, char** argv); }
 static int command_pipe[2], event_pipe[2];
@@ -31,6 +32,7 @@ struct PtySession {
 static std::mutex pty_mutex;
 static std::map<int,std::shared_ptr<PtySession>> pty_sessions;
 static int pty_next_id = 1;
+struct ScopedFd {int value;~ScopedFd(){if(value>=0)close(value);}};
 static std::string str(JNIEnv* env, jstring value) {
   const char* p = env->GetStringUTFChars(value, nullptr);
   std::string s(p); env->ReleaseStringUTFChars(value, p); return s;
@@ -114,6 +116,7 @@ Java_dev_zfold_assistant_RuntimeProcess_start(JNIEnv* env,jclass,jobjectArray ar
   pid_t pid=fork();
   if(pid<0){closePipes();throwJava(env,"Cannot fork command");return nullptr;}
   if(pid==0){
+    sigset_t unblocked;sigemptyset(&unblocked);sigprocmask(SIG_SETMASK,&unblocked,nullptr);
     close(output[0]);close(error[0]);close(startup[0]);
     int failure=0;
     if(setsid()<0||chdir(directory.c_str())<0)failure=errno;
@@ -225,7 +228,7 @@ Java_dev_zfold_assistant_PiRuntime_ptyOpen(JNIEnv* env, jclass, jobjectArray arg
   std::string cwdValue = cwdChars;
   env->ReleaseStringUTFChars(cwd, cwdChars);
 
-  int master = posix_openpt(O_RDWR | O_NOCTTY);
+  int master = posix_openpt(O_RDWR | O_NOCTTY | O_NONBLOCK);
   if (master < 0) { throwJava(env, "posix_openpt failed"); return 0; }
   if (grantpt(master) || unlockpt(master)) { close(master); throwJava(env, "PTY grant failed"); return 0; }
   char slaveName[128];
@@ -243,6 +246,8 @@ Java_dev_zfold_assistant_PiRuntime_ptyOpen(JNIEnv* env, jclass, jobjectArray arg
   std::string slave = slaveName;
   pid_t pid = fork();
   if (pid == 0) {
+    // Java worker threads may block job-control signals; the shell must not inherit that mask.
+    sigset_t unblocked;sigemptyset(&unblocked);sigprocmask(SIG_SETMASK,&unblocked,nullptr);
     signal(SIGPIPE, SIG_DFL);
     if (setsid() < 0) _exit(127);
     int slaveFd = open(slave.c_str(), O_RDWR);
@@ -272,16 +277,19 @@ Java_dev_zfold_assistant_PiRuntime_ptyOpen(JNIEnv* env, jclass, jobjectArray arg
 extern "C" JNIEXPORT void JNICALL
 Java_dev_zfold_assistant_PiRuntime_ptyWrite(JNIEnv* env, jclass, jint id, jbyteArray data) {
   std::shared_ptr<PtySession> session;
-  { std::lock_guard<std::mutex> lock(pty_mutex); session = ptySession(id); }
-  if (!session || session->fd < 0) { throwJava(env, "PTY session not found"); return; }
+  ScopedFd descriptor{-1};
+  { std::lock_guard<std::mutex> lock(pty_mutex); session = ptySession(id);if(session&&session->fd>=0)descriptor.value=dup(session->fd); }
+  if (descriptor.value < 0) { throwJava(env, "PTY session not found"); return; }
   int length = env->GetArrayLength(data);
   std::vector<char> bytes(length);
   if (length) env->GetByteArrayRegion(data, 0, length, reinterpret_cast<jbyte*>(bytes.data()));
   size_t offset = 0;
+  auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);
   while (offset < bytes.size()) {
-    ssize_t written = write(session->fd, bytes.data() + offset, bytes.size() - offset);
-    if (written >= 0) { offset += written; continue; }
+    ssize_t written = write(descriptor.value, bytes.data() + offset, bytes.size() - offset);
+    if (written > 0) { offset += written; continue; }
     if (errno == EINTR) continue;
+    if((errno==EAGAIN||errno==EWOULDBLOCK)&&std::chrono::steady_clock::now()<deadline){pollfd watched{descriptor.value,POLLOUT,0};poll(&watched,1,50);continue;}
     throwJava(env, "PTY write failed"); return;
   }
 }
@@ -289,23 +297,27 @@ Java_dev_zfold_assistant_PiRuntime_ptyWrite(JNIEnv* env, jclass, jint id, jbyteA
 extern "C" JNIEXPORT jstring JNICALL
 Java_dev_zfold_assistant_PiRuntime_ptyRead(JNIEnv* env, jclass, jint id, jint timeoutMs) {
   std::shared_ptr<PtySession> session;
-  { std::lock_guard<std::mutex> lock(pty_mutex); session = ptySession(id); }
-  if (!session || session->fd < 0) { throwJava(env, "PTY session not found"); return nullptr; }
+  ScopedFd descriptor{-1};
+  { std::lock_guard<std::mutex> lock(pty_mutex); session = ptySession(id);if(session&&session->fd>=0)descriptor.value=dup(session->fd); }
+  if (descriptor.value < 0) { throwJava(env, "PTY session not found"); return nullptr; }
   std::vector<char> output;
   int deadline = timeoutMs;
   while (output.size() < 256 * 1024) {
-    pollfd fds{session->fd, POLLIN, 0};
-    int ready = poll(&fds, 1, std::min(100, std::max(0, deadline)));
+    pollfd fds{descriptor.value, POLLIN, 0};
+    // Interactive applications wait for terminal replies. Never hold received
+    // bytes while waiting for another chunk; only drain data already available.
+    int ready = poll(&fds, 1, output.empty()?std::min(100, std::max(0, deadline)):0);
     deadline -= 100;
     if (ready > 0 && fds.revents & (POLLIN | POLLHUP)) {
       char chunk[32768];
-      ssize_t readBytes = read(session->fd, chunk, sizeof(chunk));
+      ssize_t readBytes = read(descriptor.value, chunk, sizeof(chunk));
       if (readBytes > 0) output.insert(output.end(), chunk, chunk + readBytes);
-      if (readBytes > 0 && output.size() < 256 * 1024 && deadline > 0) continue;
+      if (readBytes > 0 && output.size() < 256 * 1024) continue;
       break;
     }
-    { std::lock_guard<std::mutex> lock(pty_mutex); reapPty(session); }
-    if (!session->alive || deadline <= 0) break;
+    if(!output.empty())break;
+    bool alive;{ std::lock_guard<std::mutex> lock(pty_mutex); reapPty(session);alive=session->alive; }
+    if (!alive || deadline <= 0) break;
   }
   std::string encoded = base64(env, output);
   return env->NewStringUTF(encoded.c_str());
@@ -352,5 +364,5 @@ Java_dev_zfold_assistant_PiRuntime_ptyClose(JNIEnv* env, jclass, jint id) {
     std::lock_guard<std::mutex> lock(pty_mutex);
     kill(-session->pid, SIGKILL); waitpid(session->pid, nullptr, 0); session->alive = false;
   }
-  pty_sessions.erase(id);
+  {std::lock_guard<std::mutex> lock(pty_mutex);pty_sessions.erase(id);}
 }
