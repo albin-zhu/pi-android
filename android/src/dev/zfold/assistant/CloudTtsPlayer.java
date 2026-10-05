@@ -13,10 +13,11 @@ import org.json.JSONObject;
 final class CloudTtsPlayer implements PiRuntime.Listener {
   interface Callback {void start(String id);void done(String id);void error(String id,String reason);}
   private static final class Chunk {final String id;final byte[] bytes;final boolean end;Chunk(String id,byte[] bytes,boolean end){this.id=id;this.bytes=bytes;this.end=end;}}
-  private final PiRuntime runtime;private final Callback callback;private final Handler main=new Handler(Looper.getMainLooper());
+  private final PiRuntime runtime;private final Callback callback;private final boolean call;private final Handler main=new Handler(Looper.getMainLooper());
   private String client=UUID.randomUUID().toString();private volatile int generation;private volatile AudioTrack track;
   private LinkedBlockingQueue<Chunk> queue=new LinkedBlockingQueue<>(512);private AtomicInteger buffered=new AtomicInteger();private Thread worker;
-  CloudTtsPlayer(Context context,Callback callback){runtime=PiRuntime.get(context);this.callback=callback;runtime.listen(this);}
+  CloudTtsPlayer(Context context,Callback callback){this(context,callback,true);}
+  CloudTtsPlayer(Context context,Callback callback,boolean call){runtime=PiRuntime.get(context);this.callback=callback;this.call=call;runtime.listen(this);}
   void begin(String id){if(!runtime.ready){callback.error(id,"本机运行时尚未就绪");return;}if(worker==null){int token=generation;LinkedBlockingQueue<Chunk> source=queue;AtomicInteger count=buffered;worker=new Thread(()->play(source,count,token),"chengcheng-cloud-tts");worker.setDaemon(true);worker.start();}send("tts_start",id,null);}
   void text(String id,String text){send("tts_text",id,text);}
   void finish(String id){send("tts_finish",id,null);}
@@ -48,7 +49,7 @@ final class CloudTtsPlayer implements PiRuntime.Listener {
         if(!chunk.id.equals(current)){
           if(audio!=null)audio.release();current=chunk.id;frames=0;
           int minimum=AudioTrack.getMinBufferSize(24000,AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT);
-          audio=new AudioTrack.Builder().setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+          audio=new AudioTrack.Builder().setAudioAttributes(AudioModeOwner.speechAttributes(call))
             .setAudioFormat(new AudioFormat.Builder().setSampleRate(24000).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build())
             .setBufferSizeInBytes(Math.max(minimum,4800)).setTransferMode(AudioTrack.MODE_STREAM).build();
           if(token!=generation){audio.release();audio=null;break;}track=audio;audio.play();String id=current;main.post(()->{if(token==generation)callback.start(id);});

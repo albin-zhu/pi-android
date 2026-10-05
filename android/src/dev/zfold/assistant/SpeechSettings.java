@@ -42,7 +42,7 @@ final class SpeechSettings {
           public void start(String value){if(token==preview[0])status.setText("豆包音色试听中 · 关闭即停止");}
           public void done(String value){if(token==preview[0]){status.setText("试听完成");stopPreview.run();}}
           public void error(String value,String reason){if(token==preview[0]){status.setText("试听失败："+reason);stopPreview.run();}}
-        });cloud[0].begin(id);if(token==preview[0]&&cloud[0]!=null){cloud[0].text(id,text);cloud[0].finish(id);}
+        },false);cloud[0].begin(id);if(token==preview[0]&&cloud[0]!=null){cloud[0].text(id,text);cloud[0].finish(id);}
       }else{
         system[0]=new TextToSpeech(activity,result->main.post(()->{if(token!=preview[0]||system[0]==null)return;if(result!=TextToSpeech.SUCCESS){status.setText("系统播报不可用");stopPreview.run();return;}PhoneSpeech.selectOfflineChineseVoice(system[0]);system[0].speak(text,TextToSpeech.QUEUE_FLUSH,null,id);status.setText("系统音色试听中 · 关闭即停止");}));
         system[0].setOnUtteranceProgressListener(new UtteranceProgressListener(){public void onStart(String id){}public void onDone(String id){main.post(()->{if(token==preview[0]){status.setText("试听完成");stopPreview.run();}});}public void onError(String id){main.post(()->{if(token==preview[0]){status.setText("系统播报不可用");stopPreview.run();}});}});

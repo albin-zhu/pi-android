@@ -53,7 +53,7 @@ final class VoiceTurnController {
     if(sessionActive())return;
     android.util.Log.i("ZfoldSpeech","Voice session begin");
     if(wakeId==0)VoiceWakeService.stop(context);readyCue.arm(wakeId);stripInitialWake=wakeId>0;wakePrefixAudio=null;speechConfig=SpeechConfig.load(context);asrCloudFailed=false;ttsCloudFailed=false;ensureTts();
-    AudioModeOwner.enterSession(context);
+    AudioModeOwner.enterSession(context,this);
     boolean releasedRecognizer=recognizer!=null;
     if(recognizer!=null){recognizer.destroy();recognizer=null;}
     // A wake handoff already waits for AudioRecord release. Do not insert a
@@ -112,7 +112,7 @@ final class VoiceTurnController {
     callback.voiceState(false,false);
     taskVoice=false;
     if(cancelTask)runtime.send(PiRuntime.json("type","stop"));
-    AudioModeOwner.exitSession(context);
+    AudioModeOwner.exitSession(context,this);
     releaseLater();
   }
   void beginPrompt(){
@@ -171,7 +171,7 @@ final class VoiceTurnController {
     if(recognizer!=null){recognizer.cancel();recognizer.destroy();recognizer=null;}
     if(tts!=null){tts.stop();tts.shutdown();tts=null;}
     if(cloudTts!=null){cloudTts.close();cloudTts=null;}
-    AudioModeOwner.exitSession(context);
+    AudioModeOwner.exitSession(context,this);
   }
   void availableOfflineVoice(Consumer<String> callback){
     ensureTts();int[] waited={0};Runnable[] poll=new Runnable[1];
@@ -209,6 +209,7 @@ final class VoiceTurnController {
     tts=new TextToSpeech(context,result->main.post(()->{
       ttsReady=result==TextToSpeech.SUCCESS;
       if(ttsReady&&tts!=null){
+        tts.setAudioAttributes(AudioModeOwner.speechAttributes(true));
         String voice=PhoneSpeech.selectOfflineChineseVoice(tts);
         if(voice==null)tts.setLanguage(Locale.SIMPLIFIED_CHINESE);
         else android.util.Log.i("ZfoldSpeech","Local TTS voice: "+voice);
@@ -394,6 +395,7 @@ final class VoiceTurnController {
     if(recognizer!=null)recognizer.cancel();
     stopTts();
     stopLiveAsr();
+    AudioModeOwner.exitSession(context,this);
     callback.voiceState(false,false);callback.sessionEnded(reason);releaseLater();
   }
   private void ttsSpeakingReset(){/* Kept for call-site readability; activeUtterance is authoritative. */}
