@@ -22,6 +22,7 @@ import { resolveRuntimeCommand, shellWithEnvironment } from './command-environme
 import { ConnectorManager } from './connectors.mjs';
 import { cameraWorkingContext, cameraPromptSuffix } from './camera-context.mjs';
 import { SpeechBridge } from './speech-bridge.mjs';
+import { SessionCatalog, atomicJson } from './session-catalog.mjs';
 
 const inputFd = Number(process.argv[2]), outputFd = Number(process.argv[3]);
 registerBundledOAuthFlowLoaders({anthropic:()=>anthropicOAuth,openaiCodex:()=>openaiCodexOAuth,githubCopilot:()=>githubCopilotOAuth,openrouter:()=>openRouterOAuth,kimiCoding:()=>kimiCodingOAuth,xai:()=>xaiOAuth,radius:createRadiusOAuth});
@@ -136,7 +137,8 @@ try{jevConfig=validateJevConfig(JSON.parse(fs.readFileSync(jevConfigFile,'utf8')
 catch{fs.writeFileSync(jevConfigFile,JSON.stringify(defaultJevConfig),{mode:0o600});}
 function emitJevStatus(){emit({type:'jev_status',enabled:jevConfig.enabled,configured:Boolean(jevConfig.apiKey),model:jevConfig.model});}
 
-function saveActiveSession(id){fs.writeFileSync(activeSessionFile,JSON.stringify({id}),{mode:0o600});}
+const sessionCatalog=new SessionCatalog(sessions,workspace);
+function saveActiveSession(id){atomicJson(activeSessionFile,{id});}
 async function probeWritableExec(){
   if(!compatExec)return {supported:false,reason:'targetSdk 35 Android W^X policy blocks writable app-data execution'};
   const executable=path.join(toolsDir,'cat'),source='/system/bin/cat';
@@ -151,17 +153,22 @@ async function probeWritableExec(){
 async function selectedSessionManager(){
   let selectedId;
   try{selectedId=JSON.parse(fs.readFileSync(activeSessionFile,'utf8')).id;}catch{}
+  const entries=await sessionCatalog.list(),flags=sessionCatalog.read();
   if(typeof selectedId==='string'){
-    const stored=(await SessionManager.list(workspace,sessions)).find(item=>item.id===selectedId);
-    if(stored)return SessionManager.open(stored.path,sessions,workspace);
-    try{return SessionManager.create(workspace,sessions,{id:selectedId});}catch{}
+    const stored=entries.find(item=>item.id===selectedId);
+    if(stored&&!stored.archived&&!stored.deleted)return sessionCatalog.open(stored);
+    // Migrate a pre-catalog empty conversation without resurrecting managed IDs.
+    if(!stored&&!Object.hasOwn(flags,selectedId))try{return SessionManager.create(workspace,sessions,{id:selectedId});}catch{}
   }
-  return SessionManager.continueRecent(workspace,sessions);
+  const recent=entries.filter(item=>!item.archived&&!item.deleted).sort((a,b)=>b.modified-a.modified)[0];
+  return recent?sessionCatalog.open(recent):SessionManager.create(workspace,sessions);
 }
 async function activateSession(manager){
+  sessionCatalog.persist(manager);
   const result=await createAgentSession({cwd:workspace,agentDir,resourceLoader,modelRuntime,model:activeModel,
     sessionManager:manager,settingsManager:SettingsManager.inMemory({}),customTools:tools,
     tools:['read','edit','write','ls','bash',...tools.map(t=>t.name)]});
+  try{saveActiveSession(result.session.sessionId);}catch(error){result.session.dispose();throw error;}
   const previous=session;session=result.session;
   activeTools.clear();streamingAssistant=undefined;
   session.subscribe(event=>{
@@ -184,7 +191,6 @@ async function activateSession(manager){
     }
   });
   if(previous)previous.dispose();
-  saveActiveSession(session.sessionId);
   return session;
 }
 function emitHistory(){
@@ -194,15 +200,45 @@ function emitHistory(){
 }
 async function emitSessions(){
   const currentId=session?.sessionId;
-  const info=await SessionManager.list(workspace,sessions);
+  const info=await sessionCatalog.list();
   const items=info.map(item=>{
     const first=item.firstMessage==='(no messages)'?'':item.firstMessage.replace(/\s+/g,' ').trim();
-    const title=(item.name?.trim()||first||'新对话');
-    return {id:item.id,title:Array.from(title).slice(0,36).join(''),modified:item.modified.getTime(),messageCount:item.messageCount,current:item.id===currentId};
+    const title=item.name?.trim()||Array.from(first||'新对话').slice(0,36).join('');
+    return {id:item.id,title,modified:item.modified.getTime(),messageCount:item.messageCount,current:item.id===currentId,archived:item.archived,deleted:item.deleted};
   });
   if(currentId&&!items.some(item=>item.id===currentId))items.unshift({id:currentId,title:'新对话',modified:Date.now(),messageCount:0,current:true});
   items.sort((a,b)=>Number(b.current)-Number(a.current)||b.modified-a.modified);
   emit({type:'sessions',currentId,items});
+}
+
+async function manageSession(command){
+  let locked=false;
+  try{
+    if(busy)throw new Error('任务执行中，完成或停止后才能管理会话');
+    if(changingSession)throw new Error('会话正在变更，请稍后再试');
+    if(!['rename','archive','restore','delete','purge'].includes(command.action))throw new Error('不支持的会话操作');
+    if(['delete','purge'].includes(command.action)&&command.confirm!==true)throw new Error('请先确认删除操作');
+    changingSession=true;locked=true;
+    const item=await sessionCatalog.find(command.id),current=item.id===session?.sessionId;
+    if(command.action==='rename'){
+      if(item.deleted)throw new Error('请先从最近删除中恢复');
+      sessionCatalog.rename(item,command.name,session?.sessionManager);
+    }else if(command.action==='purge'){
+      if(current)throw new Error('不能彻底删除当前打开的会话');
+      sessionCatalog.purge(item);
+    }else{
+      const old=sessionCatalog.change(item,command.action);
+      if(current&&['archive','delete'].includes(command.action)){
+        try{await activateSession(SessionManager.create(workspace,sessions));}
+        catch(error){sessionCatalog.status(item.id,old);throw error;}
+        emit({type:'session_changed',sessionId:session.sessionId,reason:'session_management'});emitHistory();
+      }
+    }
+    await emitSessions();
+    changingSession=false;locked=false;
+    emit({type:'session_managed',requestId:command.requestId,id:item.id,action:command.action});
+  }catch(error){emit({type:'session_error',requestId:command.requestId,message:error.message});}
+  finally{if(locked)changingSession=false;}
 }
 
 function localSkills(){
@@ -792,19 +828,19 @@ async function receive(command) {
     }catch(error){emit({type:'jev_error',message:error.message});}return;
   }
   if(command.type==='jev_status'){emitJevStatus();return;}
-  if(command.type==='configure_default'){await configure(defaultModelConfig);return;}
   if(nativeTools.receive(command))return;
   if(command.type==='stop') { stopRequested=true; await session?.abort(); return; }
-  if(command.type==='configure') {
+  if(command.type==='configure'||command.type==='configure_default') {
     if(changingSession)throw new Error('会话正在切换，请稍后再试');
-    changingSession=true;try{await configure(command.config);}finally{changingSession=false;}return;
+    changingSession=true;try{await configure(command.type==='configure_default'?defaultModelConfig:command.config);}finally{changingSession=false;}return;
   }
   if(command.type==='history'){emitHistory();return;}
   if(command.type==='tools_catalog'){emitCatalog();return;}
   if(command.type==='connector_manage'){await manageConnector(command);return;}
   if(command.type==='models_catalog'){emitModelsCatalog();return;}
   if(command.type==='auth_manage'){await receiveAuth(command);return;}
-  if(command.type==='sessions'){await emitSessions();return;}
+  if(command.type==='sessions'){try{await emitSessions();}catch(error){emit({type:'session_error',message:error.message});}return;}
+  if(command.type==='session_manage'){await manageSession(command);return;}
   if(command.type==='skills_manage'){receiveSkills(command);return;}
   if(command.type==='new_session'||command.type==='open_session'){
     if(busy)throw new Error('请先停止当前任务再切换会话');
@@ -814,10 +850,10 @@ async function receive(command) {
     let manager;
     if(command.type==='new_session')manager=SessionManager.create(workspace,sessions);
     else{
-      const selected=(await SessionManager.list(workspace,sessions)).find(item=>item.id===command.id);
-      if(!selected)throw new Error('这个会话不存在或尚未保存');
+      const selected=await sessionCatalog.find(command.id);
+      if(selected.archived||selected.deleted)throw new Error('请先把这个会话恢复到会话列表');
       if(selected.id===session?.sessionId){emitHistory();return;}
-      manager=SessionManager.open(selected.path,sessions,workspace);
+      manager=sessionCatalog.open(selected);
     }
     await activateSession(manager);
     await emitSessions();changingSession=false;
