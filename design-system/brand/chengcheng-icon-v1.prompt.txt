@@ -1,0 +1,13 @@
+Generator: built-in image_gen
+Generated: 2026-10-05
+Asset: chengcheng-icon-v1.png
+Status: generated design asset; not yet installed as the Android launcher icon.
+
+Use case: logo-brand
+Asset type: one finished square Android app icon for a personal on-device AI companion named 橙橙 (Chengcheng). Create a new original icon, not a presentation mockup.
+Primary request: beautiful, contemporary, distinctly designed, approachable but sophisticated, stylized and not realistic.
+Art direction: a minimal abstract orange companion, expressed as one bold tangerine-orange rounded organic speech-bubble silhouette. A slightly asymmetric, near-circular body with a small flowing lower-right conversation tail integrated into the outline. Two small warm-ivory softly rounded upright eyes in the upper-middle give a quiet alert expression; no mouth. One small orange leaf-shaped accent above the upper-right shoulder subtly suggests an orange fruit, graphic and abstract rather than botanical. The silhouette should feel intentional, friendly, capable, and immediately recognizable.
+Style: premium contemporary flat graphic design, extremely clean vector-like edges, bold simple geometry, optical balance. Very restrained warm orange-to-coral tonal variation within the body is acceptable, but almost flat. No photorealism, no 3D render, no plastic, glass, metallic or glossy surfaces, no bevel, texture or cast shadow.
+Palette: rich warm tangerine and burnt coral orange, warm ivory background and eyes. No green leaf, no blue, no purple.
+Composition: 1:1 square canvas, full-bleed solid warm ivory background to every edge. Center one large standalone mark optically. The complete mark including leaf and tail fits comfortably within the central 64 percent of canvas, with clear generous margins suitable for Android circular and squircle masks. Strong readability at small launcher-icon sizes.
+Constraints: exactly one finished icon; no text, Chinese characters, lettering, wordmark, border, watermark, device frame, grid, multiple options, or surrounding mockup. No generic AI sparkle, circuit imagery, literal robot head, microphone, camera, or realistic fruit detail.
