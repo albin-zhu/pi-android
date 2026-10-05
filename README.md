@@ -503,6 +503,8 @@ adb reverse --remove tcp:18868
 
 ## 明确的当前边界
 
+语音选型与诊断：在线候选采用豆包 TTS 2.0 / ASR 2.0，详见 [PRODUCT_PLAN.md](PRODUCT_PLAN.md) 的语音服务接入契约；APK 尚未接入云端语音。`node scripts/probe-volc-speech.mjs` 从本地 `.env` 读取 `VOLC_API_KEY`，仅检查官方 WebSocket 握手；加 `--samples` 才会消耗 API 额度生成三段固定试听并做合成音 ASR 回环。脚本不录麦克风、不上传聊天，也不输出密钥。当前凭证在两项服务均返回 401，效果与时延尚待验证。
+
 以 0.2.75 为当前代码版本；PRODUCT_AUDIT.md 保留 0.2.72 的系统核对基线，后续产品目标见 PRODUCT_PLAN.md。
 
 - 本机 Pi/Node 主运行时仍与 UI 在同一 app 进程。已有会话持久化、工具心跳和取消，不等于独立 supervisor、全天候后台或进程死亡后的完整任务恢复。

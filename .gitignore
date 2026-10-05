@@ -8,6 +8,9 @@ artifacts/*.idsig
 *.keystore
 *.jks
 runtime/defaults.local.mjs
+.env
+.env.*
+!.env.example
 .DS_Store
 __pycache__/
 *.py[cod]

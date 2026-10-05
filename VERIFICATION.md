@@ -2,6 +2,14 @@
 
 当前交付状态（2026-10-05）：0.2.75-compat28 已构建并在模拟器安装验收，包含 0.2.74 视频/手机能力更新及对话 minimap；Fold7 最后确认安装的是 0.2.73-compat28。真机 ADB 仍断开，真机安装、前置镜头与真人语音联测待重新连接。下面保留各版本原始记录。
 
+## 语音服务选型诊断 · 2026-10-05
+
+- 核对豆包官方 TTS 双向流、ASR 2.0 和音色文档，选型与接入契约已写入 PRODUCT_PLAN.md。没有修改 Android 当前语音路由，没有新建 APK 或更新手机。
+- 用户提供的本地 `VOLC_API_KEY` 对 `openspeech.bytedance.com` 的 TTS 2.0、ASR 2.0 均返回 HTTP 401，响应为 `Invalid X-Api-Key`。最新脱敏诊断：`artifacts/speech-evaluation/2026-10-05T06-55-21-229Z/results.json`。未生成音频、未得到识别文本，因此没有音色试听、ASR 准确率或首包时延的实测结论。
+- `scripts/probe-volc-speech.mjs` 默认只做两项握手；`--samples` 在通过握手后才生成固定文本三音色 WAV，以及一次合成音 ASR 回环。限官方地址、拒绝重定向、有超时/大小限制、不录音、不读取聊天；结果只输出分类错误，密钥不进入日志或结果。
+- `node --test tests/volc-speech-probe.test.mjs`：12/12 通过，覆盖二进制帧、压缩边界、鉴权拒绝、超时/迟到回调、增量文本、音频 session 隔离、ASR 中间结果修订与末包、WAV 格式。全部成功流测试为合成协议 fixture，不能代替供应商端到端验证。
+- `.env` / `.env.*` 已加入 Git 忽略（`.env.example` 除外）；未修改用户密钥内容。诊断依赖 `ws` 显式固定为项目已安装的 8.21.3 开发依赖。
+
 ## 已通过
 
 - SDK 协议测试 6/6：UTF-8/JSON 分帧、异常输入、模型地址、Pi 启动、工具循环、取消在途工具。

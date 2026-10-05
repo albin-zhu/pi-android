@@ -250,6 +250,45 @@ flowchart TB
 
 后台语音需要对应前台服务与可见结束入口；不靠 Activity 静态引用“碰巧活着”。真人说话、TTS 回声、耳机切换、来电打断必须单独实测，按钮状态机通过不代表声学体验通过。
 
+### 语音服务选型与接入契约（2026-10-05）
+
+**工程首选：豆包 TTS 2.0 双向流式 + ASR 2.0 实时识别；保留本机语音路径。** 这是根据接口能力、现有代码和中文对话需求作出的选型，不是实测音质排名。当前提供的 `VOLC_API_KEY` 对两个官方 WebSocket 接口均返回 `401 / Invalid X-Api-Key`，尚未取得真实音频、识别结果或时延。现有 APK 仍使用 Android 语音引擎，未切换成云端。
+
+| 方案 | 适用位置 | 判断与待验证项 |
+| --- | --- | --- |
+| 豆包 TTS 2.0 + ASR 2.0 | 在线优先方案 | 文本和音频均支持流式；先比较 Vivi 2.0、小何 2.0，云舟 2.0 作为男声候选。音色默认值待同文试听确认；现有凭证未通过鉴权 |
+| sherpa-onnx + SenseVoice；中文本地 TTS | 离线与网络故障路径 | 已有 sherpa/VAD 基础可复用。SenseVoice 有中英等语种 Android 实现，但其 VAD 分段/模拟流式不等于原生逐字流式；需测 Fold7 的延迟、内存和耗电。中文 TTS 先用已安装引擎，Kokoro v1.1-zh 作为后续下载包候选 |
+| 阿里云 Qwen 实时 ASR/TTS | 第二家在线候选 | 官方提供独立实时识别和合成接口；没有可用凭证，本轮未作音质、时延或稳定性横评，不增加第二套默认客户端 |
+
+官方依据：[豆包双向 TTS](https://docs.volcengine.com/docs/DoubaoVoice/WebSocketBidirectionalStreaming-V3?lang=zh)、[ASR 2.0](https://docs.volcengine.com/docs/DoubaoVoice/bidirectional-streaming-automatic-speech-recognition-websocket?lang=zh)、[音色列表](https://docs.volcengine.com/docs/DoubaoVoice/Tonelist-1)、[SenseVoice Android](https://k2-fsa.github.io/sherpa/onnx/android/apk-simulate-streaming-asr.html)、[Kokoro 中英模型](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html)、[Qwen 实时 ASR](https://help.aliyun.com/zh/model-studio/asr-model)、[Qwen 实时 TTS](https://help.aliyun.com/zh/model-studio/interactive-process-of-qwen-tts-realtime-synthesis)。
+
+#### 模块归属与配置
+
+同一个 `VoiceCoordinator` 继续拥有麦克风、播放和回合状态。数据链路为：本机收音/VAD → 所选 ASR → 本机 Pi 和工具 → 所选 TTS → 本机播放；视频仍按原协议只在用户请求时附图。语音供应商不接管 Agent、工具或相机。
+
+ASR 和 TTS 分别配置，允许“本机识别 + 在线音色”。设置展示当前实际使用的服务、音色、网络状态和回退原因。凭据保存于私有 `no_backup`，不进入 APK、共享工作区、聊天、日志或 Git；现有同 UID 执行仍是已知隔离边界。开发机 `.env` 只用于显式诊断或后续私有配置导入，构建不读取它。
+
+豆包新版语音控制台的 `X-Api-Key` 方案只需一个可用语音 Key，不要求盲填旧版 App ID。旧版凭证必须用对应 App ID/Access Key 配对，不能把任意火山 Token 当成新 Key。当前 401 只能证明接口拒绝此 Key，不能据此断言 Key 来自哪个产品。获取路径见[豆包语音新版控制台](https://docs.volcengine.com/docs/DoubaoVoice/QuickStartNewConsole?lang=zh)。
+
+#### 流式与打断
+
+- TTS 使用 `seed-tts-2.0` 和 `/api/v3/tts/bidirection`。Vivi 为 `zh_female_vv_uranus_bigtts`，小何为 `zh_female_xiaohe_uranus_bigtts`。播放使用单声道 PCM，生产候选采样率 24 kHz，诊断样本固定 16 kHz 以直接回送 ASR。
+- 现有 `completeSpeechSentences()` 等标点攒句会抵消双向流的收益。云端适配层需要增量清理 Markdown、代码和工具结构，再送文本片段；不能每个 token 新建合成请求。一次回答尽量同一合成 session；输入结束发 FinishSession，收到 SessionFinished 后才复用连接开启下一 session。
+- TTS 网络完成与播放完成分开。按实际播放头回到收听，不能把收到末包当作扬声器已经播完。播放队列有容量与超时限制，过慢连接不无限囤积音频。
+- 头像打断先在本机停止并清空 AudioTrack 队列、递增播放代次，再取消网络 session。已经 FinishSession 或取消未确认时关闭连接；丢弃旧代次所有迟到回调。打断不等待网络，也不自动停止 Pi Run。
+- ASR 使用 `volc.seedasr.sauc.duration`、`/api/v3/sauc/bigmodel_async`，16 kHz 单声道 PCM。先用 `enable_nonstream=true`、800 ms 端点作为调试起点；中间结果只更新字幕，修订后的确定结果每回合只提交一次。端点时长是调参起点，不是实测延迟。
+- 所有 provider 共用录音所有权，不允许 Android SpeechRecognizer、云 ASR、唤醒和插话各自抢麦。声学回声消除与插话检测必须测外放和蓝牙；本机 VAD 检出声音不足以证明是用户插话。
+
+#### 故障、费用与验收
+
+401/403 明确提示凭据或服务不可用，本次通话不反复重试；429/超时做有上限的重试或本机回退。ASR 失败不自动把旧 partial 当作新指令；TTS 已播放部分发生断网时保留文字，不从头重播整段。没有可用本机模型时显示真实不可用原因。
+
+待机仅运行本机唤醒/VAD。明确开始通话后才上传收音；挂断、静音和失败时结束对应云录音。TTS 按字符、ASR 按提交音频时长估算用量，区分静音与有效发声；具体单价和免费额度取实际开通产品的控制台，不拿扣子/RTC/录音文件转写报价代替流式 API 报价。
+
+诊断入口：`node scripts/probe-volc-speech.mjs` 只检查两项官方服务的握手；加 `--samples` 后生成三段固定中文样本并对合成音做 ASR 回环，消耗 API 额度。输出在独立时间戳目录，不录音、不读取聊天；只有成功生成时才输出 WAV。握手成功不等于合成成功，合成音回环不代表真人 ASR 准确率。
+
+上线前需完成：同文盲听（亲切度、疲劳感、中英术语与数字）、冷/热连接首 PCM、首实际出声、说完到 ASR 最终文本、点击到实际静音、断网/迟到包/回合切换、20 分钟外放与蓝牙连续通话、视频并行功耗。首 PCM 和首实际出声分开记录；先取真实 p50/p95，再决定音色与超时配置。云接口与 Fold7 声学验收通过后才切默认，不把协议 fixture 测试记作真人体验通过。
+
 ### “橙橙”唤醒与接通音（新增必需流程）
 
 **当前产品约定：显示名称为“橙橙”，生效唤醒词为“橙橙”。唤醒后直接进入实时语音模式，不先打开普通聊天面板再让用户点麦克风。**
