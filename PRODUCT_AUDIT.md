@@ -19,6 +19,7 @@ Java 文件均位于 android/src/dev/zfold/assistant/。行号指上述基线版
 - 系统小窗的布局已有验证，但“应用内直接切换”“所有入口都进入同一小窗”尚未完成。
 - 多份文档把目标、旧实现、局部验收混在一起；一些测试继续验证旧面板，所以“测试通过”无法证明旧路径已退出产品。
 - 新增需求“橙橙唤醒 → 实时语音页 → 接通音”目前也未实现；显示名已经改变，唤醒链路仍硬编码小派。
+- 新增视频对话需求可复用图片附件传输，但当前没有摄像头权限、预览、镜头切换或按请求取帧链路。
 
 ## 二、已有基础：保留与边界
 
@@ -32,6 +33,7 @@ Java 文件均位于 android/src/dev/zfold/assistant/。行号指上述基线版
 | 手机操作 | 语义快照、截图 ID、新鲜度/回读校验、可替换选择器 | 常用第三方 App 的整任务完成不能仅由工具回执判断 |
 | 主聊天交互 | 系统小窗尺寸、大字体、键盘、左右滑、返回专项 | 这些证据不覆盖旧面板与所有入口 |
 | 语音 | KWS、ASR/TTS、VAD、插话及点击头像控制基础 | 实例唯一性、设备路由、后台语音和新唤醒词仍需整改 |
+| 图片输入 | Main 的 images 附件及 Pi 的图片输入通道 | 不等于摄像头视频；旧单图字段固定 PNG，模型视觉能力也需核对 |
 
 上述基础的历史验证见 VERIFICATION.md；本表不扩大原测试覆盖范围。
 
@@ -221,18 +223,34 @@ Java 文件均位于 android/src/dev/zfold/assistant/。行号指上述基线版
 
 处理：一个 WakeConfig 驱动词条、前缀和文案；唤醒事件立即交 EntryRouter 的 OPEN_VOICE；语音协调器在实际可收听后发一次 ready 事件与接通音。保留唤醒后接的命令，排除自身提示音/播报造成的触发，真实口述验收。
 
+### A20 · P0 · 视频对话需新增相机链路，图片传输可复用【新增需求；确认现状】
+
+新增用户要求：摄像头实时预览、支持前后切换，仅在请求时发送一张压缩图。此项是新增能力，不归为现有功能的回归缺陷。
+
+证据：
+
+- [AndroidManifest.xml](android/AndroidManifest.xml) 没有 CAMERA 权限；Android 源码未找到 CameraManager/CameraDevice/CameraX 相机接入或 TextureView/SurfaceView 预览链路。
+- [MainActivity.java:276](android/src/dev/zfold/assistant/MainActivity.java#L276)–283 已有 `command.images` 与 `mime`，可复用 JPEG 附件传输。
+- [runtime/agent.mjs:829](runtime/agent.mjs#L829)–831 将旧 `command.image` 固定标为 PNG，而 `command.images` 保留 MIME；新 JPEG 不能走旧字段。
+- [MainActivity.java:261](android/src/dev/zfold/assistant/MainActivity.java#L261) 在空文字时直接返回，而运行时 prompt 接收端允许纯图片；“发送当前画面”还需统一页面校验。
+- [runtime/agent.mjs:564](runtime/agent.mjs#L564) 为自定义端点直接写入 `input: ['text','image']`，不能据此认定远端模型已经验证支持图片。
+- [scripts/build.py](scripts/build.py) 是自有 Java/Android 构建流程，相机适配器需适配现有工程；没有现成 CameraX 集成可直接启用。
+
+处理：先统一通话状态，再增加 CameraCoordinator。授权、前后镜头、本地预览、生命周期、按用户请求锁定帧与压缩均使用同一会话；相机与屏幕来源明确。帧与请求绑定，重试/工具继续执行不补拍，切镜头不得发送旧缓存。图片格式/大小、模型支持情况与历史图片负载按 PRODUCT_PLAN 的视频章节验收；“加了权限”不算功能完成。
+
 ## 四、第一轮整改交付包
 
 1. 确认 Fold7 直接系统小窗的有效路径及失败行为。
 2. 统一 EntryRequest、Session/Draft、VoiceCoordinator 和 WakeConfig。
 3. 主聊天/实时语音接入同一状态，完成“橙橙 → 语音界面 → 接通音”。
 4. 小入口、HUD、系统助手、唤醒、圈选全部改路由；删除旧聊天生产路径。
-5. 走完整入口矩阵，记录身份与状态一致性，之后再发更新。
+5. 在统一通话中加入视频：前后镜头、本地预览、按用户回合压缩附图，复用图片协议并补齐失败状态。
+6. 走完整入口与视频矩阵，记录身份、帧和状态一致性，之后再发更新。
 
-先解决这五项，不再单独为旧面板加新按钮、手势或另一套适配逻辑。
+先解决这六项，不再单独为旧面板加新按钮、手势或另一套适配逻辑。
 
 ## 五、本次工作范围
 
 本次只核对源码、已有测试记录和用户展示的真实界面，制定策划与迁移标准。没有修改应用代码、唤醒词文件、系统配置或发布新 APK，也没有续做截图中显示的用户聊天任务。
 
-策划中的“橙橙唤醒”和接通音尚待实施；运行版本仍为 0.2.72。
+策划中的“橙橙唤醒”、接通音和视频对话尚待实施；运行版本仍为 0.2.72。
