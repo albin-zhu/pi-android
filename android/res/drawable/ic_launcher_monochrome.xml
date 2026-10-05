@@ -1,0 +1,9 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="108dp" android:height="108dp"
+  android:viewportWidth="108" android:viewportHeight="108">
+  <!-- Same companion silhouette, with eye cutouts for wallpaper-tinted icons. -->
+  <group android:translateX="18" android:translateY="18" android:scaleX="0.05741627" android:scaleY="0.05741627">
+    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+      android:pathData="M624,279 C842,279 1030,444 1030,670 C1030,778 987,845 956,896 C932,940 955,985 983,1032 C1012,1077 946,1075 915,1058 L823,1024 C749,994 719,1029 625,1031 C402,1040 219,903 219,681 C219,455 391,279 624,279 Z M511,507 C452,507 452,657 511,657 C570,657 570,507 511,507 Z M741,507 C682,507 682,657 741,657 C800,657 800,507 741,507 Z M803,283 C818,187 914,136 1018,161 C1054,174 985,310 889,300 C849,301 813,293 803,283 Z" />
+  </group>
+</vector>

@@ -1,7 +1,7 @@
 Generator: built-in image_gen
 Generated: 2026-10-05
 Asset: chengcheng-icon-v1.png
-Status: generated design asset; not yet installed as the Android launcher icon.
+Status: integrated as the Android adaptive launcher icon in 0.2.76; the original raster is preserved in drawable-nodpi/chengcheng_icon_art.png. A matching vector silhouette supplies the Android 13+ monochrome layer.
 
 Use case: logo-brand
 Asset type: one finished square Android app icon for a personal on-device AI companion named 橙橙 (Chengcheng). Create a new original icon, not a presentation mockup.
