@@ -29,6 +29,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   LinearLayout navigation,inputRow; Ui.Action workbenchButton; View welcomeMark,suggestions; TextView welcomeTitle,welcomeDescription; ScrollView attachmentScroll;
   private android.graphics.Insets windowBars=android.graphics.Insets.NONE,windowIme=android.graphics.Insets.NONE;
   private int toolbarWidth=-1;private float toolbarFontScale=-1;private boolean toolbarSmall;
+  SwipeNavigationLayout swipeNavigation;private Object backCallback;private ActionMode textSelection;
   String lastSentFiles="";
   int statusToken;
   VoiceTurnController voice;
@@ -52,7 +53,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     });
     foregroundVoice=voice;
     getWindow().setDecorFitsSystemWindows(false);
-    buildUI();ScreenContext.listen(screenListener);screenListener.run();
+    buildUI();backCallback=ChatBackNavigation.register(this);ScreenContext.listen(screenListener);screenListener.run();
     if(runtime.ready&&!runtime.configured)runtime.restoreConfiguration();
     else if(runtime.configured)runtime.send(PiRuntime.json("type","history"));
     if(getIntent().getBooleanExtra("open_capabilities",false)){getIntent().removeExtra("open_capabilities");permissions();}
@@ -131,7 +132,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     sendButton=button("↑",true,()->{if(runtime.busy)stop();else sendText(input.getText().toString());});sendButton.setBackground(Ui.ripple(this,theme.accent,26,theme.onAccent));sendButton.setElevation(0);toolbar.addView(sendButton,new LinearLayout.LayoutParams(dp(48),dp(48)));composerSurface.addView(toolbar);
     input.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence t,int a,int b,int c){}public void afterTextChanged(android.text.Editable e){}public void onTextChanged(CharSequence t,int a,int b,int c){updateSend();}});updateSend();
     composerFrame=new FrameLayout(this);composerFrame.addView(composerSurface,new FrameLayout.LayoutParams(-1,-2,Gravity.CENTER_HORIZONTAL));LinearLayout.LayoutParams footerParams=new LinearLayout.LayoutParams(-1,-2);footerParams.topMargin=dp(8);root.addView(composerFrame,footerParams);
-    root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,oright,ob)->adjustColumn());setContentView(root);root.post(this::adjustColumn);
+    root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,oright,ob)->adjustColumn());swipeNavigation=new SwipeNavigationLayout(this);swipeNavigation.addView(root,new FrameLayout.LayoutParams(-1,-1));swipeNavigation.conversationRegion(scroll);setContentView(swipeNavigation);root.post(this::adjustColumn);
   }
   void adjustColumn(){
     if(scroll==null||composerFrame==null)return;int viewport=scroll.getWidth();if(viewport<=0)return;
@@ -160,6 +161,8 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     LinearLayout.LayoutParams titleParams=(LinearLayout.LayoutParams)welcomeTitle.getLayoutParams();titleParams.topMargin=dp(small?0:22);welcomeTitle.setLayoutParams(titleParams);
   }
   void openSidebar(){
+    if(textSelection!=null)textSelection.finish();
+    if(swipeNavigation.hasDrawer()){swipeNavigation.open();return;}
     if(input!=null){android.view.inputmethod.InputMethodManager manager=(android.view.inputmethod.InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);if(manager!=null)manager.hideSoftInputFromWindow(input.getWindowToken(),0);}
     SessionPicker.show(sessionButton,runtime,new SessionPicker.Host(){
       public void openModelSettings(){settings();}
@@ -604,6 +607,18 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==21&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)toggleVoice();if(request==22)toggleWake();}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);super.onPause();if(voice.sessionActive()&&!VoiceCallActivity.isActive()){VoiceWakeService.resume(this);}}
   @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);if(new Ui.Theme(this).dark!=theme.dark){recreate();return;}root.post(this::adjustColumn);SystemWindowNavigation.remember(this);}
+  boolean canNavigateDrawerBack(){WindowInsets insets=getWindow().getDecorView().getRootWindowInsets();return textSelection==null&&(insets==null||!insets.isVisible(WindowInsets.Type.ime()));}
+  void handleBack(){
+    WindowInsets insets=getWindow().getDecorView().getRootWindowInsets();
+    if(insets!=null&&insets.isVisible(WindowInsets.Type.ime())){((android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(),0);return;}
+    if(textSelection!=null){textSelection.finish();return;}
+    if(swipeNavigation.hasDrawer()){swipeNavigation.close();return;}
+    if(draftExpanded.getVisibility()==View.VISIBLE){draftExpanded.setVisibility(View.GONE);return;}
+    showStatus("已在当前对话");
+  }
+  @Override public void onBackPressed(){handleBack();}
+  @Override public void onActionModeStarted(ActionMode mode){super.onActionModeStarted(mode);textSelection=mode;if(swipeNavigation!=null)swipeNavigation.selecting(true);}
+  @Override public void onActionModeFinished(ActionMode mode){super.onActionModeFinished(mode);if(textSelection==mode)textSelection=null;if(swipeNavigation!=null)swipeNavigation.selecting(false);}
   @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(root!=null)SystemWindowNavigation.remember(this);}
-  @Override protected void onDestroy(){if(current==this)current=null;runtime.unlisten(this);ScreenContext.unlisten(screenListener);pendingTaskPrompt=null;if(VoiceCallActivity.isActive());else{continuous=false;foregroundVoice=null;voice.destroy();}if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
+  @Override protected void onDestroy(){ChatBackNavigation.unregister(this,backCallback);if(swipeNavigation!=null)swipeNavigation.dispose();if(current==this)current=null;runtime.unlisten(this);ScreenContext.unlisten(screenListener);pendingTaskPrompt=null;if(VoiceCallActivity.isActive());else{continuous=false;foregroundVoice=null;voice.destroy();}if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
 }

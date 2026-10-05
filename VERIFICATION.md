@@ -671,3 +671,21 @@
 构建：`ZFOLD_TARGET_SDK=28 npm run build`。产物 `artifacts/Zfold-0.2.71-compat28-debug.apk`，versionCode 271，SHA-256 `84e9b57bcf0d27767464d491b096eaf4b1d4a07254dac89b63f4989cc04ab05f`。测试输出与截图均在 `artifacts/system-window/`。
 
 最终普通字体与 130% 字体记录分别为 `acceptance-1.0.txt`、`acceptance-1.3.txt`：各有 9 项主流程及 1 项不支持窗口恢复时的回退检查通过（结束码 -1）。两份记录均明确保留 `recreatesWindowAtSavedSizeAndPosition=false`，不声明新 task 的小窗恢复已通过。130% 字体截图已核对。测试结束恢复模拟器原来的字体、freeform 开发者开关及手写设置。
+
+## 0.2.72 左右滑与返回（2026-10-05）
+
+聊天根 Activity 之前没有自定义返回处理，也没有横向导航手势。新增 `SwipeNavigationLayout` 把会话侧栏放在当前窗口内部：右滑展开、左滑收回，按手指位置移动，释放后以速度和位置决定落点；取消恢复原状态，移动中的侧栏可以重新抓住。关闭动画时直接落位。左侧有限区域声明系统手势排除范围，包含内容边距，避免从屏幕最左侧开始时没有子 View 接收 DOWN。
+
+`ChatBackNavigation` 按 [Android 返回手势 API](https://developer.android.com/guide/navigation/custom-back/predictive-back-gesture) 注册 Android 13+ 回调，并在 Android 14+ 处理手势进度、完成和取消；旧系统保留 `onBackPressed`。根聊天返回处理键盘、选字、侧栏和附件预览，不调用退出 Activity 的默认路径。弹窗使用本身的返回逻辑，工作页面仍沿 Android task 返回。输入框、终端、横向滚动内容不由聊天侧栏接管；可选择文本在识别出水平意图前保留长按，垂直方向先锁定后交给消息滚动。
+
+验收证据在 `artifacts/swipe-navigation/`：
+
+- `acceptance.txt`：16 项实际触摸与系统返回检查全部通过，`INSTRUMENTATION_CODE: -1`。覆盖根返回不退出、右侧边缘左滑、内容右滑、左侧边缘右滑、侧栏左滑、拖动中反向与取消、系统边缘返回取消/完成、抓住正在关闭的侧栏、上下滚动、横向内容、长按选字、键盘返回、菜单/侧栏返回、工作台返回、减少动画、239×282 dp 小窗。
+- `system-window-regression.txt`：上轮的小窗布局、草稿/图片、IME、工作页面同 task、语音、外部窗口截图和已有窗口几何恢复继续通过。无 freeform feature 的模拟器仍把新 task 恢复成全屏；输出中的 `recreatesWindowAtSavedSizeAndPosition=false` 仍为已知边界，不作恢复成功的声明。
+- 第一次窗口回归被 Gboard 的“Try out your stylus”引导弹层阻挡；已保留 `window-regression-failure.png`。仅在模拟器临时关闭手写并重跑后通过，随后恢复原设置。没有把那次失败当作通过。
+- `catalog-back.json`：实际打开“功能中心”后按系统返回，UI 层级从可见变为不可见；聊天保留。
+- `swipe-small-drawer.png`、`swipe-small-chat.png`：模拟器小窗截图已查看，侧栏没有生成另一个窗口。
+
+真机 SM_F9660 重新连接后，已用 `adb install --no-incremental -r` 覆盖安装 0.2.72-compat28（versionCode 272），数据保留。真机普通聊天区域右滑展开、返回收起已直接操作并查看截图；过程中折叠屏从外屏 1080×2520 切换到内屏 1968×2184，侧栏跟随窗口重新布局。未在真机运行测试 instrumentation、替换认证、发送测试消息或清除会话。相关真机截图仅存本地忽略的 artifacts 目录。
+
+最终 APK：`artifacts/Zfold-0.2.72-compat28-debug.apk`。SHA-256：`d20a68b95c7c8e1c6820e9a95a1b87e04876dc3ef56b9cd788949198282a1bd1`。
