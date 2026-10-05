@@ -49,6 +49,12 @@ final class SystemWindowNavigation {
     ActivityOptions options=ActivityOptions.makeBasic();if(bounds!=null)options.setLaunchBounds(bounds);
     context.startActivity(intent,options.toBundle());
   }
+  static void showWake(Context context,long wakeId){
+    if(!VoiceWakeService.pending(wakeId)||VoiceCoordinator.get(context).ownsWake(wakeId))return;
+    Intent intent=new Intent(context,MainActivity.class).putExtra("wake_event_id",wakeId)
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+    context.startActivity(intent);
+  }
   static void open(Context context,Class<?> destination,boolean overlay){
     Intent intent=new Intent(context,destination).putExtra("from_overlay",overlay).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
     if(!(context instanceof Activity)||overlay)intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

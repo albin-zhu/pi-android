@@ -25,6 +25,7 @@ final class VoiceEndpointGate {
   }
 
   synchronized void reset() {
+    candidate = "";
     started = false;
     finalRequested = false;
     activeFrames = 0;

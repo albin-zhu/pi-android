@@ -26,14 +26,15 @@ final class VoiceTurnController {
   }
   private final Context context;private final Callback callback;private final Handler main=new Handler(Looper.getMainLooper());
   private final PiRuntime runtime;
-  private SpeechRecognizer recognizer,wakeRecognizer;private TextToSpeech tts;private VoiceBargeIn barge;
-  private SpeechConfig speechConfig;private CloudTtsPlayer cloudTts;private CloudAsrClient cloudAsr,wakeCloud;
+  private SpeechRecognizer recognizer;private TextToSpeech tts;private VoiceBargeIn barge;
+  private SpeechConfig speechConfig;private CloudTtsPlayer cloudTts;private CloudAsrClient cloudAsr;
   private String cloudSegment;private boolean asrCloudFailed,ttsCloudFailed;
+  private final VoiceReadyCue readyCue=new VoiceReadyCue();private ArrayList<byte[]> wakePrefixAudio;private boolean stripInitialWake;
   private VoiceAsrSource liveAsr;
   private Mode mode=Mode.IDLE;private String activeUtterance,speechPending="",asrLanguage="zh-CN";
   private final StringBuilder spoken=new StringBuilder();
   private boolean ttsReady,listening,asrChecking,recognizerLocal,forceSystemAsr;
-  private int emptySpeech,unsupported,retries,transientErrors,epoch;private long serial,audioCooldownUntil,recognizerReleasedAt;private volatile String wakePartial="",livePartial="";
+  private int emptySpeech,unsupported,retries,transientErrors,epoch;private long serial,audioCooldownUntil,recognizerReleasedAt;private volatile String livePartial="";
   private boolean taskVoice,speechSuppressed;
   private volatile long lastLiveVoiceAt;private long partialFinalToken;
   private final VoiceEndpointGate endpointGate=new VoiceEndpointGate(this::handleEndpoint);
@@ -46,25 +47,35 @@ final class VoiceTurnController {
   boolean speaking(){return mode==Mode.SPEAKING||engineSpeaking();}
   boolean listeningForInput(){return sessionActive()&&mode==Mode.LISTENING;}
   private boolean engineSpeaking(){return activeUtterance!=null;}
-  void beginSession(){
+  void beginSession(){beginSession(0);}
+  void beginWakeSession(long id){beginSession(id);}
+  private void beginSession(long wakeId){
     if(sessionActive())return;
     android.util.Log.i("ZfoldSpeech","Voice session begin");
-    VoiceWakeService.stop(context);speechConfig=SpeechConfig.load(context);asrCloudFailed=false;ttsCloudFailed=false;ensureTts();
+    if(wakeId==0)VoiceWakeService.stop(context);readyCue.arm(wakeId);stripInitialWake=wakeId>0;wakePrefixAudio=null;speechConfig=SpeechConfig.load(context);asrCloudFailed=false;ttsCloudFailed=false;ensureTts();
     AudioModeOwner.enterSession(context);
+    boolean releasedRecognizer=recognizer!=null;
     if(recognizer!=null){recognizer.destroy();recognizer=null;}
-    recognizerReleasedAt=SystemClock.elapsedRealtime();
+    // A wake handoff already waits for AudioRecord release. Do not insert a
+    // half-second recording gap when there was no previous ASR engine to release.
+    recognizerReleasedAt=SystemClock.elapsedRealtime()-(wakeId>0&&!releasedRecognizer?500:0);
     epoch++;emptySpeech=0;unsupported=0;retries=0;transientErrors=0;forceSystemAsr=false;asrChecking=false;spoken.setLength(0);activeUtterance=null;speechPending="";livePartial="";
-    speechSuppressed=false;
+    speechSuppressed=runtime.busy;
     partialFinalToken=0;
     endpointFinalToken=0;
     endpointGate.reset();
     stopLiveAsr();
-    ArrayList<byte[]> wakeAudio=VoiceWakeService.consumeWakeAudio();cancelWakeCommand();
-    mode=Mode.LISTENING;callback.voiceState(true,false);
-    main.postDelayed(()->{
-      if(!sessionActive()||mode!=Mode.LISTENING)return;
-      if(wakeAudio!=null&&!wakeAudio.isEmpty())listenWakeCommand(wakeAudio);else listen();
-    },350);
+    mode=Mode.LISTENING;taskVoice=runtime.busy;callback.voiceState(true,false);readyCue.viewReady(VoiceCallActivity.isForeground());
+    int token=epoch;
+    if(wakeId>0){
+      VoiceWakeService.takeAudio(context,wakeId,audio->{
+        if(token!=epoch||!sessionActive())return;
+        if(audio==null){pause("唤醒录音已过期，请重新唤醒");return;}
+        wakePrefixAudio=audio.lost?null:audio.pcm;stripInitialWake=!audio.lost;
+        if(audio.lost)callback.status("唤醒指令接续超时，提示音后请重新说");
+        listen();
+      });
+    }else main.postDelayed(()->{if(token==epoch&&sessionActive()&&mode==Mode.LISTENING)listen();},350);
   }
   void beginTaskVoice(){
     if(sessionActive()){
@@ -87,15 +98,14 @@ final class VoiceTurnController {
     if(mode==Mode.LISTENING&&(listening||asrChecking)){callback.status("正在听，请说话…");return;}
     speechSuppressed=true;taskVoice=runtime.busy;asrChecking=false;listening=false;
     epoch++;activeUtterance=null;speechPending="";stopBarge(false);stopTts();
-    cancelWakeCommand();stopLiveAsr();livePartial="";partialFinalToken++;endpointFinalToken++;
+    stopLiveAsr();livePartial="";partialFinalToken++;endpointFinalToken++;
     if(recognizer!=null){SpeechRecognizer old=recognizer;recognizer=null;old.cancel();cleanupRecognizer(old);}
     mode=Mode.LISTENING;callback.voiceState(true,false);callback.status("已打断，正在切换收听…");
     audioCooldownUntil=SystemClock.elapsedRealtime()+800;int token=epoch;
     main.postDelayed(()->{if(token==epoch&&sessionActive()&&!engineSpeaking())listen();},800);
   }
   void stopSession(boolean cancelTask){
-    epoch++;mode=Mode.IDLE;activeUtterance=null;ttsSpeakingReset();speechPending="";spoken.setLength(0);stopBarge(false);
-    cancelWakeCommand();
+    readyCue.cancel();wakePrefixAudio=null;stripInitialWake=false;epoch++;mode=Mode.IDLE;activeUtterance=null;ttsSpeakingReset();speechPending="";spoken.setLength(0);stopBarge(false);
     stopLiveAsr();
     if(recognizer!=null){SpeechRecognizer old=recognizer;recognizer=null;old.cancel();cleanupRecognizer(old);}
     stopTts();
@@ -106,7 +116,7 @@ final class VoiceTurnController {
     releaseLater();
   }
   void beginPrompt(){
-    speechSuppressed=false;
+    speechSuppressed=false;stripInitialWake=false;wakePrefixAudio=null;
     epoch++;activeUtterance=null;speechPending="";spoken.setLength(0);stopBarge(false);
     stopTts();
     stopLiveAsr();
@@ -156,8 +166,7 @@ final class VoiceTurnController {
     if(sessionActive())stopSession(false);
   }
   void destroy(){
-    epoch++;mode=Mode.IDLE;activeUtterance=null;speechPending="";spoken.setLength(0);stopBarge(false);
-    cancelWakeCommand();
+    readyCue.cancel();wakePrefixAudio=null;stripInitialWake=false;epoch++;mode=Mode.IDLE;activeUtterance=null;speechPending="";spoken.setLength(0);stopBarge(false);
     stopLiveAsr();
     if(recognizer!=null){recognizer.cancel();recognizer.destroy();recognizer=null;}
     if(tts!=null){tts.stop();tts.shutdown();tts=null;}
@@ -251,92 +260,9 @@ final class VoiceTurnController {
     barge.setSpoken(spoken.toString());barge.start();
   }
   private void stopBarge(boolean waitForResult){if(barge!=null){VoiceBargeIn active=barge;barge=null;active.stop(waitForResult);}}
-  private void listenWakeCommand(ArrayList<byte[]> audio){
-    if(!sessionActive()||audio.isEmpty())return;
-    if(useCloudAsr()){listenCloudWake(audio);return;}
-    mode=Mode.LISTENING;wakePartial="";callback.status("正在识别唤醒指令…");
-    try{
-      ParcelFileDescriptor[] pipe=ParcelFileDescriptor.createPipe();
-      Intent request=PhoneSpeech.intent("cmn-Hans-CN",true);
-      request.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE,pipe[0]);
-      request.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT,1);
-      request.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING,AudioFormat.ENCODING_PCM_16BIT);
-      request.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_SAMPLING_RATE,16000);
-      main.post(()->{
-        if(!sessionActive()){try{pipe[0].close();pipe[1].close();}catch(Exception ignored){}return;}
-        try{
-          wakeRecognizer=PhoneSpeech.createRecognizer(context,true);
-          wakeRecognizer.setRecognitionListener(new RecognitionListener(){
-            public void onReadyForSpeech(Bundle bundle){}
-            public void onBeginningOfSpeech(){}
-            public void onRmsChanged(float value){}
-            public void onBufferReceived(byte[] value){}
-            public void onEndOfSpeech(){}
-            public void onPartialResults(Bundle bundle){
-              ArrayList<String> values=bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-              if(values!=null&&!values.isEmpty()){wakePartial=values.get(0);callback.status("唤醒指令 · "+wakePartial);}
-            }
-            public void onEvent(int code,Bundle bundle){}
-            public void onError(int code){
-              if(!sessionActive())return;SpeechRecognizer active=wakeRecognizer;wakeRecognizer=null;cleanupRecognizer(active);
-              if(!wakePartial.isBlank())submitWakeCommand(wakePartial);else listen();
-            }
-            public void onResults(Bundle bundle){
-              if(!sessionActive())return;SpeechRecognizer active=wakeRecognizer;wakeRecognizer=null;cleanupRecognizer(active);
-              ArrayList<String> values=bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-              String text=values==null||values.isEmpty()?"":values.get(0).trim();
-              if(text.isBlank())text=wakePartial;
-              if(!text.isBlank())submitWakeCommand(text);else{callback.status("我在听，请说指令…");listen();}
-            }
-          });
-          wakeRecognizer.startListening(request);
-          Thread writer=new Thread(()->writeWakeAudio(pipe[1],audio),"zfold-wake-command");writer.setDaemon(true);writer.start();
-        }catch(RuntimeException error){
-          try{pipe[0].close();pipe[1].close();}catch(Exception ignored){}
-          wakeRecognizer=null;callback.status("唤醒指令识别失败");listen();
-        }
-      });
-    }catch(Exception error){callback.status("无法识别唤醒指令");listen();}
-  }
-  private void submitWakeCommand(String text){
-    String command=stripWakePrefix(text);
-    if(!sessionActive())return;
-    if(command==null){
-      if(!usablePrompt(text)){
-        android.util.Log.i("ZfoldSpeech","Wake command rejected: unusable text "+text);
-        callback.status("我在听，请说指令…");listenAfterWakeRelease();return;
-      }
-      command=text;
-      android.util.Log.i("ZfoldSpeech","Wake prefix absent after fresh KWS; accepting command: "+command);
-    }
-    if(command.isBlank()){
-      callback.status("我在听，请说指令…");listenAfterWakeRelease();return;
-    }
-    android.util.Log.i("ZfoldSpeech","Wake command accepted: "+command);
-    mode=Mode.THINKING;callback.status("正在处理 · "+command);callback.prompt(command);
-  }
-  private static String stripWakePrefix(String raw){
-    String text=raw==null?"":raw.trim();String normalized=text.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{Nd}]","");
-    if(normalized.isEmpty())return "";
-    String prefix="(?i)^\\s*(?:(?:小派|小排|xiao\\s*pi|xiao\\s*pai)\\s*[，,。：:？?！!]*\\s*)+";
-    if(normalized.startsWith("小派")||normalized.startsWith("小排")||normalized.startsWith("xiaopi")||normalized.startsWith("xiaopai"))return text.replaceFirst(prefix,"").trim();
-    return null;
-  }
-  private void writeWakeAudio(ParcelFileDescriptor descriptor,ArrayList<byte[]> audio){
-    try(java.io.OutputStream output=new ParcelFileDescriptor.AutoCloseOutputStream(descriptor)){
-      for(byte[] chunk:audio){if(wakeRecognizer==null)return;output.write(chunk);}
-    }catch(Exception ignored){}
-  }
   private void cleanupRecognizer(SpeechRecognizer recognizer){
     if(recognizer==null)return;recognizerReleasedAt=SystemClock.elapsedRealtime();
     main.post(()->{try{recognizer.destroy();}catch(Exception ignored){}});
-  }
-  private void listenAfterWakeRelease(){
-    if(sessionActive())main.postDelayed(this::listen,260);
-  }
-  private void cancelWakeCommand(){
-    if(wakeCloud!=null){wakeCloud.cancel();wakeCloud=null;}
-    SpeechRecognizer active=wakeRecognizer;wakeRecognizer=null;wakePartial="";cleanupRecognizer(active);
   }
   private void listen(){
     if(!sessionActive()||mode==Mode.SPEAKING||asrChecking||(runtime.busy&&!taskVoice))return;
@@ -363,21 +289,24 @@ final class VoiceTurnController {
             catch(RuntimeException again){pause("语音识别服务无法启动");return;}
           }else{pause("语音识别服务无法启动");return;}
         }
+        SpeechRecognizer engine=recognizer;
         recognizer.setRecognitionListener(new RecognitionListener(){
-          public void onReadyForSpeech(Bundle bundle){if(sessionActive())callback.status(recognizerLocal?"本机识别 · 正在听…":"系统识别 · 可能联网 · 正在听…");}
+          private boolean valid(){return token==epoch&&recognizer==engine&&sessionActive();}
+          public void onReadyForSpeech(Bundle bundle){if(valid()){if(liveAsr==null)readyCue.microphoneReady();readyCue.backendReady();callback.status(recognizerLocal?"本机识别 · 正在听…":"系统识别 · 可能联网 · 正在听…");}}
           public void onBeginningOfSpeech(){}
           public void onRmsChanged(float value){}
           public void onBufferReceived(byte[] value){}
           public void onEndOfSpeech(){if(sessionActive())callback.status("正在识别…");}
-          public void onError(int error){handleAsrError(error);}
+          public void onError(int error){if(valid())handleAsrError(error);}
           public void onResults(Bundle bundle){
-            if(!sessionActive())return;
+            if(!valid())return;
             partialFinalToken=0;
             endpointFinalToken=0;
             stopLiveAsr();
             ArrayList<String> values=bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);emptySpeech=0;retries=0;
             String text=values==null||values.isEmpty()?"":values.get(0);
             if(text.isBlank())text=livePartial;
+            text=initialTranscript(text,true);
             android.util.Log.i("ZfoldSpeech","ASR final count="+(values==null?-1:values.size())+" raw="+(values==null||values.isEmpty()?"":values.get(0))+" using="+text);
             SpeechRecognizer active=recognizer;recognizer=null;
             if(active!=null)active.cancel();
@@ -388,8 +317,8 @@ final class VoiceTurnController {
           private void retryNoMatch(){if(sessionActive()&&!engineSpeaking())listen();}
           public void onPartialResults(Bundle bundle){
             ArrayList<String> values=bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-            if(sessionActive()&&values!=null&&!values.isEmpty()){
-              String value=values.get(0);
+            if(valid()&&values!=null&&!values.isEmpty()){
+              String value=initialTranscript(values.get(0),false);
               if(value.isBlank())return;
               if(!value.equals(livePartial))android.util.Log.i("ZfoldSpeech","ASR partial: "+value);
               livePartial=value;callback.status(value);
@@ -410,9 +339,10 @@ final class VoiceTurnController {
     java.util.function.Consumer<String> failed=reason->main.post(()->{
       if(sessionActive())callback.status("连续识别麦克风不可用，改用系统采集");
     });
+    source.prefix(wakePrefixAudio);wakePrefixAudio=null;
     boolean started=source.start(request,failed);
     if(started){
-      liveAsr=source;
+      liveAsr=source;readyCue.microphoneReady();
     }else{
       request=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
         .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -446,6 +376,7 @@ final class VoiceTurnController {
     if(error==SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS){pause("麦克风权限或系统录音授权受限");return;}
     if(error==SpeechRecognizer.ERROR_NO_MATCH||error==SpeechRecognizer.ERROR_SPEECH_TIMEOUT){
       String partial=livePartial;
+      SpeechRecognizer old=recognizer;recognizer=null;if(old!=null)old.cancel();cleanupRecognizer(old);
       if(!partial.isBlank()&&usablePrompt(partial)){
         android.util.Log.i("ZfoldSpeech","ASR timeout accepted partial: "+partial);
         mode=Mode.THINKING;taskVoice=false;callback.prompt(partial);return;
@@ -459,7 +390,7 @@ final class VoiceTurnController {
   }
   private void pause(String reason){
     android.util.Log.w("ZfoldSpeech","Voice session pause: "+reason+" mode="+mode+" retries="+retries+" transientErrors="+transientErrors+" emptySpeech="+emptySpeech);
-    epoch++;mode=Mode.PAUSED;activeUtterance=null;speechPending="";stopBarge(false);
+    readyCue.cancel();wakePrefixAudio=null;stripInitialWake=false;epoch++;mode=Mode.PAUSED;activeUtterance=null;speechPending="";stopBarge(false);
     if(recognizer!=null)recognizer.cancel();
     stopTts();
     stopLiveAsr();
@@ -471,7 +402,7 @@ final class VoiceTurnController {
     if(source!=null)source.stop();
     if(cloudAsr!=null){cloudAsr.cancel();cloudAsr=null;}
     listening=false;
-    endpointGate.reset();
+    endpointGate.reset();readyCue.resetInput();
   }
   private void armPartialFinalizer(){
     long token=++partialFinalToken;
@@ -543,6 +474,8 @@ final class VoiceTurnController {
       if(cloudTts!=null){cloudTts.close();cloudTts=null;}
     },5*60_000);
   }
+  void voiceViewReady(boolean visible){readyCue.viewReady(visible&&sessionActive());}
+  private String initialTranscript(String raw,boolean finished){String text=stripInitialWake?WakeConfig.get(context).stripPrefix(raw):raw;if(finished)stripInitialWake=false;return text;}
   private boolean useCloudAsr(){return speechConfig!=null&&speechConfig.cloudAsr&&!asrCloudFailed;}
   private boolean useCloudTts(){return speechConfig!=null&&speechConfig.cloudTts&&!ttsCloudFailed;}
   private boolean speechReady(){return useCloudTts()?runtime.ready:ttsReady&&tts!=null;}
@@ -569,10 +502,10 @@ final class VoiceTurnController {
     final CloudAsrClient[] holder=new CloudAsrClient[1];
     holder[0]=new CloudAsrClient(context,new CloudAsrClient.Callback(){
       private boolean valid(){return token==epoch&&sessionActive()&&cloudAsr==holder[0];}
-      public void ready(){if(valid())callback.status("豆包识别 · 在线 · 正在听…");}
-      public void partial(String text){if(!valid())return;boolean changed=!text.equals(livePartial);livePartial=text;endpointGate.setCandidate(text);callback.status("豆包识别 · "+text);if(changed)armPartialFinalizer();}
+      public void ready(){if(valid()){callback.status("豆包识别 · 在线 · 正在听…");readyCue.backendReady();}}
+      public void partial(String text){if(!valid())return;text=initialTranscript(text,false);boolean changed=!text.equals(livePartial);livePartial=text;endpointGate.setCandidate(text);callback.status("豆包识别 · "+text);if(changed)armPartialFinalizer();}
       public void result(String text){
-        if(!valid())return;stopLiveAsr();livePartial="";
+        if(!valid())return;text=initialTranscript(text,true);stopLiveAsr();livePartial="";
         if(usablePrompt(text)){mode=Mode.THINKING;taskVoice=false;callback.prompt(text);}
         else main.postDelayed(()->{if(token==epoch&&sessionActive())listen();},400);
       }
@@ -585,18 +518,7 @@ final class VoiceTurnController {
     cloudAsr=holder[0];cloudAsr.start();if(cloudAsr!=holder[0])return;
     VoiceAsrSource source=new VoiceAsrSource(context,value->{if(token==epoch&&value>=.035)lastLiveVoiceAt=SystemClock.elapsedRealtime();},endpointGate);
     liveAsr=source;listening=true;
-    source.startPcm(holder[0]::pcm,reason->main.post(()->{if(token==epoch&&cloudAsr==holder[0]){stopLiveAsr();pause(reason);}}));
-  }
-  private void listenCloudWake(ArrayList<byte[]> audio){
-    int token=epoch;mode=Mode.LISTENING;callback.status("豆包识别 · 正在识别唤醒指令…");
-    final CloudAsrClient[] holder=new CloudAsrClient[1];
-    holder[0]=new CloudAsrClient(context,new CloudAsrClient.Callback(){
-      private boolean valid(){return token==epoch&&sessionActive()&&wakeCloud==holder[0];}
-      public void ready(){}
-      public void partial(String text){if(valid())callback.status("唤醒指令 · "+text);}
-      public void result(String text){if(!valid())return;wakeCloud=null;if(usablePrompt(text))submitWakeCommand(text);else listen();}
-      public void error(String reason){if(!valid())return;wakeCloud=null;asrCloudFailed=true;callback.status("豆包识别不可用，改用系统，请再说一次");listen();}
-    });wakeCloud=holder[0];wakeCloud.start();if(wakeCloud!=holder[0])return;
-    for(byte[] chunk:audio)wakeCloud.pcm(chunk);wakeCloud.finish();
+    source.prefix(wakePrefixAudio);wakePrefixAudio=null;
+    if(source.startPcm(holder[0]::pcm,reason->main.post(()->{if(token==epoch&&cloudAsr==holder[0]){stopLiveAsr();pause(reason);}})))readyCue.microphoneReady();
   }
 }

@@ -26,14 +26,15 @@ final class SpeechSettings {
     Button local=new Button(activity);local.setAllCaps(false);local.setText("本机模型、唤醒与插话设置");body.addView(local);
     ScrollView scroll=new ScrollView(activity);scroll.setFillViewport(false);scroll.addView(body);
     AlertDialog dialog=new AlertDialog.Builder(activity).setTitle("语音服务").setView(scroll).setNegativeButton("关闭",null).setNeutralButton("保存并试听",null).setPositiveButton("保存",null).create();
-    final CloudTtsPlayer[] cloud={null};final TextToSpeech[] system={null};final int[] preview={0};Handler main=new Handler(Looper.getMainLooper());
-    Runnable stopPreview=()->{preview[0]++;if(cloud[0]!=null){cloud[0].close();cloud[0]=null;}if(system[0]!=null){system[0].stop();system[0].shutdown();system[0]=null;}};
+    final CloudTtsPlayer[] cloud={null};final TextToSpeech[] system={null};final int[] preview={0};final boolean[] wakeHeld={false};Object outputOwner=new Object();Handler main=new Handler(Looper.getMainLooper());
+    Runnable stopPreview=()->{preview[0]++;if(cloud[0]!=null){cloud[0].close();cloud[0]=null;}if(system[0]!=null){system[0].stop();system[0].shutdown();system[0]=null;}if(wakeHeld[0]){wakeHeld[0]=false;VoiceWakeService.releaseOutput(activity,outputOwner);}};
     java.util.function.Consumer<Boolean> save=audition->{
       stopPreview.run();
       try{SpeechConfig.save(activity,asr.getSelectedItemPosition()==1,tts.getSelectedItemPosition()==1,speaker.getSelectedItemPosition(),key.getText().toString());}
       catch(Exception error){status.setText("保存失败：检查 API Key 和配置文件");return;}
       key.setText("");key.setHint("已保存 · 留空保留，输入可替换");voice.stopSession(false);current.setText(voice.providerStatus());status.setText("已保存，下次开始语音时生效");
       if(!audition)return;
+      VoiceWakeService.suspendOutput(activity,outputOwner);wakeHeld[0]=true;
       int token=preview[0];String id="speech-preview",text="你好，我是橙橙。你先忙，我来处理，完成后告诉你。";
       status.setText("正在准备试听…");
       if(tts.getSelectedItemPosition()==1){

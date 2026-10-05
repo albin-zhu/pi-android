@@ -528,11 +528,15 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       voice.availableOfflineVoice(localVoice->runOnUiThread(()->{
         if(isFinishing())return;showStatus(idleStatus());
         String synthesis=localVoice==null?"尚未检测到已安装的离线中文声线。":"已安装离线中文声线："+localVoice;
-        boolean auto=VoiceVadMonitor.enabled(this);String interruption="自动插话 · "+(auto?"已开启":"未开启")+"。开启后只在播报期间用本机 VAD 确认真人插话，并保留最近约 2 秒声音送本机识别；噪声、外放与蓝牙仍需实测。";
-        boolean wake=VoiceWakeService.enabled(this);String wakeState=wake?"常驻前台监听“小派”":"未开启；开启后会显示麦克风前台通知";
-        AlertDialog.Builder dialog=new AlertDialog.Builder(this).setTitle("本机语音").setMessage("识别 · "+recognition+"\n\n播报 · "+synthesis+"\n\n"+interruption+"\n\n唤醒 · "+wakeState).setNegativeButton("关闭",null).setNeutralButton(auto?"关闭自动插话":"开启自动插话",(d,w)->{VoiceVadMonitor.setEnabled(this,!auto);localSpeechCapabilities();});
-        if(!support.installed&&support.downloadable)dialog.setPositiveButton("下载中文识别包",(d,w)->PhoneSpeech.downloadMandarin(this,message->{if(isFinishing())return;if(message.endsWith("%"))showStatus(message);else{showStatus(idleStatus());notice(message);}}));
-        else dialog.setPositiveButton(wake?"关闭“小派”唤醒":"开启“小派”唤醒",(d,w)->toggleWake());
+        boolean auto=VoiceVadMonitor.enabled(this);String interruption="自动插话 · "+(auto?"已开启":"未开启")+"。本机 VAD 检测插话候选，再由所选语音识别服务确认；噪声、外放与蓝牙仍需实测。";
+        String word=WakeConfig.get(this).word;boolean wake=VoiceWakeService.enabled(this);String wakeState=(wake?"已开启":"未开启")+"，当前唤醒词为“"+word+"”。接通并可收听时响一声短提示音。";
+        if(wake&&VoiceWakeService.lastFailure!=null)wakeState+="\n当前状态："+VoiceWakeService.lastFailure;
+        LinearLayout info=new LinearLayout(this);info.setOrientation(LinearLayout.VERTICAL);info.setPadding(dp(22),dp(8),dp(22),dp(10));
+        info.addView(Ui.text(this,"识别 · "+recognition+"\n\n播报 · "+synthesis+"\n\n"+interruption+"\n\n唤醒 · "+wakeState,14,theme.ink));
+        if(!support.installed&&support.downloadable){Button download=new Button(this);download.setText("下载本机中文识别包");download.setOnClickListener(v->PhoneSpeech.downloadMandarin(this,message->{if(!isFinishing())notice(message);}));info.addView(download);}
+        ScrollView content=new ScrollView(this);content.addView(info);
+        AlertDialog.Builder dialog=new AlertDialog.Builder(this).setTitle("本机语音与唤醒").setView(content).setNegativeButton("关闭",null).setNeutralButton(auto?"关闭自动插话":"开启自动插话",(d,w)->{VoiceVadMonitor.setEnabled(this,!auto);localSpeechCapabilities();})
+          .setPositiveButton(wake?"关闭“"+word+"”唤醒":"开启“"+word+"”唤醒",(d,w)->toggleWake());
         dialog.show();
       }));
     });
@@ -592,7 +596,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)missing.add(Manifest.permission.RECORD_AUDIO);
     if(Build.VERSION.SDK_INT>=33&&checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=PackageManager.PERMISSION_GRANTED)missing.add("android.permission.POST_NOTIFICATIONS");
     if(!missing.isEmpty()){requestPermissions(missing.toArray(new String[0]),22);return;}
-    boolean next=!VoiceWakeService.enabled(this);VoiceWakeService.setEnabled(this,next);notice(next?"已开启“小派”唤醒":"已关闭“小派”唤醒");
+    boolean next=!VoiceWakeService.enabled(this);VoiceWakeService.setEnabled(this,next);String word=WakeConfig.get(this).word;notice(next?"已开启“"+word+"”唤醒":"已关闭“"+word+"”唤醒");
   }
   void acceptImage(){if(CircleOverlay.selectedImage!=null){pendingImage=CircleOverlay.selectedImage;pendingImageLabel="圈选区域";CircleOverlay.selectedImage=null;input.setHint("已附上屏幕内容，想怎么处理？");updateDraftAttachment();}}
   void pickFiles(){
@@ -627,8 +631,14 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     if(files==null||files.isEmpty())return "";
     StringBuilder out=new StringBuilder("[本地文件：");for(int i=0;i<files.size();i++){if(i>0)out.append("，");out.append(files.get(i).name);}return out.append("]").toString();
   }
-  @Override protected void onResume(){super.onResume();acceptImage();if(getIntent().getBooleanExtra("open_voice",false)){getIntent().removeExtra("open_voice");root.post(this::toggleVoice);}}
-  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);returnWorkbench=intent.getBooleanExtra("return_workbench",false);acceptImage();if(intent.getBooleanExtra("open_tools",false)){intent.removeExtra("open_tools");sessionButton.post(()->showToolCenter(sessionButton));}if(intent.getBooleanExtra("open_models",false)){intent.removeExtra("open_models");settings();}if(intent.getBooleanExtra("open_capabilities",false)){intent.removeExtra("open_capabilities");permissions();}if(intent.getBooleanExtra("open_speech",false)){intent.removeExtra("open_speech");speechCapabilities();}if(intent.getBooleanExtra("open_sessions",false)){intent.removeExtra("open_sessions");sessionButton.post(this::openSidebar);}if(intent.getBooleanExtra("open_provider_auth",false)){intent.removeExtra("open_provider_auth");sessionButton.post(()->ProviderAuthDialog.show(sessionButton,runtime));}if(intent.getBooleanExtra("open_runtime_packs",false)){intent.removeExtra("open_runtime_packs");runtimePacksSettings();}}
+  private void acceptWakeEntry(){
+    long id=getIntent().getLongExtra("wake_event_id",0);if(id==0)return;getIntent().removeExtra("wake_event_id");
+    if(!VoiceWakeService.pending(id))return;
+    if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){VoiceWakeService.discard(id);showStatus("麦克风权限不可用，语音尚未接通");return;}
+    VoiceCallActivity.show(this);VoiceCoordinator.get(this).requestWake(id);
+  }
+  @Override protected void onResume(){super.onResume();acceptImage();acceptWakeEntry();if(getIntent().getBooleanExtra("open_voice",false)){getIntent().removeExtra("open_voice");root.post(this::toggleVoice);}}
+  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);root.post(this::acceptWakeEntry);returnWorkbench=intent.getBooleanExtra("return_workbench",false);acceptImage();if(intent.getBooleanExtra("open_tools",false)){intent.removeExtra("open_tools");sessionButton.post(()->showToolCenter(sessionButton));}if(intent.getBooleanExtra("open_models",false)){intent.removeExtra("open_models");settings();}if(intent.getBooleanExtra("open_capabilities",false)){intent.removeExtra("open_capabilities");permissions();}if(intent.getBooleanExtra("open_speech",false)){intent.removeExtra("open_speech");speechCapabilities();}if(intent.getBooleanExtra("open_sessions",false)){intent.removeExtra("open_sessions");sessionButton.post(this::openSidebar);}if(intent.getBooleanExtra("open_provider_auth",false)){intent.removeExtra("open_provider_auth");sessionButton.post(()->ProviderAuthDialog.show(sessionButton,runtime));}if(intent.getBooleanExtra("open_runtime_packs",false)){intent.removeExtra("open_runtime_packs");runtimePacksSettings();}}
   @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==21&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)toggleVoice();if(request==22)toggleWake();}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);super.onPause();if(voice.sessionActive()&&!VoiceCallActivity.isActive()){VoiceWakeService.resume(this);}}
   @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);if(new Ui.Theme(this).dark!=theme.dark){recreate();return;}root.post(this::adjustColumn);SystemWindowNavigation.remember(this);}

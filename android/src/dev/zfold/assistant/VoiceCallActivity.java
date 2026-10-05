@@ -173,8 +173,8 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
   }
 
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);}
-  @Override protected void onResume(){super.onResume();active=this;foreground=true;VoiceMiniOverlay.hide();if(video&&(!camera.owns(this)||!camera.ready())){cameraStatus.setText("摄像头已暂停，点击相机恢复");cameraAction.setContentDescription("恢复摄像头");}}
-  @Override protected void onPause(){SystemWindowNavigation.remember(this);super.onPause();if(active==this)foreground=false;if(!isFinishing())VoiceMiniOverlay.showIfCallActive(this);}
+  @Override protected void onResume(){super.onResume();active=this;foreground=true;VoiceMiniOverlay.hide();getWindow().getDecorView().post(()->{if(active==this&&foreground)VoiceCoordinator.get(this).voiceViewReady(true);});if(video&&(!camera.owns(this)||!camera.ready())){cameraStatus.setText("摄像头已暂停，点击相机恢复");cameraAction.setContentDescription("恢复摄像头");}}
+  @Override protected void onPause(){SystemWindowNavigation.remember(this);super.onPause();if(active==this){foreground=false;VoiceCoordinator.get(this).voiceViewReady(false);}if(!isFinishing())VoiceMiniOverlay.showIfCallActive(this);}
   @Override protected void onStop(){camera.pause(this);super.onStop();}
   @Override protected void onDestroy(){if(isFinishing())camera.endVideo(this);camera.detach(this);if(active==this)active=null;runtime.unlisten(this);super.onDestroy();}
   @Override public void onBackPressed(){startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}

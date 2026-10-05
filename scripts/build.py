@@ -77,6 +77,10 @@ def main():
         member=kwsTar.getmember(f'{prefix}/{source}');input=kwsTar.extractfile(member)
         if input is None:raise RuntimeError(f'Missing KWS model file: {source}')
         (kws_dir/target).write_bytes(input.read())
+    wake=json.loads((ROOT/'android/assets/wake.json').read_text())
+    vocabulary={line.split()[0] for line in (kws_dir/'tokens.txt').read_text().splitlines() if line.strip()}
+    if not wake['word'] or any(c.isspace() or c=='@' for c in wake['word']) or wake['word'] not in wake['asrPrefixes'] or any(token not in vocabulary for token in wake['tokens'].split()):raise RuntimeError('Wake configuration has inconsistent name, aliases or model tokens')
+    (kws_dir/'keywords.txt').write_text(wake['tokens']+' @'+wake['word']+'\n')
     native=BUILD/'apk/lib/arm64-v8a'
     if native.exists():shutil.rmtree(native)
     native.mkdir(parents=True)

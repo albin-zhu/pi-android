@@ -18,6 +18,10 @@ final class VoiceAsrSource {
   private final java.util.function.DoubleConsumer level;
   private final VoiceEndpointGate endpoint;
   private java.util.function.Consumer<String> cloudFailure;
+  private ParcelFileDescriptor readEnd;private volatile OutputStream sink;
+  private java.util.List<byte[]> prefix=java.util.Collections.emptyList();
+  void prefix(java.util.List<byte[]> audio){prefix=audio==null?java.util.Collections.emptyList():audio;}
+  private int inputBuffer(int minimum){int bytes=0;for(byte[] chunk:prefix)bytes+=chunk.length;return Math.max(minimum,Math.max(8192,Math.min(192000,bytes+8192)));}
 
   VoiceAsrSource(Context context,java.util.function.DoubleConsumer level,VoiceEndpointGate endpoint){
     this.context=context.getApplicationContext();this.level=level;this.endpoint=endpoint;
@@ -27,6 +31,7 @@ final class VoiceAsrSource {
     ParcelFileDescriptor[] pipe=null;
     try{
       pipe=ParcelFileDescriptor.createPipe();
+      readEnd=pipe[0];
       request.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE,pipe[0]);
       request.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT,1);
       request.putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING,AudioFormat.ENCODING_PCM_16BIT);
@@ -34,12 +39,12 @@ final class VoiceAsrSource {
       int minimum=AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
       if(minimum<=0)throw new IllegalStateException("无法建立连续识别麦克风");
       AudioRecord record=new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,16000,
-        AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(minimum,8192));
+        AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,inputBuffer(minimum));
       if(record.getState()!=AudioRecord.STATE_INITIALIZED){record.release();throw new IllegalStateException("连续识别麦克风未就绪");}
       audio=record;running=true;record.startRecording();
       if(record.getRecordingState()!=AudioRecord.RECORDSTATE_RECORDING)throw new IllegalStateException("连续识别麦克风没有开始");
-      ParcelFileDescriptor output=pipe[1];int sourceId=record.getAudioSessionId();
-      writer=new Thread(()->write(new ParcelFileDescriptor.AutoCloseOutputStream(output),sourceId),"zfold-live-asr");writer.setDaemon(true);writer.start();
+      OutputStream output=new ParcelFileDescriptor.AutoCloseOutputStream(pipe[1]);sink=output;int sourceId=record.getAudioSessionId();
+      writer=new Thread(()->write(output,sourceId),"zfold-live-asr");writer.setDaemon(true);writer.start();
       return true;
     }catch(Throwable error){
       running=false;
@@ -53,11 +58,12 @@ final class VoiceAsrSource {
   boolean startPcm(java.util.function.Consumer<byte[]> sink,java.util.function.Consumer<String> failed){
     try{
       int minimum=AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
-      AudioRecord record=new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(minimum,8192));
+      AudioRecord record=new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,inputBuffer(minimum));
       if(record.getState()!=AudioRecord.STATE_INITIALIZED){record.release();throw new IllegalStateException();}
       audio=record;running=true;cloudFailure=failed;record.startRecording();
       if(record.getRecordingState()!=AudioRecord.RECORDSTATE_RECORDING)throw new IllegalStateException();
       OutputStream output=new OutputStream(){public void write(int value){}public void write(byte[] bytes,int offset,int length){sink.accept(java.util.Arrays.copyOfRange(bytes,offset,offset+length));}};
+      this.sink=output;
       int sourceId=record.getAudioSessionId();writer=new Thread(()->write(output,sourceId),"chengcheng-cloud-mic");writer.setDaemon(true);writer.start();return true;
     }catch(Exception error){stop();failed.accept("麦克风不可用");return false;}
   }
@@ -68,6 +74,8 @@ final class VoiceAsrSource {
     if(record!=null){try{record.stop();}catch(IllegalStateException ignored){}record.release();}
     Thread active=writer;writer=null;
     if(active!=null)active.interrupt();
+    if(readEnd!=null){try{readEnd.close();}catch(Exception ignored){}readEnd=null;}
+    OutputStream output=sink;sink=null;if(output!=null)try{output.close();}catch(Exception ignored){}
   }
 
   private synchronized boolean running(){return running;}
@@ -82,6 +90,7 @@ final class VoiceAsrSource {
       vad=null;
     }
     try(OutputStream output=destination){
+      for(byte[] chunk:prefix){if(!running())return;output.write(chunk);}prefix=java.util.Collections.emptyList();
       short[] pcm=new short[512];float[] samples=new float[512];int debugFrames=0;double debugMaxRms=0;
       while(running()){
         AudioRecord record=record();if(record==null)return;

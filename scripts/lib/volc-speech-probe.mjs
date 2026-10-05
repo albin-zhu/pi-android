@@ -59,6 +59,8 @@ export function probeAuth(apiKey,service,options = {}) {
 }
 
 export function synthesizeSample(apiKey,voice,options = {}) {
+  const text=options.text??SAMPLE_TEXT;
+  if(typeof text!=='string'||!text.trim()||text.length>512)throw diagnosticError('text_limit');
   const sessionId = randomUUID(), chunks = [];
   let firstAudio, firstText, opened, bytes = 0, sessionStarted = false;
   return exchange({...options, service:'tts', apiKey,
@@ -71,7 +73,7 @@ export function synthesizeSample(apiKey,voice,options = {}) {
       } else if (m.id === sessionId && m.event === 150 && !sessionStarted) {
         sessionStarted = true;
         // Deliberately send multiple fragments, not one request per sentence.
-        const parts = [...SAMPLE_TEXT.matchAll(/.{1,8}/gu)].map(match => match[0]);
+        const parts = [...text.matchAll(/.{1,8}/gu)].map(match => match[0]);
         const sendNext = () => {
           if (!active()) return;
           try {
@@ -91,7 +93,7 @@ export function synthesizeSample(apiKey,voice,options = {}) {
       } else if (m.id === sessionId && m.event === 152) {
         if (!bytes) { finish(diagnosticError('empty_audio')); return; }
         finish(null,{pcm:Buffer.concat(chunks),metrics:{ok:true,name:voice.name,label:voice.label,speaker:voice.speaker,
-          sampleRate:16000,text:SAMPLE_TEXT,connectMs:Math.round(opened-started),
+          sampleRate:16000,text,connectMs:Math.round(opened-started),
           firstAudioFromConnectMs:Math.round(firstAudio-started),firstAudioFromTextMs:Math.round(firstAudio-firstText),
           totalMs:Math.round(performance.now()-started),audioDurationMs:Math.round(bytes/32)}});
       }

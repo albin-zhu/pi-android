@@ -7,6 +7,8 @@ import android.os.Bundle;
 /** ADB-only smoke test: start the opt-in wake service from the application UID. */
 public final class WakeInstrumentation extends Instrumentation {
   @Override public void onCreate(Bundle arguments){
+    if((!android.os.Build.HARDWARE.contains("ranchu")&&!android.os.Build.HARDWARE.contains("goldfish"))||arguments==null||!"true".equals(arguments.getString("mic"))){Bundle result=new Bundle();result.putString("failure","Emulator only; explicit -e mic true is required for microphone diagnostics");finish(0,result);return;}
+    PiRuntime.testMode=true;
     new Thread(()->{
       Bundle result=new Bundle();Context context=getTargetContext();
       try{
