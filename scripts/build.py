@@ -102,6 +102,7 @@ def main():
             (native/name).write_bytes(z.read('jni/arm64-v8a/'+name))
     ndk=SDK/'ndk/28.0.13004108/toolchains/llvm/prebuilt/darwin-x86_64'
     run(ndk/'bin/aarch64-linux-android30-clang++','-std=c++17','-fPIC','-shared',ROOT/'native/bridge.cpp','-L'+str(native),'-lnode','-llog','-Wl,-z,max-page-size=16384','-Wl,-soname,libzfold.so','-o',native/'libzfold.so')
+    run(ndk/'bin/aarch64-linux-android30-clang','-std=c11','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-fPIE','-pie',ROOT/'native/package_cli.c','-Wl,-z,max-page-size=16384','-o',native/'libzfold_pkg.so')
     shutil.copy2(ndk/'sysroot/usr/lib/aarch64-linux-android/libc++_shared.so',native/'libc++_shared.so')
     run('npm','run','bundle')
     channelAsset=BUILD/'assets/runtime/runtime-channel.json';channelAsset.parent.mkdir(parents=True,exist_ok=True)

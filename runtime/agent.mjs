@@ -47,16 +47,17 @@ const phoneSkillPath = path.join(path.dirname(process.argv[1]), 'phone-control.S
 const skillCreatorPath = path.join(path.dirname(process.argv[1]), 'skill-creator.SKILL.md');
 const nativeLibDir = process.env.ZFOLD_NATIVE_LIB_DIR || '';
 const runtimeDir=path.dirname(process.argv[1]);
+const builtinBinDir=path.join(runtimeDir,'bin');
 const toolsDir=path.join(runtimeDir,'tools');
 const packageBinDir=path.join(runtimeDir,'pkg','usr','bin');
 let runtimeChannel={channel:'modern',targetSdk:35,writableExec:false};
 try{const value=JSON.parse(fs.readFileSync(path.join(path.dirname(process.argv[1]),'runtime-channel.json'),'utf8'));if(value&&(value.channel==='modern'||value.channel==='compat28'))runtimeChannel=value;}catch{}
 const compatExec=runtimeChannel.channel==='compat28'&&runtimeChannel.targetSdk===28&&runtimeChannel.writableExec===true;
 const runtimePackBinDir=path.join(runtimeDir,compatExec?'runtime-exec-test':'exec','usr','bin');
-const execPaths=[toolsDir,packageBinDir,runtimePackBinDir,'/system/bin','/system/xbin','/vendor/bin'].join(':');
+const execPaths=[builtinBinDir,toolsDir,packageBinDir,runtimePackBinDir,'/system/bin','/system/xbin','/vendor/bin'].join(':');
 const runtimeExecDir=path.join(path.dirname(process.argv[1]),compatExec?'runtime-exec-test':'exec');
 const packageRootDir=path.join(path.dirname(process.argv[1]),'pkg');
-const commandDirectories=[toolsDir,packageBinDir,runtimePackBinDir];
+const commandDirectories=[builtinBinDir,toolsDir,packageBinDir,runtimePackBinDir];
 let initialEnvironment={HOME:root,TMPDIR:path.join(root,'.tmp'),PATH:execPaths};
 if(process.platform==='android')try{initialEnvironment=JSON.parse(fs.readFileSync(path.join(runtimeDir,'environment.json'),'utf8'));}catch{}
 const currentEnvironment=signal=>process.platform==='android'?android('runtime_environment',{},signal):Promise.resolve(initialEnvironment);

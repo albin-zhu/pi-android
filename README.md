@@ -10,6 +10,13 @@
 
 以下版本条目是历史交付记录；实际能力与未完成项结合“明确的当前边界”、核对清单及 VERIFICATION.md 阅读。
 
+### 0.2.73 终端 pkg 与工作台共用包管理
+
+- 终端的 `pkg install [-y] 包名...` 直接使用应用内包管理器；支持 `search`、`list` / `list-installed`、`list-all`、`update` 和 `remove` / `uninstall`。安装进度、失败退出码和 Ctrl+C 取消回传终端。
+- 内置命令在 PATH 中优先于 Termux 的同名脚本，终端、Agent 工具与工作台共享安装记录和包管理锁。无需为这个命令另行安装 apt/dpkg 或配置 apt 源；`update` 刷新索引，`install` 可升级指定包。
+- 命令通过校验双方 app UID 的本机 Unix socket 访问包管理器，无模型调用、HTTP 端口或 ADB 依赖。连接中断取消后续安装；已开始替换的单个包完成收尾再停止。
+- 直接调用 Termux `apt/dpkg` 的硬编码路径兼容不在本次支持范围。此修复没有完成策划中的 UI/语音收敛、唤醒或视频功能。验收与实际安装状态见 VERIFICATION.md。
+
 ### 0.2.72 手势与返回导航
 
 - 聊天区域右滑展开会话列表，列表左滑收回；拖动跟手，支持中途反向、取消和关闭动画。侧栏留在当前系统窗口内。
@@ -470,7 +477,7 @@ adb reverse --remove tcp:18868
 
 ## 明确的当前边界
 
-以 0.2.72 为基线；后续产品目标见 PRODUCT_PLAN.md，源码核对见 PRODUCT_AUDIT.md。
+以 0.2.73 为当前代码版本；PRODUCT_AUDIT.md 保留 0.2.72 的系统核对基线，后续产品目标见 PRODUCT_PLAN.md。
 
 - 本机 Pi/Node 主运行时仍与 UI 在同一 app 进程。已有会话持久化、工具心跳和取消，不等于独立 supervisor、全天候后台或进程死亡后的完整任务恢复。
 - 已有真实 PTY、共享执行环境、包管理和 MCP 客户端。MCP 的网络/stdio 连接、认证与工具调用已实现；对外提供手机 MCP server 是另一项后续能力。

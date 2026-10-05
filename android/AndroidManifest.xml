@@ -49,6 +49,7 @@
    <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-started local interactive terminal sessions" />
  </service>
  </application>
+ <instrumentation android:name=".PackageCliInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold package CLI check (emulator only)" />
  <instrumentation android:name=".SmokeInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold native Pi integration check" />
  <instrumentation android:name=".ToolUiInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold tool timeline check" />
  <instrumentation android:name=".JevInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold live Jev acceptance" />

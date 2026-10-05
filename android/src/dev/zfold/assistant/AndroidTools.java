@@ -105,7 +105,7 @@ public final class AndroidTools {
         String canonical=executable.getCanonicalPath();
         boolean trustedCache=canonical.startsWith(cache.getPath()+File.separator),trustedPackage=canonical.startsWith(pkgRoot.getPath()+File.separator);
         boolean trustedTools=canonical.startsWith(toolsRoot.getPath()+File.separator);
-        if(!trustedCache&&!trustedPackage&&!trustedTools)throw new Exception("只能执行 Runtime Pack、用户软件包或 tool_install 安装的私有工具");
+        if(!trustedCache&&!trustedPackage&&!trustedTools&&!PackageCliServer.isClient(context,executable))throw new Exception("只能执行内置 pkg、Runtime Pack、用户软件包或 tool_install 安装的私有工具");
         ProcessBuilder builder=new ProcessBuilder(command).redirectErrorStream(false);
         File cwd=RuntimeEnvironment.workingDirectory(context,args.optString("cwd",null));
         builder.directory(cwd);
@@ -131,7 +131,7 @@ public final class AndroidTools {
           File executable=new File(command.get(0));
           String canonical=executable.getCanonicalPath();
           boolean trusted=canonical.startsWith(cache.getPath()+File.separator)||canonical.startsWith(pkgRoot.getPath()+File.separator)||canonical.startsWith(toolsRoot.getPath()+File.separator);
-          if(!trusted)throw new Exception("PTY 只能执行 Runtime Pack、用户软件包或 tool_install 安装的私有工具");
+          if(!trusted&&!PackageCliServer.isClient(context,executable))throw new Exception("PTY 只能执行内置 pkg、Runtime Pack、用户软件包或 tool_install 安装的私有工具");
           File cwd=RuntimeEnvironment.workingDirectory(context,args.optString("cwd",null));
           String cwdPath=cwd.getCanonicalPath();
           ProcessBuilder environmentSource=new ProcessBuilder("true");

@@ -689,3 +689,31 @@
 真机 SM_F9660 重新连接后，已用 `adb install --no-incremental -r` 覆盖安装 0.2.72-compat28（versionCode 272），数据保留。真机普通聊天区域右滑展开、返回收起已直接操作并查看截图；过程中折叠屏从外屏 1080×2520 切换到内屏 1968×2184，侧栏跟随窗口重新布局。未在真机运行测试 instrumentation、替换认证、发送测试消息或清除会话。相关真机截图仅存本地忽略的 artifacts 目录。
 
 最终 APK：`artifacts/Zfold-0.2.72-compat28-debug.apk`。SHA-256：`d20a68b95c7c8e1c6820e9a95a1b87e04876dc3ef56b9cd788949198282a1bd1`。
+
+## 0.2.73 终端 pkg 安装入口（2026-10-05）
+
+### 问题与修改
+
+ADB 截图显示手机内 Agent 曾补装 apt/dpkg 和源配置，但仍提示终端不可直接使用 pkg。只读核对确认终端命中 Termux 的 pkg 脚本；真机 `apt --version` 返回 100，并访问 `/data/data/com.termux/files/usr/etc/apt/apt.conf.d/`，报 `Unable to determine a suitable packaging system type`。这与工作台直接使用 PiPackageManager 是两条不同链路。
+
+0.2.73 在 APK 中提供原生 pkg 客户端，`runtime/bin/pkg` 优先于软件包目录中的同名脚本。CLI 经同 UID Unix socket 交给 PiPackageManager，复用安装记录、依赖解析、下载校验与锁；安装进度、退出码和取消传回终端。没有模型请求，也不依赖 apt/dpkg。请求头读取有期限，执行期间只将实际断连接视为取消，避免长下载被读超时误停；发送超时单独限制。
+
+### 已验证
+
+- compat28 APK 构建、原生 C 编译（含警告视为错误）、D8、签名验证通过。
+- Node 的 command-environment、native-tools、pty 共 8 项测试通过。
+- Android 16 arm64 模拟器：新 PackageCliInstrumentation 在独立临时目录运行；设备守卫位于任何 fixture 创建/修改之前。结果 `INSTRUMENTATION_CODE=-1`。
+- 模拟器真实 PTY 中执行 `pkg install -y tree`，从官方仓库下载目标与依赖，再执行 `tree --version` 成功，版本 2.3.2。重复安装识别为已安装，CLI 与 PiPackageManager 的 installed.json 一致；移除也同步记录。
+- 无网络索引时 `pkg list` 可用且没有创建索引；帮助、非法包名、不支持的命令、找不到的包返回正确结果/非零退出码。
+- Agent 的 runtime_exec 能执行同一个 APK 内置 pkg 客户端。断开正在等包管理锁的安装客户端后，解锁不会继续安装该包。
+- 真机 SM_F9660：确认两个 Bash 进程等待输入、没有外部命令在执行后，以保留数据方式覆盖安装。系统报告 `0.2.73-compat28 / 273 / targetSdk 28`。
+- 真机当前环境下 `command -v pkg` 返回 `/data/user/0/dev.zfold.assistant/files/runtime/bin/pkg`；`pkg install bash` 返回 `bash 5.3.20 已安装`，`pkg search ripgrep` 正常。更新前后的 installed.json SHA-256 一致，保留原有 92 个软件包。
+- 从真机主页面经工作台打开终端，实际键入 `pkg install bash`；屏幕显示成功结果并回到 Shell 提示符。未在真机运行 fixture、测试模型或新增/删除测试包。
+
+证据保存在本地忽略的 `artifacts/pkg-install-diagnosis/`：初始截图、最终终端截图、构建日志、8 项 Node 结果、模拟器 instrumentation 结果、真机命令与库存比对记录。
+
+### 边界
+
+真机验证为既有包的幂等安装和仓库搜索；首次下载、安装与执行由隔离的模拟器验证。直接执行 Termux apt/dpkg 的路径重定位、本机包管理的完整事务恢复、modern 通道安装与本轮产品策划中的 UI/语音/视频迁移，不因本次通过而视为完成。应用更新重启了空闲终端，已有安装记录与会话数据保留。
+
+APK：`artifacts/Zfold-0.2.73-compat28-debug.apk`。SHA-256：`27718863a32f6e98a0fb4cafde6898b9abe01fe185a40e5c487e1642d0659a30`。

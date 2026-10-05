@@ -8,13 +8,14 @@ import org.json.*;
 
 /** Shared command environment for the Agent, one-shot processes and PTYs. */
 final class RuntimeEnvironment {
-  private static final Set<String> COMMON=new HashSet<>(Arrays.asList("HOME","TMPDIR","PATH","PREFIX","TERMINFO","TERM","LD_LIBRARY_PATH"));
+  private static final Set<String> COMMON=new HashSet<>(Arrays.asList("HOME","TMPDIR","PATH","PREFIX","TERMINFO","TERM","LD_LIBRARY_PATH","ZFOLD_PKG_SOCKET"));
   static JSONObject base(Context context)throws IOException{
     File runtime=new File(context.getFilesDir(),"runtime"),pkg=PiPackageManager.root(context),pack=PiRuntimePacks.cache(context);
     File home=new File(pkg,"home"),tmp=new File(pkg,"tmp");
     if((!home.isDirectory()&&!home.mkdirs())||(!tmp.isDirectory()&&!tmp.mkdirs()))throw new IOException("无法创建运行环境目录");
     JSONObject value=PiRuntime.json("HOME",home.getCanonicalPath(),"TMPDIR",tmp.getCanonicalPath(),
-      "PATH",new File(runtime,"tools").getPath()+":"+new File(pkg,"usr/bin").getPath()+":"+new File(pack,"usr/bin").getPath()+":/system/bin:/system/xbin:/vendor/bin",
+      "PATH",new File(runtime,"bin").getPath()+":"+new File(runtime,"tools").getPath()+":"+new File(pkg,"usr/bin").getPath()+":"+new File(pack,"usr/bin").getPath()+":/system/bin:/system/xbin:/vendor/bin",
+      "ZFOLD_PKG_SOCKET",PackageCliServer.ensure(context),
       "PREFIX",new File(pkg,"usr").getPath(),"TERMINFO",new File(pkg,"usr/share/terminfo").getPath(),"TERM","xterm-256color",
       "LD_LIBRARY_PATH",new File(pkg,"usr/lib").getPath()+":"+new File(pack,"usr/lib").getPath());
     // Relocated CLI resources must follow the app prefix, not /data/data/com.termux.

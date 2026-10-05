@@ -33,12 +33,14 @@ public final class PiPackageManager {
   private static File cacheDir(Context context){return new File(root(context),"cache");}
 
   public static synchronized JSONObject status(Context context,boolean refresh)throws Exception {
+    NativeToolExecution.checkpoint();
     JSONObject state=installed(context);
     JSONArray available=refresh?packageArray(refreshIndex(context)):packageArray(readIndex(context));
     return PiRuntime.json("root",root(context).getPath(),"state",state,"packages",available);
   }
 
   public static synchronized JSONObject search(Context context,String query,boolean refresh)throws Exception {
+    NativeToolExecution.checkpoint();
     if(refresh)refreshIndex(context);
     String q=query==null?"":query.trim().toLowerCase(Locale.ROOT);
     JSONArray all=packageArray(readIndex(context)),out=new JSONArray();
@@ -80,6 +82,7 @@ public final class PiPackageManager {
   }
 
   public static synchronized JSONObject remove(Context context,String name)throws Exception {
+    NativeToolExecution.checkpoint();
     JSONObject state=installed(context),record=state.optJSONObject(name);
     if(record==null)return PiRuntime.json("name",name,"alreadyInstalled",false,"state",state);
     for(java.util.Iterator<String> it=state.keys();it.hasNext();) {
