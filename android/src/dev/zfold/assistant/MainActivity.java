@@ -22,11 +22,11 @@ import java.util.*;
 public final class MainActivity extends Activity implements PiRuntime.Listener {
   static final int BG=Color.rgb(245,246,247), INK=Color.rgb(16,20,24), MUTED=Color.rgb(95,107,120), ACCENT=Color.rgb(47,111,237), LINE=Color.rgb(226,230,234);
   static volatile MainActivity current;
-  PiRuntime runtime; LinearLayout conversation,root,intro,draftAttachment,fileList,composerSurface,statusRow,actionToolbar; android.view.View slashSuggest; FrameLayout composerFrame;ConversationMinimap.Scroll scroll;ConversationMinimap minimap; TextView status,draftLabel,appTitle; Ui.RichBlock answer; Ui.Action voiceButton,modelButton,circleButton,attachButton,screenShareButton,sendButton,sessionButton,overflowButton; EditText input; ImageView draftThumbnail,draftExpanded; Bitmap draftBitmap; Ui.Theme theme;
-  StringBuilder response=new StringBuilder(); boolean continuous,compactHeader,screenSharing,capturingScreen,composerCompact,screenWindowPending;
+  PiRuntime runtime; LinearLayout conversation,root,intro,draftAttachment,fileList,composerSurface,statusRow,actionToolbar; android.view.View slashSuggest; FrameLayout composerFrame;ConversationMinimap.Scroll scroll;ConversationMinimap minimap; TextView status,draftLabel; Ui.RichBlock answer; Ui.Action voiceButton,modelButton,circleButton,attachButton,screenShareButton,sendButton,sessionButton,overflowButton; EditText input; ImageView draftThumbnail,draftExpanded; Bitmap draftBitmap; Ui.Theme theme;
+  StringBuilder response=new StringBuilder(); boolean continuous,screenSharing,capturingScreen,composerCompact,screenWindowPending;
   final Runnable screenListener=()->{screenSharing=ScreenContext.enabled();updateScreenShareControl();};
   private boolean returnWorkbench,temporarySettingsHost,smallWindow,windowLayoutApplied;
-  LinearLayout navigation,inputRow; Ui.Action workbenchButton; View welcomeMark,suggestions; TextView welcomeTitle,welcomeDescription; ScrollView attachmentScroll;
+  LinearLayout inputRow; Ui.Action workbenchButton; View welcomeMark,suggestions; TextView welcomeTitle,welcomeDescription; ScrollView attachmentScroll;
   private android.graphics.Insets windowBars=android.graphics.Insets.NONE,windowIme=android.graphics.Insets.NONE;
   private int toolbarWidth=-1;private float toolbarFontScale=-1;private boolean toolbarSmall;
   SwipeNavigationLayout swipeNavigation;private Object backCallback;private ActionMode textSelection;
@@ -39,7 +39,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   String pendingTaskPrompt;
   final Map<String,ToolCallView> toolViews=new LinkedHashMap<>();
   @Override public void onCreate(Bundle state){
-    super.onCreate(state);returnWorkbench=getIntent().getBooleanExtra("return_workbench",false);temporarySettingsHost=returnWorkbench;theme=new Ui.Theme(this);compactHeader=getResources().getConfiguration().screenWidthDp<360;getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);
+    super.onCreate(state);returnWorkbench=getIntent().getBooleanExtra("return_workbench",false);temporarySettingsHost=returnWorkbench;theme=new Ui.Theme(this);getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);
     getWindow().getDecorView().setSystemUiVisibility(theme.dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     current=this;
     runtime=PiRuntime.get(this);runtime.listen(this);
@@ -78,7 +78,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     else if(label.contains("语音")){icon=R.drawable.ic_microphone;visible="说话";}
     else if(label.contains("圈选")){icon=R.drawable.ic_corners_out;visible="圈选";}
     else if(label.contains("停止")){icon=R.drawable.ic_stop;visible="停止";}
-    else if(label.equals("会话")){icon=R.drawable.ic_sidebar;visible=compactHeader?"":"会话";}
+    else if(label.equals("会话")){icon=R.drawable.ic_sidebar;visible="会话";}
     else if(label.equals("模型")||label.equals("手机能力")){icon=label.equals("模型")?R.drawable.ic_gear_six:R.drawable.ic_arrows_out_simple;visible="";}
     else visible=label.replace("↗  ","");
     boolean chrome=label.equals("会话")||label.equals("模型")||label.equals("手机能力");
@@ -87,10 +87,6 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   void buildUI(){
     root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(theme.page);root.setPadding(dp(12),0,dp(12),dp(10));
     root.setOnApplyWindowInsetsListener((view,insets)->{windowBars=insets.getInsets(WindowInsets.Type.systemBars());windowIme=insets.getInsets(WindowInsets.Type.ime());applyWindowPadding();return insets;});
-    navigation=new LinearLayout(this);navigation.setGravity(Gravity.CENTER_VERTICAL);navigation.setPadding(dp(2),dp(5),0,dp(5));
-    TextView name=text(runtime.agentName,20,theme.ink);appTitle=name;name.setTypeface(Typeface.create("sans-serif-medium",0));name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);navigation.addView(name,new LinearLayout.LayoutParams(0,-2,1));
-    navigation.addView(new Ui.Action(this,R.drawable.ic_sidebar,"","会话",theme.muted,Color.TRANSPARENT,this::openSidebar),new LinearLayout.LayoutParams(dp(48),dp(48)));
-    workbenchButton=new Ui.Action(this,R.drawable.ic_workbench,"工作台","打开工作台",theme.ink,Color.TRANSPARENT,()->WorkbenchActivity.open(this));navigation.addView(workbenchButton);root.addView(navigation);
     scroll=new ConversationMinimap.Scroll(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.setClipToPadding(false);
     conversation=new LinearLayout(this);conversation.setOrientation(LinearLayout.VERTICAL);conversation.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(conversation);FrameLayout viewport=new FrameLayout(this);viewport.setMotionEventSplittingEnabled(false);viewport.addView(scroll,new FrameLayout.LayoutParams(-1,-1));minimap=new ConversationMinimap(this,scroll,conversation);viewport.addView(minimap,new FrameLayout.LayoutParams(dp(48),-1,Gravity.RIGHT));root.addView(viewport,new LinearLayout.LayoutParams(-1,0,1));
     intro=new LinearLayout(this);intro.setOrientation(LinearLayout.VERTICAL);intro.setGravity(Gravity.CENTER);intro.setPadding(dp(12),dp(34),dp(12),dp(30));
@@ -116,7 +112,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     statusRow=new LinearLayout(this);statusRow.setGravity(Gravity.CENTER_VERTICAL);statusRow.setPadding(dp(8),0,dp(8),dp(4));
     status=text(idleStatus(),11,theme.muted);status.setSingleLine(true);status.setEllipsize(android.text.TextUtils.TruncateAt.END);statusRow.addView(status,new LinearLayout.LayoutParams(0,-2,1));
     statusRow.setVisibility(View.GONE);
-    root.addView(statusRow,1,new LinearLayout.LayoutParams(-1,-2));
+    composerSurface.addView(statusRow,new LinearLayout.LayoutParams(-1,-2));
     inputRow=new LinearLayout(this);inputRow.setGravity(Gravity.CENTER_VERTICAL);composerSurface.addView(inputRow,new LinearLayout.LayoutParams(-1,-2));
     input=new EditText(this);input.setTextSize(16);input.setTextColor(theme.ink);input.setHintTextColor(theme.muted);input.setHint("说说你的想法…");input.setBackgroundColor(Color.TRANSPARENT);input.setMinLines(1);input.setMaxLines(5);input.setMinimumHeight(dp(48));input.setPadding(dp(11),dp(4),dp(11),dp(6));input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);input.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI|android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN);inputRow.addView(input,new LinearLayout.LayoutParams(0,-2,1));
     slashSuggest=SlashSuggest.attach(input,theme,this::runSlashCommand);composerSurface.addView(slashSuggest,new LinearLayout.LayoutParams(-1,-2));
@@ -128,6 +124,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     attachButton=new Ui.Action(this,R.drawable.ic_file,"文件","选择本地文件、图片、表格或媒体",theme.muted,Color.TRANSPARENT,this::pickFiles);LinearLayout.LayoutParams fileParams=new LinearLayout.LayoutParams(-2,-2);fileParams.leftMargin=dp(2);toolbar.addView(attachButton,fileParams);
     screenShareButton=new Ui.Action(this,R.drawable.ic_screen_share,"",screenSharing?"关闭共享屏幕":"开启共享屏幕聊天",theme.muted,Color.TRANSPARENT,this::toggleScreenShare);LinearLayout.LayoutParams shareParams=new LinearLayout.LayoutParams(-2,-2);shareParams.leftMargin=dp(2);toolbar.addView(screenShareButton,shareParams);
     overflowButton=new Ui.Action(this,R.drawable.ic_dots_three,"","更多工具",theme.muted,Color.TRANSPARENT,()->showToolbarOverflow());LinearLayout.LayoutParams overflowParams=new LinearLayout.LayoutParams(-2,-2);overflowParams.leftMargin=dp(2);toolbar.addView(overflowButton,overflowParams);
+    workbenchButton=new Ui.Action(this,R.drawable.ic_workbench,"工作台","打开工作台",theme.ink,Color.TRANSPARENT,()->WorkbenchActivity.open(this));
     View spacer=new View(this);toolbar.addView(spacer,new LinearLayout.LayoutParams(0,1,1));
     sendButton=button("↑",true,()->{if(runtime.busy)stop();else sendText(input.getText().toString());});sendButton.setBackground(Ui.ripple(this,theme.accent,26,theme.onAccent));sendButton.setElevation(0);toolbar.addView(sendButton,new LinearLayout.LayoutParams(dp(48),dp(48)));composerSurface.addView(toolbar);
     input.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence t,int a,int b,int c){}public void afterTextChanged(android.text.Editable e){}public void onTextChanged(CharSequence t,int a,int b,int c){updateSend();}});updateSend();
@@ -148,7 +145,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     int usableHeight=root.getHeight()-windowBars.top-Math.max(windowBars.bottom,windowIme.bottom);
     boolean small=root.getWidth()<dp(360)||usableHeight<dp(400);
     if(windowLayoutApplied&&smallWindow==small)return;windowLayoutApplied=true;smallWindow=small;
-    applyWindowPadding();navigation.setPadding(dp(2),small?0:dp(5),0,small?0:dp(5));appTitle.setTextSize(small?16:20);workbenchButton.setCompact(small);
+    applyWindowPadding();
     composerSurface.setPadding(dp(small?4:10),dp(small?4:8),dp(small?4:10),dp(small?4:8));
     input.setMaxLines(small?2:5);input.setTextSize(small?15:16);input.setPadding(dp(small?4:11),dp(4),dp(small?4:11),dp(6));
     ((ViewGroup)sendButton.getParent()).removeView(sendButton);((ViewGroup)overflowButton.getParent()).removeView(overflowButton);
@@ -313,7 +310,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     switch(event.optString("type")){
       case "ready":showStatus(idleStatus());updateModelChip();break;
       case "configured":showStatus(idleStatus());updateModelChip();break;
-      case "agent_identity":if(appTitle!=null)appTitle.setText(runtime.agentName);runtime.send(PiRuntime.json("type","history"));break;
+      case "agent_identity":runtime.send(PiRuntime.json("type","history"));break;
       case "jev_status":break;
       case "jev_error":notice(event.optString("message"));break;
       case "session_changed":minimap.reset();conversation.removeAllViews();toolViews.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
@@ -361,12 +358,12 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     screenShareButton.setCompact(false);
     sendButton.setCompact(false);overflowButton.setCompact(true);
 
-    sessionButton.setVisibility(mode==0?View.VISIBLE:View.GONE);
+    sessionButton.setVisibility(View.GONE);
     circleButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
     attachButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
     screenShareButton.setVisibility(View.VISIBLE);
-    overflowButton.setVisibility(mode==0?View.GONE:View.VISIBLE);
-    overflowButton.setContentDescription("更多工具"+(mode>=3?"：会话、圈选、文件、共享":"：会话、共享"));
+    overflowButton.setVisibility(View.VISIBLE);
+    overflowButton.setContentDescription("更多工具：会话、工作台"+(mode>=2?"、圈选、文件":""));
     updateModelChip();updateScreenShareControl();
   }
   void showToolbarOverflow(){
@@ -377,7 +374,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     if(circleButton.getVisibility()==View.GONE)items.add(circleButton);
     if(attachButton.getVisibility()==View.GONE)items.add(attachButton);
     if(screenShareButton.getVisibility()==View.GONE)items.add(screenShareButton);
-    if(items.isEmpty())return;
+    items.add(workbenchButton);
     ToolbarOverflow.show(overflowButton,items);
   }
   void updateModelChip(){
