@@ -6,6 +6,7 @@ import android.content.Context;
 final class VoiceMiniOverlay {
   static boolean showing() {return UnifiedOverlay.showing(UnifiedOverlay.Mode.CALL);}
   static void showIfCallActive(Context context) {
+    if(SystemWindowNavigation.active())return;
     MainActivity main = MainActivity.current();
     boolean active = main != null ? main.voice.sessionActive() : VoiceCallActivity.hasLiveController();
     if (active) UnifiedOverlay.call(context, "实时通话进行中");

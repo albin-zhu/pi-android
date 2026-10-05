@@ -30,15 +30,16 @@ final class SessionPicker implements PiRuntime.Listener {
   SessionPicker(View anchor,PiRuntime runtime,Host host){
     this.anchor=anchor;this.runtime=runtime;Context context=anchor.getContext();theme=new Ui.Theme(context);
     this.host=host;
-    drawerWidth=Math.min(Ui.dp(context,310),context.getResources().getDisplayMetrics().widthPixels-Ui.dp(context,44));
+    boolean small=context.getResources().getConfiguration().screenWidthDp<360||context.getResources().getConfiguration().screenHeightDp<400;
+    drawerWidth=Math.min(Ui.dp(context,310),context.getResources().getDisplayMetrics().widthPixels-Ui.dp(context,small?0:44));
     frame=new FrameLayout(context);frame.setFocusableInTouchMode(true);frame.setOnKeyListener((v,key,event)->{if(key==KeyEvent.KEYCODE_BACK&&event.getAction()==KeyEvent.ACTION_UP){popup.dismiss();return true;}return key==KeyEvent.KEYCODE_BACK;});
     scrim=new View(context);scrim.setBackgroundColor(0x74000000);scrim.setContentDescription("关闭会话侧边栏");scrim.setClickable(true);frame.addView(scrim,new FrameLayout.LayoutParams(-1,-1));
     drawer=new LinearLayout(context);drawer.setOrientation(LinearLayout.VERTICAL);drawer.setBackgroundColor(theme.surface);drawer.setElevation(Ui.dp(context,16));drawer.setClickable(true);drawer.setContentDescription("会话侧边栏");
     FrameLayout.LayoutParams drawerParams=new FrameLayout.LayoutParams(drawerWidth,-1,Gravity.START);
     if(!(context instanceof MainActivity)){int statusId=context.getResources().getIdentifier("status_bar_height","dimen","android");drawerParams.topMargin=statusId>0?context.getResources().getDimensionPixelSize(statusId):Ui.dp(context,24);}
     frame.addView(drawer,drawerParams);
-    drawer.setPadding(Ui.dp(context,14),Ui.dp(context,18),Ui.dp(context,14),Ui.dp(context,16));
-    frame.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());drawer.setPadding(Ui.dp(context,14)+bars.left,Ui.dp(context,16)+bars.top,Ui.dp(context,14),Ui.dp(context,16)+bars.bottom);return insets;});
+    int inset=Ui.dp(context,small?4:16);drawer.setPadding(Ui.dp(context,14),inset,Ui.dp(context,14),inset);
+    frame.setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());drawer.setPadding(Ui.dp(context,14)+bars.left,inset+bars.top,Ui.dp(context,14),inset+bars.bottom);return insets;});
 
     LinearLayout brand=new LinearLayout(context);brand.setGravity(Gravity.CENTER_VERTICAL);brand.addView(Ui.agentMark(context,runtime.agentAvatar,Ui.dp(context,29)),new LinearLayout.LayoutParams(Ui.dp(context,29),Ui.dp(context,29)));
     TextView name=Ui.text(context,runtime.agentName,16,theme.ink);name.setTypeface(Typeface.create("sans-serif-medium",0));LinearLayout.LayoutParams nameParams=new LinearLayout.LayoutParams(0,-2,1);nameParams.leftMargin=Ui.dp(context,9);brand.addView(name,nameParams);
@@ -50,6 +51,7 @@ final class SessionPicker implements PiRuntime.Listener {
     View divider=new View(context);divider.setBackgroundColor(theme.line);LinearLayout.LayoutParams dividerParams=new LinearLayout.LayoutParams(-1,Ui.dp(context,1));dividerParams.setMargins(Ui.dp(context,8),Ui.dp(context,16),Ui.dp(context,8),Ui.dp(context,7));drawer.addView(divider,dividerParams);
     ScrollView scroll=new ScrollView(context);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);list=new LinearLayout(context);list.setOrientation(LinearLayout.VERTICAL);scroll.addView(list);drawer.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     footer=Ui.text(context,"会话仅保存在这台手机",11,theme.muted);footer.setPadding(Ui.dp(context,9),Ui.dp(context,13),0,0);drawer.addView(footer);
+    if(small){heading.setVisibility(View.GONE);toolsAction.setVisibility(View.GONE);actions.setVisibility(View.GONE);divider.setVisibility(View.GONE);footer.setVisibility(View.GONE);}
     popup=new PopupWindow(frame,-1,-1,true);popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));popup.setOutsideTouchable(true);popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);popup.setOnDismissListener(()->runtime.unlisten(this));
     scrim.setOnClickListener(v->popup.dismiss());
   }

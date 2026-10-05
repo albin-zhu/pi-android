@@ -131,7 +131,7 @@ public final class PhoneAccessibility extends AccessibilityService {
     for(AccessibilityWindowInfo window:getWindows()){
       if(window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION||window.getLayer()<layer)continue;
       AccessibilityNodeInfo root=window.getRoot();if(root==null)continue;
-      try{if(window.isActive()||window.isFocused())return String.valueOf(root.getPackageName());best=String.valueOf(root.getPackageName());layer=window.getLayer();}finally{root.recycle();}
+      try{String app=String.valueOf(root.getPackageName());if(app.equals(getPackageName()))continue;if(window.isActive()||window.isFocused())return app;best=app;layer=window.getLayer();}finally{root.recycle();}
     }
     return best;
   }

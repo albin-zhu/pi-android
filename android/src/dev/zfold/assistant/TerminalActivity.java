@@ -13,7 +13,7 @@ import com.termux.view.*;
 /** Real terminal surface: back detaches; ending a process is a named action. */
 public final class TerminalActivity extends Activity implements TerminalViewClient,TerminalSessions.Listener {
   private boolean fromOverlay;
-  static void open(Context context){boolean overlay=FloatingNavigation.suspend(context);context.startActivity(new Intent(context,TerminalActivity.class).putExtra("from_overlay",overlay).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
+  static void open(Context context){boolean overlay=FloatingNavigation.suspend(context);SystemWindowNavigation.open(context,TerminalActivity.class,overlay);}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.hasExtra("from_overlay"))fromOverlay=intent.getBooleanExtra("from_overlay",false);}
   private TerminalSessions sessions;private TerminalSessions.Job current;
   private TerminalView terminal;private TextView title,status,control;private boolean ctrl;
@@ -114,7 +114,7 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   @Override public void changed(TerminalSessions.Job job){if(isFinishing()||job!=current)return;title.setText(job.session.getTitle()==null||job.session.getTitle().isBlank()?job.name:job.session.getTitle());status.setText(installing?"正在安装 Bash…":job.status+(job.cwd.isEmpty()?"":" · "+job.cwd.replace(PiRuntime.agentRoot(this).getPath(),"项目")));updateChrome();terminal.onScreenUpdated();}
   @Override public void paste(TerminalSessions.Job job){ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(clipboard.hasPrimaryClip()&&clipboard.getPrimaryClip().getItemCount()>0&&job.session.getEmulator()!=null)job.session.getEmulator().paste(clipboard.getPrimaryClip().getItemAt(0).coerceToText(this).toString());}
   @Override protected void onResume(){super.onResume();if(sessions!=null)sessions.observe(this);if(terminal!=null)terminal.setTerminalCursorBlinkerState(true,true);}
-  @Override protected void onPause(){if(terminal!=null)terminal.setTerminalCursorBlinkerState(false,false);super.onPause();}
+  @Override protected void onPause(){SystemWindowNavigation.remember(this);if(terminal!=null)terminal.setTerminalCursorBlinkerState(false,false);super.onPause();}
   @Override protected void onDestroy(){if(sessions!=null)sessions.detach(this);if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
   @Override public void onBackPressed(){finish();}
   public float onScale(float scale){if(scale>1.1f){changeFont(1);return 1;}if(scale<.9f){changeFont(-1);return 1;}return scale;}

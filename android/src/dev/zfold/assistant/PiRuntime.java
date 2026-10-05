@@ -184,7 +184,7 @@ public final class PiRuntime {
         if(phoneAction){
           handoff=AssistantSessionService.handoffToBubble(context);
           if(!handoff)handoff=AssistantOverlay.minimizeForPhoneControl(context);
-          if(name.equals("app_open")&&!callVisible)CircleOverlay.ensureBubble(context);
+          if(name.equals("app_open")&&!callVisible&&!SystemWindowNavigation.active())CircleOverlay.ensureBubble(context);
         }
         Runnable execute=()->{
           if(stopped&&!event.isNull("turnId")){toolResult(event.optString("id"),null,"操作已停止");return;}

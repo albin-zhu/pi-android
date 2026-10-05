@@ -37,7 +37,7 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
   private long startedAt;
   private static volatile boolean controllerSession,controllerSpeaking;
 
-  static void show(Context context){context.startActivity(new Intent(context,VoiceCallActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));}
+  static void show(Context context){SystemWindowNavigation.open(context,VoiceCallActivity.class,false);}
   static void onControllerStatus(String text){VoiceMiniOverlay.status(text);VoiceCallActivity target=active;if(target!=null)target.main.post(()->target.setStateText(text));}
   static void onControllerState(boolean session,boolean speaking){controllerSession=session;controllerSpeaking=speaking;VoiceMiniOverlay.state(session,speaking);VoiceCallActivity target=active;if(target!=null)target.main.post(()->{target.session=session;target.speaking=speaking;target.orb.setState(!session?"ended":speaking?"speaking":"listening");});}
   static void onPrompt(String text){VoiceMiniOverlay.status("正在处理你的话");VoiceCallActivity target=active;if(target!=null)target.main.post(()->target.setStateText("正在处理你的话"));}
@@ -48,10 +48,11 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
 
   @Override protected void onCreate(Bundle state){
     super.onCreate(state);runtime=PiRuntime.get(getApplicationContext());theme=new Ui.Theme(this);active=this;
-    getWindow().setStatusBarColor(0xff070b12);getWindow().setNavigationBarColor(0xff070b12);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+    getWindow().setStatusBarColor(0xff070b12);getWindow().setNavigationBarColor(0xff070b12);getWindow().getDecorView().setSystemUiVisibility(0);
     CircleOverlay.hideBubble();
     LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(0xff070b12);root.setKeepScreenOn(true);
-    root.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());root.setPadding(bars.left,bars.top+Ui.dp(this,18),bars.right,bars.bottom+Ui.dp(this,16));return insets;});
+    getWindow().setDecorFitsSystemWindows(false);
+    root.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());root.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});
 
     LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.VERTICAL);top.setGravity(Gravity.CENTER_HORIZONTAL);top.setPadding(Ui.dp(this,24),Ui.dp(this,16),Ui.dp(this,24),0);
     orb=new CallOrb(this);
@@ -63,7 +64,7 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     liveText=Ui.text(this,"",14,0xff9db0c7);liveText.setLineSpacing(Ui.dp(this,3),1f);liveText.setGravity(Gravity.CENTER);liveText.setMaxLines(3);liveText.setEllipsize(android.text.TextUtils.TruncateAt.END);LinearLayout.LayoutParams liveParams=new LinearLayout.LayoutParams(-1,-2);liveParams.topMargin=Ui.dp(this,10);top.addView(liveText,liveParams);
     TextView name=Ui.text(this,runtime.agentName,22,0xffeef4ff);name.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));name.setGravity(Gravity.CENTER);LinearLayout.LayoutParams nameParams=new LinearLayout.LayoutParams(-1,-2);nameParams.topMargin=Ui.dp(this,20);top.addView(name,nameParams);
     stateText=Ui.text(this,"正在准备实时通话…",14,0xff9db0c7);stateText.setGravity(Gravity.CENTER);LinearLayout.LayoutParams stateParams=new LinearLayout.LayoutParams(-1,-2);stateParams.topMargin=Ui.dp(this,7);top.addView(stateText,stateParams);
-    root.addView(top,new LinearLayout.LayoutParams(-1,-2));
+    ScrollView callScroll=new ScrollView(this);callScroll.setFillViewport(true);callScroll.addView(top);root.addView(callScroll,new LinearLayout.LayoutParams(-1,0,1));
 
     LinearLayout controls=new LinearLayout(this);controls.setGravity(Gravity.CENTER);controls.setPadding(0,Ui.dp(this,8),0,0);
     controls.addView(callAction(R.drawable.ic_chat_circle_text,"转文字","切换到文字对话",0xff223047,()->{startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}),new LinearLayout.LayoutParams(Ui.dp(this,72),Ui.dp(this,72)));
@@ -71,6 +72,18 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     controls.addView(callAction(R.drawable.ic_x,"","结束实时通话",0xffff4553,this::endCall),endParams);
     controls.addView(callAction(R.drawable.ic_microphone,"","打断播报/重新收听",0xff223047,this::tapMicrophone),new LinearLayout.LayoutParams(Ui.dp(this,72),Ui.dp(this,72)));
     root.addView(controls,new LinearLayout.LayoutParams(-1,-2));
+    final boolean[] applied={false},compact={false};
+    Runnable adapt=()->{
+      if(root.getWidth()==0)return;boolean small=root.getWidth()<Ui.dp(this,360)||root.getHeight()-root.getPaddingTop()-root.getPaddingBottom()<Ui.dp(this,440);
+      if(applied[0]&&compact[0]==small)return;applied[0]=true;compact[0]=small;
+      top.setPadding(Ui.dp(this,small?8:24),Ui.dp(this,small?6:24),Ui.dp(this,small?8:24),Ui.dp(this,8));top.setGravity(Gravity.CENTER);
+      int diameter=Ui.dp(this,small?80:228);orb.setLayoutParams(new LinearLayout.LayoutParams(diameter,diameter));liveText.setVisibility(small?View.GONE:View.VISIBLE);
+      name.setTextSize(small?16:22);LinearLayout.LayoutParams np=(LinearLayout.LayoutParams)name.getLayoutParams();np.topMargin=Ui.dp(this,small?4:20);name.setLayoutParams(np);
+      stateText.setTextSize(small?12:14);stateText.setMaxLines(2);stateText.setEllipsize(android.text.TextUtils.TruncateAt.END);
+      controls.setPadding(0,Ui.dp(this,4),0,Ui.dp(this,small?6:16));
+      for(int i=0;i<controls.getChildCount();i++){int size=Ui.dp(this,small?48:i==1?84:72);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(size,size);if(i==1){lp.leftMargin=Ui.dp(this,small?12:24);lp.rightMargin=lp.leftMargin;}controls.getChildAt(i).setLayoutParams(lp);}
+    };
+    root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->adapt.run());root.post(adapt);
     setContentView(root);
     runtime.listen(this);
     VoiceMiniOverlay.hide();
@@ -106,7 +119,7 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
 
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);}
   @Override protected void onResume(){super.onResume();active=this;foreground=true;VoiceMiniOverlay.hide();}
-  @Override protected void onPause(){super.onPause();if(active==this)foreground=false;if(!isFinishing())VoiceMiniOverlay.showIfCallActive(this);}
+  @Override protected void onPause(){SystemWindowNavigation.remember(this);super.onPause();if(active==this)foreground=false;if(!isFinishing())VoiceMiniOverlay.showIfCallActive(this);}
   @Override protected void onDestroy(){if(active==this)active=null;runtime.unlisten(this);super.onDestroy();}
   @Override public void onBackPressed(){startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}
 

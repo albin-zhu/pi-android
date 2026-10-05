@@ -15,25 +15,25 @@ public final class WorkbenchActivity extends Activity implements PiRuntime.Liste
   private static WorkbenchActivity active;
   static void capabilitiesChanged(){if(active!=null)active.render();}
   private PiRuntime runtime;private Ui.Theme theme;private LinearLayout content;private TextView status;
-  private boolean fromOverlay,pendingFloating;private Runnable pendingAction;
+  private boolean fromOverlay;private Runnable pendingAction;
   static void open(Context context){
     boolean overlay=FloatingNavigation.suspend(context);
-    context.startActivity(new Intent(context,WorkbenchActivity.class).putExtra("from_overlay",overlay).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    SystemWindowNavigation.open(context,WorkbenchActivity.class,overlay);
   }
-  static void returnFromSettings(Context context){context.startActivity(new Intent(context,WorkbenchActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));}
+  static void returnFromSettings(Context context){SystemWindowNavigation.open(context,WorkbenchActivity.class,false);}
   @Override protected void onCreate(Bundle saved){super.onCreate(saved);fromOverlay=getIntent().getBooleanExtra("from_overlay",false);theme=new Ui.Theme(this);runtime=PiRuntime.get(this);build();runtime.listen(this);}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.hasExtra("from_overlay"))fromOverlay=intent.getBooleanExtra("from_overlay",false);}
-  @Override protected void onResume(){super.onResume();active=this;if(content!=null)render();if(pendingFloating){pendingFloating=false;if(PhoneAccessibility.instance!=null||Settings.canDrawOverlays(this))floating();}}
-  @Override protected void onPause(){if(active==this)active=null;pendingAction=null;super.onPause();}
+  @Override protected void onResume(){super.onResume();active=this;if(content!=null)render();}
+  @Override protected void onPause(){SystemWindowNavigation.remember(this);if(active==this)active=null;pendingAction=null;super.onPause();}
   @Override protected void onDestroy(){if(runtime!=null)runtime.unlisten(this);if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
-  @Override public void onBackPressed(){finishAndRemoveTask();}
+  @Override public void onBackPressed(){finish();}
   private void build(){
     getWindow().setDecorFitsSystemWindows(false);getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);getWindow().getDecorView().setSystemUiVisibility(theme.dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(theme.page);
     root.setOnApplyWindowInsetsListener((view,insets)->{Insets bars=insets.getInsets(WindowInsets.Type.systemBars());root.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});
-    LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(8),dp(8),dp(18),dp(8));header.addView(new Ui.Action(this,R.drawable.ic_caret_down,"","返回",theme.ink,Color.TRANSPARENT,this::finishAndRemoveTask),new LinearLayout.LayoutParams(dp(48),dp(48)));
+    LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER_VERTICAL);header.setPadding(dp(8),0,dp(12),0);header.addView(new Ui.Action(this,R.drawable.ic_caret_down,"","返回",theme.ink,Color.TRANSPARENT,this::finish),new LinearLayout.LayoutParams(dp(48),dp(48)));
     TextView title=Ui.text(this,"工作台",23,theme.ink);title.setTypeface(Typeface.create("sans-serif-medium",0));header.addView(title,new LinearLayout.LayoutParams(0,-2,1));root.addView(header);
-    status=Ui.text(this,"",13,theme.muted);status.setPadding(dp(22),0,dp(22),dp(16));root.addView(status);
+    status=Ui.text(this,"",13,theme.muted);status.setPadding(dp(4),0,dp(4),dp(8));
     ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(18),0,dp(18),dp(24));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));root.setContentDescription("手机工作台页面");setContentView(root);render();
   }
   private LinearLayout section(String title){TextView label=Ui.text(this,title,13,theme.muted);label.setPadding(dp(5),dp(18),0,dp(9));content.addView(label);LinearLayout group=new LinearLayout(this);group.setOrientation(LinearLayout.VERTICAL);group.setPadding(dp(4),dp(4),dp(4),dp(4));group.setBackground(Ui.shape(this,theme.surface,20,0));content.addView(group);return group;}
@@ -44,7 +44,7 @@ public final class WorkbenchActivity extends Activity implements PiRuntime.Liste
     ImageView arrow=new ImageView(this);arrow.setImageDrawable(Ui.icon(this,R.drawable.ic_arrow_square_out,theme.muted));row.addView(arrow,new LinearLayout.LayoutParams(dp(18),dp(18)));row.setContentDescription(title+"，"+detail);row.setFocusable(true);row.setOnClickListener(v->{Ui.click(v);action.run();});group.addView(row,new LinearLayout.LayoutParams(-1,-2));
   }
   private void render(){
-    content.removeAllViews();status.setText(!runtime.ready?"正在准备本机运行时…":runtime.busy?"Agent 正在执行任务，离开页面仍会继续":runtime.configured?"本机运行时已就绪 · "+runtime.currentModel:"本机工具已就绪 · 对话前连接模型");
+    content.removeAllViews();content.addView(status);status.setText(!runtime.ready?"正在准备本机运行时…":runtime.busy?"Agent 正在执行任务，离开页面仍会继续":runtime.configured?"本机运行时已就绪 · "+runtime.currentModel:"本机工具已就绪 · 对话前连接模型");
     LinearLayout local=section("本机工作");
     row(local,R.drawable.ic_terminal,"终端","直接输入命令，离开后保留会话",()->TerminalActivity.open(this));
     row(local,R.drawable.ic_file,"软件包","安装 Bash、Node.js、Python 等工具",()->startActivity(new Intent(this,RuntimePackageManagerActivity.class)));
@@ -55,18 +55,14 @@ public final class WorkbenchActivity extends Activity implements PiRuntime.Liste
     row(extend,R.drawable.ic_gear_six,"Agent 设置","名称、头像与系统提示",()->whenReady(()->AgentSettings.show(content,runtime)));
     LinearLayout phone=section("手机能力");
     row(phone,R.drawable.ic_screen_share,"读屏与操作",PhoneAccessibility.instance!=null?"已连接 · 可读取和操作其他应用":"未开启 · 前往系统设置",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-    row(phone,R.drawable.ic_arrows_out_simple,"悬浮助手",PhoneAccessibility.instance!=null||Settings.canDrawOverlays(this)?"到其他应用上聊天、看屏幕和圈选":"未允许悬浮窗 · 点按前往授权",this::floating);
+    row(phone,R.drawable.ic_arrows_out_simple,"系统小窗","使用系统弹出视图或分屏，自由调整大小",()->SystemWindowNavigation.explain(this));
     row(phone,R.drawable.ic_microphone,"语音","检查本机识别、播报与唤醒",()->openMain("open_speech"));
     LinearLayout advanced=section("高级");
     row(advanced,R.drawable.ic_sidebar,"工具目录","查询工具能力、参数和命令",()->openMain("open_tools"));
     row(advanced,R.drawable.ic_gear_six,"Runtime Packs","管理可选运行环境",()->openMain("open_runtime_packs"));
   }
   private void whenReady(Runnable action){if(runtime.ready)action.run();else{pendingAction=action;status.setText("正在准备本机运行时，准备好后打开…");}}
-  private void openMain(String extra){startActivity(new Intent(this,MainActivity.class).putExtra(extra,true).putExtra("return_workbench",extra.equals("open_models")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));}
-  private void floating(){
-    if(PhoneAccessibility.instance==null&&!Settings.canDrawOverlays(this)){pendingFloating=true;startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));return;}
-    fromOverlay=false;MainActivity main=MainActivity.current();if(main!=null)main.moveTaskToBack(true);finishAndRemoveTask();new Handler(Looper.getMainLooper()).postDelayed(()->AssistantOverlay.show(getApplicationContext()),300);
-  }
+  private void openMain(String extra){startActivity(new Intent(this,MainActivity.class).putExtra(extra,true).putExtra("return_workbench",extra.equals("open_models")).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP));}
   public void event(JSONObject event){String type=event.optString("type");if(type.equals("ready")||type.equals("configured")||type.equals("turn_start")||type.equals("turn_end")||type.equals("error"))render();if(type.equals("ready")&&pendingAction!=null&&active==this){Runnable next=pendingAction;pendingAction=null;next.run();}else if(type.equals("error")&&!runtime.ready){pendingAction=null;status.setText("运行时未能启动："+event.optString("message"));}}
   private int dp(float value){return Ui.dp(this,value);}
 }

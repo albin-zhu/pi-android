@@ -36,14 +36,9 @@ public final class ScreenShareInstrumentation extends Instrumentation implements
       require(configured.await(30,TimeUnit.SECONDS),"Model fixture not configured: "+runtimeError);
       runOnMainSync(()->runtime.send(PiRuntime.json("type","new_session")));require(empty.await(20,TimeUnit.SECONDS),"Fresh session not ready");
       openPage("red");
-      getTargetContext().startActivity(new Intent(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-      for(int i=0;i<200;i++){runOnMainSync(()->{MainActivity current=MainActivity.current();if(current!=null&&current.input!=null&&current.input.isLaidOut())activity=current;});if(activity!=null)break;Thread.sleep(100);}
-      require(activity!=null,"Main UI did not become ready");
-      runOnMainSync(()->{activity.input.setText("保留输入草稿");activity.screenShareButton.performClick();});
-      for(int i=0;i<100&&AssistantOverlay.currentPanel()==null;i++)Thread.sleep(100);runOnMainSync(()->panel=AssistantOverlay.currentPanel());require(panel!=null,"Main did not enter floating mode");
-      require(ScreenContext.enabled(),"Screen state not shared");require(panel.input.getText().toString().equals("保留输入草稿"),"Draft lost during handoff");
-      for(int i=0;i<100&&!PhoneAccessibility.instance.screenApplicationPackage().equals("dev.zfold.fixture.screen");i++)Thread.sleep(100);
-      require(PhoneAccessibility.instance.screenApplicationPackage().equals("dev.zfold.fixture.screen"),"Main stayed in front of external app");report.putBoolean("mainToExternalOverlay",true);
+      // Compatibility overlay coverage. Native freeform chat is covered by SystemWindowInstrumentation.
+      runOnMainSync(()->{AssistantOverlay.show(getTargetContext());panel=AssistantOverlay.currentPanel();panel.input.setText("保留输入草稿");panel.toggleScreenShare();});
+      require(panel!=null&&ScreenContext.enabled(),"Compatibility overlay not ready");
       runOnMainSync(()->{AssistantOverlay.minimizeForPhoneControl(getTargetContext());AssistantOverlay.show(getTargetContext());panel=AssistantOverlay.currentPanel();});
       require(panel.screenSharing&&panel.input.getText().toString().equals("保留输入草稿"),"Collapse did not preserve mode and draft");report.putBoolean("collapseRestore",true);
       send("Read page A");String red=runtime.lastPromptImage;assertColor(red,0xffd64545);assertReceived(red);report.putBoolean("externalRedImage",true);

@@ -655,3 +655,19 @@
 - `acceptance-node-tests.txt`：57 项通过、0 项失败。`final-build.log`：compat28 APK 构建与签名校验成功，已安装模拟器。
 - 最终 APK：`Zfold-0.2.70-compat28-debug.apk`，versionCode 270、targetSdk 28、arm64-v8a；SHA-256 `1da769b5b2192c3ad40632b69066e51b01c8a24579d7cb85944c3cb25ddfd022`。
 - 已按原始要求、计划表、测试断言和已查看图像完成审计，当前完整结果统一在 INTERACTION_REDESIGN.md。旧章节中的“待验证”记录保留其历史含义，以最新完成审计为准。
+
+## 0.2.71 系统小窗（2026-10-05）
+
+用户在 SM_F9660 上把系统弹出视图调整为 `Rect(1287,1374–1914,2114)`，资源配置为 `239 × 282 dp`。已截取 `artifacts/system-window/before.png`：旧界面的标题、工具条挤占内容，发送按钮越出窗口。这是 0.2.70 自绘浮层测试未覆盖的场景。
+
+本版改用系统 task 的移动、大小和最小化机制。聊天按窗口实际宽高切换单行输入栏，保持 48dp 发送 / 停止与工具菜单；附件区限制高度。会话菜单和语音页面适配小窗，打开工作台、终端、连接、语音时显式传递原窗口 bounds，保留同一 task / 返回栈。只测 View 几何会漏掉窗口合成层裁剪，本次另外核对了真实截图和语音结束按钮的屏幕像素。
+
+`SystemWindowNavigation` 在聊天及工作页面离开时保存 dp 尺寸、相对位置；全屏、分屏、可见 IME 不覆盖记录。已有 task 用 `AppTask.moveToFront()` 原样唤回，保留当前页面；无 task 时把保存 bounds 交给 `ActivityOptions.setLaunchBounds()`。这个启动参数由系统决定是否接受，参考 [Android ActivityOptions](https://developer.android.com/reference/android/app/ActivityOptions#setLaunchBounds(android.graphics.Rect))。
+
+**恢复边界**：模拟器通过开发者选项运行 freeform，但没有声明 `android.software.freeform_window_management` feature。已有窗口的恢复及几何持久化通过；移除 task 后启动时系统忽略 bounds，回到全屏。测试明确记录 `recreatesWindowAtSavedSizeAndPosition=false`，不算这一能力通过；另行验证全屏回退不覆盖已存 bounds，也不创建自绘浮层。三星在移除最近任务后的恢复仍待真机验证。期间真机 USB 断开，0.2.71 尚未安装到真机。
+
+测试入口 `SystemWindowInstrumentation` 仅允许模拟器，使用隔离 runtime / window preferences。检查真实 task 的 239×282 与 400×600 缩放、发送和键盘可见性、文本 / 光标 / 附件保留、工作页面同 task、语音头像与结束按钮可见、原窗口唤回，以及截图读取独立红色应用而非助手。兼容自绘浮层的 `ScreenShareInstrumentation` 已移除过时的 Main → 自绘浮层假设；它不代表系统小窗验收。
+
+构建：`ZFOLD_TARGET_SDK=28 npm run build`。产物 `artifacts/Zfold-0.2.71-compat28-debug.apk`，versionCode 271，SHA-256 `84e9b57bcf0d27767464d491b096eaf4b1d4a07254dac89b63f4989cc04ab05f`。测试输出与截图均在 `artifacts/system-window/`。
+
+最终普通字体与 130% 字体记录分别为 `acceptance-1.0.txt`、`acceptance-1.3.txt`：各有 9 项主流程及 1 项不支持窗口恢复时的回退检查通过（结束码 -1）。两份记录均明确保留 `recreatesWindowAtSavedSizeAndPosition=false`，不声明新 task 的小窗恢复已通过。130% 字体截图已核对。测试结束恢复模拟器原来的字体、freeform 开发者开关及手写设置。

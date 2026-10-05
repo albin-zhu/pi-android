@@ -25,6 +25,7 @@ final class ScreenContext {
     if(busy){callback.done(null,null,"正在读取屏幕，请稍候");return;}
     PhoneAccessibility service=PhoneAccessibility.instance;
     if(service==null){setEnabled(false);callback.done(null,null,"需要先开启读屏与操作服务");return;}
+    if(context instanceof android.app.Activity&&((android.app.Activity)context).isInMultiWindowMode()&&Build.VERSION.SDK_INT<34){callback.done(null,null,"当前 Android 版本不支持单独读取旁边的应用窗口");return;}
     busy=true;int request=generation;long started=SystemClock.uptimeMillis();
     ArrayList<View> hidden=new ArrayList<>();
     for(View view:new View[]{AssistantOverlay.currentPanel(),AssistantSessionService.currentPanel(),CircleOverlay.captureView(),UnifiedOverlay.captureView()}){
@@ -45,7 +46,7 @@ final class ScreenContext {
         if(finished[0])return;
         if(request!=generation||!enabled){complete.done(null,null,"本次屏幕读取已取消");return;}
         String app=service.screenApplicationPackage();
-        if(app.isEmpty()||app.equals(context.getPackageName())){complete.done(null,null,"请切换到要查看的其他应用，再从悬浮窗发送");return;}
+        if(app.isEmpty()||app.equals(context.getPackageName())){complete.done(null,null,"请在小窗旁边打开要查看的应用，再发送");return;}
         lastCapture=SystemClock.uptimeMillis();
         try{service.captureApplication(app,(bitmap,error)->main.post(()->{
           if(finished[0]){if(bitmap!=null)bitmap.recycle();return;}

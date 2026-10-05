@@ -12,11 +12,11 @@
  <uses-permission android:name="android.permission.VIBRATE" />
  <queries><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent><intent><action android:name="android.speech.RecognitionService"/></intent><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent></queries>
  <application android:label="@string/app_name" android:icon="@drawable/icon" android:theme="@style/AppTheme"
-  android:debuggable="true" android:allowBackup="false" android:extractNativeLibs="true" android:usesCleartextTraffic="true">
-  <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden">
+  android:resizeableActivity="true" android:debuggable="true" android:allowBackup="false" android:extractNativeLibs="true" android:usesCleartextTraffic="true">
+  <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden">
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
   </activity>
-  <activity android:name=".OverlayEntryActivity" android:exported="true" android:theme="@style/TransparentTheme" android:excludeFromRecents="true">
+  <activity android:name=".OverlayEntryActivity" android:taskAffinity="" android:exported="true" android:theme="@style/TransparentTheme" android:excludeFromRecents="true">
    <intent-filter><action android:name="android.intent.action.ASSIST"/><category android:name="android.intent.category.DEFAULT"/></intent-filter>
   </activity>
   <activity android:name=".MicrophonePermissionActivity" android:exported="false" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" />
@@ -24,14 +24,14 @@
   <activity android:name=".FilePickActivity" android:exported="false" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" />
   <activity android:name=".AvatarEditorActivity" android:exported="false" />
  <activity android:name=".RuntimePackageManagerActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
- <activity android:name=".TerminalActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTask" android:taskAffinity="dev.zfold.assistant.terminal" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden" />
- <activity android:name=".ConnectorActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTask" android:taskAffinity="dev.zfold.assistant.connectors" android:windowSoftInputMode="adjustResize" />
- <activity android:name=".WorkbenchActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTask" android:taskAffinity="dev.zfold.assistant.workbench" />
+ <activity android:name=".TerminalActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.terminal" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+ <activity android:name=".ConnectorActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.connectors" android:windowSoftInputMode="adjustResize" />
+ <activity android:name=".WorkbenchActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.workbench" />
  <activity android:name=".ConnectorOAuthActivity" android:exported="true">
    <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="dev.zfold.assistant" android:host="connector-oauth"/></intent-filter>
  </activity>
-  <activity android:name=".VoiceCallActivity" android:exported="false" android:launchMode="singleTask"
-   android:showWhenLocked="true" android:turnScreenOn="true" android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden" />
+  <activity android:name=".VoiceCallActivity" android:theme="@style/WorkScreenTheme" android:exported="false" android:launchMode="singleTop"
+   android:showWhenLocked="true" android:turnScreenOn="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
   <service android:name=".PhoneAccessibility" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
    <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
    <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility"/>
@@ -84,4 +84,5 @@
     <instrumentation android:name=".PackageManagerInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold package manager install and execution check" />
     <instrumentation android:name=".PtyInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold Termux PTY check" />
     <instrumentation android:name=".OpenToolInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold native open tool check" />
+ <instrumentation android:name=".SystemWindowInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold system window acceptance" />
 </manifest>

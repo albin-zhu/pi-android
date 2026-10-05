@@ -21,6 +21,7 @@ final class PhoneHud {
   static synchronized void takeover(Context context,String action){show(context,action,true);}
   static synchronized void forceHide(){takeover=false;hideLocked();}
   private static synchronized void show(Context context,String action,boolean takeoverMode){
+    if(SystemWindowNavigation.active()&&!takeoverMode){MainActivity.current().showStatus(action);return;}
     takeover=takeoverMode;
     if(takeoverMode)UnifiedOverlay.takeover(context,action);
     else UnifiedOverlay.task(context,action);

@@ -12,6 +12,10 @@ import java.util.List;
 final class ToolbarOverflow {
   static void show(View anchor,List<Ui.Action> actions){
     Context context=anchor.getContext();Ui.Theme theme=new Ui.Theme(context);
+    if(context instanceof android.app.Activity){
+      String[] labels=new String[actions.size()];for(int i=0;i<actions.size();i++)labels[i]=actions.get(i).getContentDescription().toString();
+      new android.app.AlertDialog.Builder(context).setTitle("更多工具").setItems(labels,(dialog,index)->anchor.post(actions.get(index)::performClick)).setNegativeButton("返回",null).show();return;
+    }
     FrameLayout frame=new FrameLayout(context);frame.setFocusableInTouchMode(true);
     final PopupWindow[] handle=new PopupWindow[1];
     frame.setOnKeyListener((v,key,event)->{if(key==KeyEvent.KEYCODE_BACK&&event.getAction()==KeyEvent.ACTION_UP){handle[0].dismiss();return true;}return key==KeyEvent.KEYCODE_BACK;});
