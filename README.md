@@ -2,7 +2,13 @@
 
 独立 Android APK。Pi 0.85.1 依赖嵌入式 Node 引擎并在应用进程中运行，界面与系统权限使用原生 Android API，通过匿名管道/JNI 连接 Pi。用户侧 `node/npm/npx` 不再内置；需要时通过 Runtime 包管理安装。没有本机 HTTP 控制端口，不依赖 Termux App、Office、电脑端 Agent 或 root。电脑只用于构建和测试。
 
+## 产品基线
+
+[产品与系统策划案](PRODUCT_PLAN.md)规定后续目标、状态归属、入口矩阵与验收门槛；[现状核对清单](PRODUCT_AUDIT.md)逐项对照 0.2.72 源码。方案中的单一聊天/语音所有者、直接系统小窗、“橙橙”唤醒和接通音仍有待实施部分，不代表当前 APK 已全部支持。
+
 ## 当前版本
+
+以下版本条目是历史交付记录；实际能力与未完成项结合“明确的当前边界”、核对清单及 VERIFICATION.md 阅读。
 
 ### 0.2.72 手势与返回导航
 
@@ -464,21 +470,25 @@ adb reverse --remove tcp:18868
 
 ## 明确的当前边界
 
-- 这是可运行的开发版，尚未完成全天候后台、折叠/旋转、蓝牙耳机与长时间语音稳定性验收。
-- 连续语音已有播报期间的 VAD 自动插话实验选项和手动“打断”；系统本机 ASR 的转接仍可能漏掉开头很短的词。切后台时不持续录音，尚无自定义唤醒词。
-- 中文语言包已安装时，语音输入使用系统本机识别服务；未安装或本机服务失效时回退到系统默认识别，可能联网。Pi 本地运行不等于所选推理模型离线。
-- 调试包里的 `SpeechProbeInstrumentation` 可读取本机 ASR 语言包与离线 TTS 声线状态；它不录音，也不自动下载语言包。
-- 暂只提供 OpenAI 兼容推理配置和 `SKILL.md` 文本管理。本地 Skill 可指导现有手机能力，但不能安装原生扩展、MCP server 或请求新的 Android 权限；重名本地 Skill 会被跳过，需先改名或删除。
-- 控件语义身份真变化或离开观测窗口会让旧动作失效；无关内容变化不应误杀，但频繁变化的第三方页面仍需继续实测。坐标手势已绑定截图帧，受保护界面仍不可读取。
-- APK 内的 Pi/Node 主运行时与 UI 暂在同一应用进程；Node/npm/npx 工具已是独立子进程，但仍共享 app UID。后续应使用独立 Service 进程和 `isolatedProcess` broker 隔离运行时异常与不可信代码。
-- 权限已声明和功能已实现不等于所有场景均已实测。实际测试记录见 `VERIFICATION.md`。
+以 0.2.72 为基线；后续产品目标见 PRODUCT_PLAN.md，源码核对见 PRODUCT_AUDIT.md。
+
+- 本机 Pi/Node 主运行时仍与 UI 在同一 app 进程。已有会话持久化、工具心跳和取消，不等于独立 supervisor、全天候后台或进程死亡后的完整任务恢复。
+- 已有真实 PTY、共享执行环境、包管理和 MCP 客户端。MCP 的网络/stdio 连接、认证与工具调用已实现；对外提供手机 MCP server 是另一项后续能力。
+- 主聊天已适配系统小窗和手势，但旧 AssistantPanel 仍可通过快捷入口、HUD、系统助手与唤醒进入。产品尚未完成单一聊天 UI 和单一语音所有者的收敛。
+- 当前应用内“系统小窗”入口仍是说明；已有窗口恢复与全屏直接切换、删除 task 后重建，是不同场景，不能互相替代验收。
+- 显示名可以是“橙橙”，当前 KWS、识别前缀和唤醒文案仍以“小派”为主；“橙橙→实时语音→接通音”已进入策划约束，尚未实施。
+- ASR 可使用系统本机识别；缺语言包或服务不可用时存在系统识别回退，可能联网。本机运行不等于所选模型或全部语音链路离线。
+- compat28 是当前自用侧载执行后端；modern 的可写二进制执行受限。用户代码共享 app UID，不等于完整不可信代码沙箱。
+- 快照/截图 ID、目标校验和输入回读已有基础；第三方 App 整任务结果、音频路由、长时后台与所有 OEM 行为不能只凭工具回执或 UI 测试宣称通过。
+- 测试 instrumentation 随调试 APK 打包，需进一步统一隔离、拒绝错误设备与清理规则，并拆分测试包。实测范围和失败记录见 VERIFICATION.md。
 
 ## 结构
 
 - `runtime/agent.mjs`：真正的 Pi SDK 会话、自定义模型和 Android 工具定义。
 - `native/bridge.cpp`：嵌入 Node、双向匿名管道。
 - `android/src/dev/zfold/assistant/`：原生 UI、默认助手、语音、无障碍和圈选。
-- `PRODUCT_INTERACTION.md`：自主 agent 的任务状态、授权、打断、接管和证据反馈交互契约。
+- `PRODUCT_PLAN.md`：唯一产品基线；`PRODUCT_AUDIT.md`：对应代码核对与整改清单。
+- `PRODUCT_INTERACTION.md`：历史交互方案；`RUNTIME_DESIGN.md`：运行时协议与演进记录。
 - `scripts/`：打包、固定运行时与测试端点。
 
 本项目独立放在 `/Users/mt/workspace/pi-android`。原 `/Users/mt/workspace/zfold` 的 Laya 服务、`upstream/`、Python 环境及其他脚本保持原位。
