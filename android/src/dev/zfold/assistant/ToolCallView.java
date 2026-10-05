@@ -33,6 +33,7 @@ final class ToolCallView extends LinearLayout {
   void toggle(){expanded=!expanded;details.setVisibility(expanded?VISIBLE:GONE);toggle.setRotation(expanded?180:0);toggle.setContentDescription((expanded?"收起":"展开")+title.getText()+"详情");}
   static String label(String name){
     switch(name){
+      case "phone_capabilities":return "电话与相机能力";case "phone_call":return "拨打电话";case "phone_sms":return "短信与回执";case "contact_search":return "查找联系人";case "camera_capture":return "拍照并获取图片";
       case "read":return "读取文件";case "write":return "写入文件";case "edit":return "编辑文件";
       case "ls":return "列出文件";case "bash":return "执行 Shell";case "reload_skills":return "重载 Skills";case "phone_task":return "Jev 操作手机";case "device_info":return "读取手机状态";
       case "screen_read":return "读取当前界面";case "screen_capture":return "截取屏幕";

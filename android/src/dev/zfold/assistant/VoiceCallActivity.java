@@ -36,23 +36,54 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
   private String assistantText="";private boolean session,speaking;
   private long startedAt;
   private static volatile boolean controllerSession,controllerSpeaking;
+  private CameraCoordinator camera;private android.view.TextureView cameraView;private FrameLayout videoStage;
+  private TextView cameraStatus,videoStatus,videoText,lastFrameLabel;private CallOrb videoOrb;private View cameraAction;
+  private boolean video;private Runnable adaptLayout;private String lastFrameImage;private boolean frameDialogOpen;
+
+  static void onFrameSubmitted(JSONObject metadata,org.json.JSONArray images){VoiceCallActivity target=active;if(target==null||metadata==null)return;target.main.post(()->{
+    if(images!=null)for(int i=0;i<images.length();i++){JSONObject item=images.optJSONObject(i);if(item!=null&&metadata.optString("frameId").equals(item.optString("frameId")))target.lastFrameImage=item.optString("data");}
+    target.lastFrameLabel.setText("已附图 · "+new java.text.SimpleDateFormat("HH:mm:ss",java.util.Locale.getDefault()).format(new java.util.Date(metadata.optLong("capturedAt")))+" · "+("front".equals(metadata.optString("facing"))?"前置":"后置"));
+    target.lastFrameLabel.setVisibility(View.VISIBLE);
+  });}
+  static void onSubmissionFailed(String text,String error){VoiceCallActivity target=active;if(target==null)return;target.main.post(()->{
+    target.setStateText(error);if(!foreground||target.isFinishing()||target.frameDialogOpen)return;target.frameDialogOpen=true;
+    new android.app.AlertDialog.Builder(target).setTitle("这条话还未发送").setMessage(error+"\n\n"+text)
+      .setPositiveButton("重试附图",(d,w)->VoiceCoordinator.get(target).retry(true))
+      .setNeutralButton("仅发文字",(d,w)->VoiceCoordinator.get(target).retry(false)).setNegativeButton("保留",null)
+      .setOnDismissListener(d->target.frameDialogOpen=false).show();
+  });}
 
   static void show(Context context){SystemWindowNavigation.open(context,VoiceCallActivity.class,false);}
   static void onControllerStatus(String text){VoiceMiniOverlay.status(text);VoiceCallActivity target=active;if(target!=null)target.main.post(()->target.setStateText(text));}
-  static void onControllerState(boolean session,boolean speaking){controllerSession=session;controllerSpeaking=speaking;VoiceMiniOverlay.state(session,speaking);VoiceCallActivity target=active;if(target!=null)target.main.post(()->{target.session=session;target.speaking=speaking;target.orb.setState(!session?"ended":speaking?"speaking":"listening");});}
+  static void onControllerState(boolean session,boolean speaking){controllerSession=session;controllerSpeaking=speaking;VoiceMiniOverlay.state(session,speaking);VoiceCallActivity target=active;if(target!=null)target.main.post(()->{target.session=session;target.speaking=speaking;target.setOrbState(!session?"ended":speaking?"speaking":"listening");});}
   static void onPrompt(String text){VoiceMiniOverlay.status("正在处理你的话");VoiceCallActivity target=active;if(target!=null)target.main.post(()->target.setStateText("正在处理你的话"));}
-  static void onSessionEnded(String reason){VoiceMiniOverlay.hide();VoiceCallActivity target=active;if(target!=null)target.main.post(()->{target.orb.setState("ended");target.setStateText(Ui.errorMessage(reason));});MainActivity.clearForegroundVoice();}
+  static void onSessionEnded(String reason){VoiceMiniOverlay.hide();VoiceCallActivity target=active;if(target!=null)target.main.post(()->{target.setOrbState("ended");target.setStateText(Ui.errorMessage(reason));});MainActivity.clearForegroundVoice();}
   static boolean isActive(){return active!=null;}
   static boolean isForeground(){return foreground&&active!=null;}
   static boolean hasLiveController(){return controllerSession;}
 
   @Override protected void onCreate(Bundle state){
-    super.onCreate(state);runtime=PiRuntime.get(getApplicationContext());theme=new Ui.Theme(this);active=this;
+    super.onCreate(state);runtime=PiRuntime.get(getApplicationContext());theme=new Ui.Theme(this);active=this;camera=CameraCoordinator.get(this);VoiceCoordinator.get(this);
     getWindow().setStatusBarColor(0xff070b12);getWindow().setNavigationBarColor(0xff070b12);getWindow().getDecorView().setSystemUiVisibility(0);
-    CircleOverlay.hideBubble();
+    AssistantSessionService.yieldToCall();if(AssistantOverlay.currentPanel()!=null)AssistantOverlay.preserveDraft(AssistantOverlay.currentPanel().draft());AssistantOverlay.hide();CircleOverlay.hideBubble();
     LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(0xff070b12);root.setKeepScreenOn(true);
     getWindow().setDecorFitsSystemWindows(false);
     root.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());root.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});
+
+    videoStage=new FrameLayout(this);videoStage.setBackgroundColor(0xff070b12);videoStage.setVisibility(View.GONE);
+    cameraView=new android.view.TextureView(this);videoStage.addView(cameraView,new FrameLayout.LayoutParams(-1,-1));
+    cameraStatus=Ui.text(this,"本地预览",12,0xffffe4cc);cameraStatus.setPadding(Ui.dp(this,12),Ui.dp(this,12),Ui.dp(this,8),Ui.dp(this,8));cameraStatus.setMaxLines(2);
+    cameraStatus.setBackgroundColor(0xc0070b12);
+    FrameLayout.LayoutParams cs=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP|Gravity.LEFT);cs.rightMargin=Ui.dp(this,64);videoStage.addView(cameraStatus,cs);
+    cameraStatus.setOnClickListener(v->cameraMenu());cameraStatus.setContentDescription("相机状态与画面操作");
+    View flip=callAction(R.drawable.ic_arrow_clockwise,"","切换前后摄像头",0xcc223047,()->camera.switchLens());
+    FrameLayout.LayoutParams fp=new FrameLayout.LayoutParams(Ui.dp(this,48),Ui.dp(this,48),Gravity.TOP|Gravity.RIGHT);fp.setMargins(0,Ui.dp(this,6),Ui.dp(this,8),0);videoStage.addView(flip,fp);
+    LinearLayout videoCaption=new LinearLayout(this);videoCaption.setGravity(Gravity.CENTER_VERTICAL);videoCaption.setPadding(Ui.dp(this,6),Ui.dp(this,4),Ui.dp(this,6),Ui.dp(this,4));videoCaption.setBackgroundColor(0xb3070b12);
+    videoOrb=new CallOrb(this);videoOrb.setClickable(true);videoOrb.setFocusable(true);videoOrb.setContentDescription("点击头像，打断播报并说话");videoOrb.setOnClickListener(v->tapMicrophone());videoCaption.addView(videoOrb,new LinearLayout.LayoutParams(Ui.dp(this,48),Ui.dp(this,48)));
+    LinearLayout captionText=new LinearLayout(this);captionText.setOrientation(LinearLayout.VERTICAL);videoStatus=Ui.text(this,"正在听…",12,0xffeef4ff);videoStatus.setMaxLines(2);captionText.addView(videoStatus);
+    videoText=Ui.text(this,"每次提问附一张画面",11,0xffaab5c3);videoText.setMaxLines(2);videoText.setEllipsize(android.text.TextUtils.TruncateAt.END);captionText.addView(videoText);
+    lastFrameLabel=Ui.text(this,"",11,0xffffb27a);lastFrameLabel.setVisibility(View.GONE);lastFrameLabel.setOnClickListener(v->showLastFrame());captionText.addView(lastFrameLabel);
+    videoCaption.addView(captionText,new LinearLayout.LayoutParams(0,-2,1));videoStage.addView(videoCaption,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));root.addView(videoStage,new LinearLayout.LayoutParams(-1,0,1));
 
     LinearLayout top=new LinearLayout(this);top.setOrientation(LinearLayout.VERTICAL);top.setGravity(Gravity.CENTER_HORIZONTAL);top.setPadding(Ui.dp(this,24),Ui.dp(this,16),Ui.dp(this,24),0);
     orb=new CallOrb(this);
@@ -68,6 +99,7 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
 
     LinearLayout controls=new LinearLayout(this);controls.setGravity(Gravity.CENTER);controls.setPadding(0,Ui.dp(this,8),0,0);
     controls.addView(callAction(R.drawable.ic_chat_circle_text,"转文字","切换到文字对话",0xff223047,()->{startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}),new LinearLayout.LayoutParams(Ui.dp(this,72),Ui.dp(this,72)));
+    cameraAction=callAction(R.drawable.ic_camera,"","开启摄像头",0xff223047,this::toggleCamera);cameraAction.setOnLongClickListener(v->{cameraMenu();return true;});controls.addView(cameraAction,new LinearLayout.LayoutParams(Ui.dp(this,72),Ui.dp(this,72)));
     FrameLayout.LayoutParams endParams=new FrameLayout.LayoutParams(Ui.dp(this,84),Ui.dp(this,84));endParams.setMargins(Ui.dp(this,24),0,Ui.dp(this,24),0);
     controls.addView(callAction(R.drawable.ic_x,"","结束实时通话",0xffff4553,this::endCall),endParams);
     controls.addView(callAction(R.drawable.ic_microphone,"","打断播报/重新收听",0xff223047,this::tapMicrophone),new LinearLayout.LayoutParams(Ui.dp(this,72),Ui.dp(this,72)));
@@ -75,25 +107,27 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     final boolean[] applied={false},compact={false};
     Runnable adapt=()->{
       if(root.getWidth()==0)return;boolean small=root.getWidth()<Ui.dp(this,360)||root.getHeight()-root.getPaddingTop()-root.getPaddingBottom()<Ui.dp(this,440);
-      if(applied[0]&&compact[0]==small)return;applied[0]=true;compact[0]=small;
+      applied[0]=true;compact[0]=small;videoStage.setVisibility(video?View.VISIBLE:View.GONE);callScroll.setVisibility(video?View.GONE:View.VISIBLE);camera.transform();
       top.setPadding(Ui.dp(this,small?8:24),Ui.dp(this,small?6:24),Ui.dp(this,small?8:24),Ui.dp(this,8));top.setGravity(Gravity.CENTER);
       int diameter=Ui.dp(this,small?80:228);orb.setLayoutParams(new LinearLayout.LayoutParams(diameter,diameter));liveText.setVisibility(small?View.GONE:View.VISIBLE);
       name.setTextSize(small?16:22);LinearLayout.LayoutParams np=(LinearLayout.LayoutParams)name.getLayoutParams();np.topMargin=Ui.dp(this,small?4:20);name.setLayoutParams(np);
       stateText.setTextSize(small?12:14);stateText.setMaxLines(2);stateText.setEllipsize(android.text.TextUtils.TruncateAt.END);
       controls.setPadding(0,Ui.dp(this,4),0,Ui.dp(this,small?6:16));
-      for(int i=0;i<controls.getChildCount();i++){int size=Ui.dp(this,small?48:i==1?84:72);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(size,size);if(i==1){lp.leftMargin=Ui.dp(this,small?12:24);lp.rightMargin=lp.leftMargin;}controls.getChildAt(i).setLayoutParams(lp);}
+      videoText.setVisibility(small?View.GONE:View.VISIBLE);lastFrameLabel.setMaxLines(1);lastFrameLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+      for(int i=0;i<controls.getChildCount();i++){int size=Ui.dp(this,small?48:64);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(size,size);lp.leftMargin=Ui.dp(this,small?3:8);lp.rightMargin=lp.leftMargin;controls.getChildAt(i).setLayoutParams(lp);}
     };
+    adaptLayout=adapt;
     root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->adapt.run());root.post(adapt);
     setContentView(root);
     runtime.listen(this);
     VoiceMiniOverlay.hide();
-    liveText.setText("实时通话已就绪");
+    setLiveText("打开摄像头，每次提问附一张画面");
     VoiceTurnController controller=MainActivity.activeVoice();
     if(controller!=null&&controller.sessionActive()){
-      session=true;speaking=controller.speaking();orb.setState(speaking?"speaking":controller.listeningForInput()?"listening":"thinking");
+      session=true;speaking=controller.speaking();setOrbState(speaking?"speaking":controller.listeningForInput()?"listening":"thinking");
       setStateText(speaking?"正在播报 · 点头像可打断":controller.listeningForInput()?"正在听…":"正在思考…");
-    }else orb.setState("preparing");
-    if(runtime.agentAvatar!=null&&!runtime.agentAvatar.isEmpty())orb.setAvatar(runtime.agentAvatar);
+    }else{setOrbState("preparing");setStateText("语音未开启 · 点麦克风开始");}
+    if(runtime.agentAvatar!=null&&!runtime.agentAvatar.isEmpty()){orb.setAvatar(runtime.agentAvatar);videoOrb.setAvatar(runtime.agentAvatar);}
     startedAt=System.currentTimeMillis();
   }
 
@@ -105,39 +139,61 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     button.setContentDescription(description);return button;
   }
 
-  private void setStateText(String text){if(stateText!=null)stateText.setText(text==null?"":text);}
+  private void setStateText(String text){if(stateText!=null)stateText.setText(text==null?"":text);if(videoStatus!=null)videoStatus.setText(text==null?"":text);}
+  private void setOrbState(String state){if(orb!=null)orb.setState(state);if(videoOrb!=null)videoOrb.setState(state);}
+  private void setLiveText(String text){if(liveText!=null)liveText.setText(text);if(videoText!=null)videoText.setText(text);}
+  private void toggleCamera(){
+    if(video&&camera.state().equals("preview")){camera.disable();video=false;cameraAction.setContentDescription("开启摄像头");adaptLayout.run();return;}
+    if(checkSelfPermission(android.Manifest.permission.CAMERA)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{android.Manifest.permission.CAMERA},31);return;}
+    video=true;adaptLayout.run();camera.bind(this,cameraView,(state,message)->{
+      cameraStatus.setText(message);cameraAction.setContentDescription(state.equals("off")?"开启摄像头":state.equals("preview")?"关闭摄像头":"恢复摄像头");
+      if(state.equals("off")){video=false;adaptLayout.run();}
+    },runtime.sessionId,true);
+  }
+  private void cameraMenu(){
+    String[] choices={"发送当前画面","切换前后摄像头","查看上次附图","重试未发送的话","仅发送上次的话"};
+    new android.app.AlertDialog.Builder(this).setTitle("摄像头画面").setItems(choices,(d,which)->{
+      if(which==0){if(!video||!camera.ready()){setStateText("先开启摄像头并等待画面就绪");return;}VoiceCoordinator.get(this).submit("请看看当前摄像头画面。",true);}
+      else if(which==1)camera.switchLens();else if(which==2)showLastFrame();else VoiceCoordinator.get(this).retry(which==3);
+    }).show();
+  }
+  private void showLastFrame(){if(lastFrameImage==null){setStateText("还没有发送过摄像头画面");return;}ImageView image=new ImageView(this);image.setAdjustViewBounds(true);image.setImageBitmap(Ui.thumbnail(lastFrameImage,1280));new android.app.AlertDialog.Builder(this).setTitle(lastFrameLabel.getText()).setView(image).setPositiveButton("关闭",null).show();}
+  @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);boolean granted=results.length>0&&results[0]==android.content.pm.PackageManager.PERMISSION_GRANTED;if(request==31){if(granted)toggleCamera();else setStateText("未允许相机，语音仍可继续");}else if(request==32){if(granted)tapMicrophone();else setStateText("未允许麦克风，可继续查看画面");}}
   private void tapMicrophone(){
+    if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},32);return;}
     VoiceTurnController controller=MainActivity.activeVoice();
-    if(controller==null){setStateText("语音控制器已释放，请从聊天重新开始");orb.setState("error");return;}
+    if(controller==null){setStateText("语音控制器已释放，请从聊天重新开始");setOrbState("error");return;}
     if(controller.sessionActive()){controller.forceInterrupt();}else controller.beginSession();
   }
   private void endCall(){
+    camera.endVideo(this);
     VoiceTurnController controller=MainActivity.activeVoice();
     if(controller!=null)controller.stopSession(false);
     finish();
   }
 
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);}
-  @Override protected void onResume(){super.onResume();active=this;foreground=true;VoiceMiniOverlay.hide();}
+  @Override protected void onResume(){super.onResume();active=this;foreground=true;VoiceMiniOverlay.hide();if(video&&(!camera.owns(this)||!camera.ready())){cameraStatus.setText("摄像头已暂停，点击相机恢复");cameraAction.setContentDescription("恢复摄像头");}}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);super.onPause();if(active==this)foreground=false;if(!isFinishing())VoiceMiniOverlay.showIfCallActive(this);}
-  @Override protected void onDestroy(){if(active==this)active=null;runtime.unlisten(this);super.onDestroy();}
+  @Override protected void onStop(){camera.pause(this);super.onStop();}
+  @Override protected void onDestroy(){if(isFinishing())camera.endVideo(this);camera.detach(this);if(active==this)active=null;runtime.unlisten(this);super.onDestroy();}
   @Override public void onBackPressed(){startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}
 
   @Override public void event(JSONObject event){
     String type=event.optString("type");
-    if(type.equals("agent_identity")){main.post(()->{if(orb!=null)orb.setAvatar(runtime.agentAvatar);});return;}
-    if(type.equals("turn_start")){main.post(()->{session=true;speaking=false;assistantText="";liveText.setText(runtime.lastPromptText);setStateText("正在思考…");orb.setState("thinking");});return;}
+    if(type.equals("agent_identity")){main.post(()->{if(orb!=null)orb.setAvatar(runtime.agentAvatar);if(videoOrb!=null)videoOrb.setAvatar(runtime.agentAvatar);});return;}
+    if(type.equals("turn_start")){main.post(()->{session=true;speaking=false;assistantText="";setLiveText(runtime.lastPromptText);setStateText("正在思考…");setOrbState("thinking");});return;}
     if(type.equals("assistant_start"))return;
     if(type.equals("delta")){main.post(()->{VoiceTurnController vc=MainActivity.activeVoice();
-      if(vc==null||!vc.listeningForInput()){session=true;speaking=vc!=null&&vc.speaking();orb.setState(speaking?"speaking":"thinking");if(speaking)setStateText(runtime.agentName+" 正在说话");}
+      if(vc==null||!vc.listeningForInput()){session=true;speaking=vc!=null&&vc.speaking();setOrbState(speaking?"speaking":"thinking");if(speaking)setStateText(runtime.agentName+" 正在说话");}
       String latest=runtime.lastResponse;int cut=Math.max(0,latest.length()-200);
-      liveText.setText(cut>0?"…"+latest.substring(cut):latest);});return;}
+      setLiveText(cut>0?"…"+latest.substring(cut):latest);});return;}
     if(type.equals("tool_execution")){main.post(()->{
       VoiceTurnController vc=MainActivity.activeVoice();
-      if(vc==null||!vc.listeningForInput()){setStateText(PhoneHud.action(event));orb.setState("thinking");}
-      if(vc!=null&&"running".equals(event.optString("status")))vc.toolAnnounce(PhoneHud.action(event));});return;}
-    if(type.equals("turn_end")){main.post(()->{VoiceTurnController vc=MainActivity.activeVoice();session=vc!=null&&vc.sessionActive();speaking=vc!=null&&vc.speaking();assistantText=runtime.lastResponse;orb.setState(!session?"ended":speaking?"speaking":"listening");if(speaking)setStateText("播报完成后自动听你说话");});return;}
-    if(type.equals("error")){main.post(()->{setStateText("通话出现错误，请看状态");orb.setState("error");});return;}
+      if(vc==null||!vc.listeningForInput()){setStateText(PhoneHud.action(event));setOrbState("thinking");}
+      });return;}
+    if(type.equals("turn_end")){main.post(()->{VoiceTurnController vc=MainActivity.activeVoice();session=vc!=null&&vc.sessionActive();speaking=vc!=null&&vc.speaking();assistantText=runtime.lastResponse;setOrbState(!session?"ended":speaking?"speaking":"listening");if(speaking)setStateText("播报完成后自动听你说话");});return;}
+    if(type.equals("error")){main.post(()->{setStateText("通话出现错误，请看状态");setOrbState("error");});return;}
   }
 
   static final class CallOrb extends View {

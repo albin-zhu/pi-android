@@ -10,6 +10,7 @@ final class AudioModeOwner {
   private static final int EXPIRY_MS=15_000;
   private static String owner;
   private static long at;
+  private static Integer previousMode;
 
   static synchronized Mode enter(Context context,String requestedBy){
     AudioManager manager=(AudioManager)context.getSystemService(Context.AUDIO_SERVICE);
@@ -25,26 +26,16 @@ final class AudioModeOwner {
   static synchronized void enterSession(Context context){
     AudioManager manager=(AudioManager)context.getSystemService(Context.AUDIO_SERVICE);
     if(manager==null)return;
+    if(previousMode==null)previousMode=manager.getMode();
     manager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-    if(Build.VERSION.SDK_INT>=31){
-      for(AudioDeviceInfo device:manager.getAvailableCommunicationDevices()){
-        if(device.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER){manager.setCommunicationDevice(device);break;}
-      }
-    }
-    manager.setSpeakerphoneOn(true);
-    int max=manager.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL);
-    int current=manager.getStreamVolume(AudioManager.STREAM_VOICE_CALL);
-    if(current<max/2)manager.setStreamVolume(AudioManager.STREAM_VOICE_CALL,max,0);
     owner="session";at=android.os.SystemClock.elapsedRealtime();
   }
 
   static synchronized void exitSession(Context context){
     AudioManager manager=(AudioManager)context.getSystemService(Context.AUDIO_SERVICE);
     if(manager==null)return;
-    if(Build.VERSION.SDK_INT>=31)manager.clearCommunicationDevice();
-    if(!manager.isSpeakerphoneOn())manager.setSpeakerphoneOn(true);
-    manager.setSpeakerphoneOn(false);
-    manager.setMode(AudioManager.MODE_NORMAL);
+    if(previousMode!=null&&manager.getMode()==AudioManager.MODE_IN_COMMUNICATION)manager.setMode(previousMode);
+    previousMode=null;
     owner=null;at=0;
   }
 

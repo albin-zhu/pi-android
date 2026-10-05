@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Actual avatar click against a synthetic busy turn; no microphone capture. */
 public final class VoiceAvatarInstrumentation extends Instrumentation {
   private VoiceCallActivity activity;
-  @Override public void onCreate(Bundle arguments){PiRuntime.testMode=true;start();}
+  @Override public void onCreate(Bundle arguments){if(!android.os.Build.HARDWARE.contains("ranchu")&&!android.os.Build.HARDWARE.contains("goldfish")){Bundle result=new Bundle();result.putString("error","Emulator only");finish(0,result);return;}PiRuntime.testMode=true;start();}
   @Override public void onStart(){
     Bundle result=new Bundle();String error="";AtomicBoolean active=new AtomicBoolean(true);VoiceTurnController[] controller=new VoiceTurnController[1];
     try{
@@ -27,13 +27,7 @@ public final class VoiceAvatarInstrumentation extends Instrumentation {
       Method queue=VoiceTurnController.class.getDeclaredMethod("queue",String.class);queue.setAccessible(true);
       PiRuntime runtime=PiRuntime.get(getTargetContext());
       runOnMainSync(()->{
-        controller[0]=new VoiceTurnController(getTargetContext(),new VoiceTurnController.Callback(){
-          public boolean active(){return active.get();}
-          public void status(String text){VoiceCallActivity.onControllerStatus(text);}
-          public void voiceState(boolean session,boolean speaking){VoiceCallActivity.onControllerState(session,speaking);}
-          public void prompt(String text){throw new IllegalStateException("Fixture must not submit speech");}
-          public void sessionEnded(String reason){}
-        });
+        controller[0]=VoiceCoordinator.get(getTargetContext()).controller;coordinatorActive(true);
         try{mode.set(controller[0],VoiceTurnController.Mode.SPEAKING);utterance.set(controller[0],"synthetic-utterance");foreground.set(null,controller[0]);}
         catch(Exception failure){throw new RuntimeException(failure);}
         runtime.busy=true;runtime.stopped=false;
@@ -49,18 +43,18 @@ public final class VoiceAvatarInstrumentation extends Instrumentation {
         try{checks[2]=taskVoice.getBoolean(controller[0])&&runtime.busy&&!runtime.stopped;checks[3]=Boolean.FALSE.equals(queue.invoke(controller[0],"旧回答的后续内容"));}
         catch(Exception failure){throw new RuntimeException(failure);}
         // Disable the fixture before the recognizer's delayed start.
-        active.set(false);runtime.busy=false;
+        active.set(false);coordinatorActive(false);runtime.busy=false;
       });
       boolean[] extra=new boolean[2];
       runOnMainSync(()->{
         try{
-          active.set(true);runtime.busy=true;mode.set(controller[0],VoiceTurnController.Mode.SPEAKING);utterance.set(controller[0],"mini-utterance");
+          active.set(true);coordinatorActive(true);runtime.busy=true;mode.set(controller[0],VoiceTurnController.Mode.SPEAKING);utterance.set(controller[0],"mini-utterance");
           UnifiedOverlay.call(getTargetContext(),"测试语音状态");View mini=findNamed(UnifiedOverlay.captureView(),"点击头像打断语音");
-          extra[0]=mini!=null&&mini.performClick()&&controller[0].listeningForInput()&&!controller[0].speaking();active.set(false);UnifiedOverlay.forceHide();
+          extra[0]=mini!=null&&mini.performClick()&&controller[0].listeningForInput()&&!controller[0].speaking();active.set(false);coordinatorActive(false);UnifiedOverlay.forceHide();
           AssistantPanel panel=new AssistantPanel(getTargetContext(),new AssistantPanel.Host(){public void close(){}public void minimize(){}public void select(){}public void toggleExpansion(){}});
-          panel.speakingMode=true;runtime.busy=true;mode.set(panel.voice,VoiceTurnController.Mode.SPEAKING);utterance.set(panel.voice,"panel-utterance");panel.updateControls();
+          coordinatorActive(true);panel.speakingMode=true;runtime.busy=true;mode.set(panel.voice,VoiceTurnController.Mode.SPEAKING);utterance.set(panel.voice,"panel-utterance");panel.updateControls();
           extra[1]=panel.identityBadge.performClick()&&panel.voice.listeningForInput()&&!panel.voice.speaking()&&Boolean.FALSE.equals(queue.invoke(panel.voice,"旧回答"));
-          panel.speakingMode=false;panel.dispose();runtime.busy=false;
+          coordinatorActive(false);panel.speakingMode=false;panel.dispose();runtime.busy=false;
         }catch(Exception failure){throw new RuntimeException(failure);}
       });
       result.putBoolean("miniAvatarInterrupts",extra[0]);result.putBoolean("panelAvatarInterrupts",extra[1]);for(boolean check:extra)if(!check)throw new IllegalStateException("Floating avatar binding failed");
@@ -71,14 +65,15 @@ public final class VoiceAvatarInstrumentation extends Instrumentation {
       foreground.set(null,null);
     }catch(Throwable failure){error=failure.toString();result.putString("error",error);}
     finally{
-      active.set(false);
+      active.set(false);coordinatorActive(false);
       runOnMainSync(()->{MainActivity.clearForegroundVoice();VoiceCallActivity.onControllerState(false,false);if(activity!=null)activity.finish();});
     }
     finish(error.isEmpty()?-1:0,result);
   }
+  private void coordinatorActive(boolean value){try{Field field=VoiceCoordinator.class.getDeclaredField("session");field.setAccessible(true);field.setBoolean(VoiceCoordinator.get(getTargetContext()),value);}catch(Exception failure){throw new IllegalStateException(failure);}}
   private static View findNamed(View view,String label){if(view==null)return null;if(label.contentEquals(view.getContentDescription()==null?"":view.getContentDescription()))return view;if(view instanceof ViewGroup)for(int i=0;i<((ViewGroup)view).getChildCount();i++){View match=findNamed(((ViewGroup)view).getChildAt(i),label);if(match!=null)return match;}return null;}
   private static View findAvatar(View view){
-    if(view instanceof VoiceCallActivity.CallOrb)return view;
+    if(view instanceof VoiceCallActivity.CallOrb&&view.isShown())return view;
     if(view instanceof ViewGroup)for(int i=0;i<((ViewGroup)view).getChildCount();i++){View found=findAvatar(((ViewGroup)view).getChildAt(i));if(found!=null)return found;}
     return null;
   }

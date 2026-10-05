@@ -136,8 +136,6 @@ public final class VoiceWakeService extends Service {
   private void wakeAssistant(){
     stopSelf();
     lastWakeTriggerAt=SystemClock.elapsedRealtime();
-    if(AssistantSessionService.isShowing()){main.postDelayed(()->AssistantSessionService.startVoice(),250);return;}
-    if(SystemWindowNavigation.active()){SystemWindowNavigation.showChat(this,true);return;}
-    AssistantOverlay.showForVoice(this);
+    SystemWindowNavigation.showChat(this,true);
   }
 }

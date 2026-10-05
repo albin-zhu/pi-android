@@ -15,11 +15,12 @@ final class ScreenContext {
   private static long lastCapture;private static String target="";
   static boolean enabled(){return enabled;}
   static boolean busy(){return busy;}
+  static void cancelCapture(){if(busy)generation++;}
   static String label(){return enabled?(target.isEmpty()?"看屏幕 · 每次发送刷新":"看屏幕 · "+target):"看屏幕";}
   static void listen(Runnable listener){listeners.add(listener);}
   static void unlisten(Runnable listener){listeners.remove(listener);}
   private static void changed(){for(Runnable listener:new ArrayList<>(listeners))listener.run();}
-  static void setEnabled(boolean value){if(enabled==value)return;enabled=value;generation++;if(!value)target="";changed();}
+  static void setEnabled(boolean value){if(value)CameraCoordinator.disableVideo();if(enabled==value)return;enabled=value;generation++;if(!value)target="";changed();}
   static void capture(Context context,Capture callback){
     if(!enabled){callback.done(null,null,"看屏幕已关闭");return;}
     if(busy){callback.done(null,null,"正在读取屏幕，请稍候");return;}

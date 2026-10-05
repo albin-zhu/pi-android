@@ -44,6 +44,7 @@ final class NativeToolExecution {
     for(NativeToolExecution call:active.values())if(turnId.equals(call.turnId))call.cancelled=true;
   }
   static void checkpoint(){NativeToolExecution call=current.get();if(call!=null&&call.cancelled)throw new CancellationException("操作已停止");}
+  static boolean isCancelled(String id){NativeToolExecution call=active.get(id);return call==null||call.cancelled;}
   void run(Runnable operation){
     NativeToolExecution previous=current.get();current.set(this);
     try{checkpoint();operation.run();}

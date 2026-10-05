@@ -20,7 +20,7 @@ public final class AssistantOverlay {
   }
   static void show(Context context){show(context,null);}
   static void showForVoice(Context context){
-    show(context);AssistantPanel panel=currentPanel();if(panel!=null)panel.wakeVoice();
+    SystemWindowNavigation.showChat(context,true);
   }
   static void show(Context context,String image){
     AssistantSessionService.yieldToOverlay();UnifiedOverlay.forceHide();

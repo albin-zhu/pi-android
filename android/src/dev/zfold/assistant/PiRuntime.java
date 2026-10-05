@@ -33,6 +33,7 @@ public final class PiRuntime {
   private final ExecutorService writer = Executors.newSingleThreadExecutor();
   private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
   public volatile boolean ready, configured, busy, stopped;
+  public volatile boolean imageInput=true;
   public volatile boolean stopUnconfirmed;
   private volatile boolean phoneActive;
   private volatile String activeTurnId="";
@@ -149,7 +150,7 @@ public final class PiRuntime {
       if(type.equals("default_config")){defaultConfig=event.optJSONObject("config");defaultModels=event.optJSONArray("models");}
       if(type.equals("agent_identity")){agentName=event.optString("name","Zfold");agentAvatar=event.isNull("avatar")?null:event.optString("avatar",null);agentPrompt=event.optString("prompt");agentDefaultPrompt=event.optString("defaultPrompt",agentDefaultPrompt);}
       if(type.equals("ready")) {ready=true;status="Pi "+event.optString("pi")+" · Node "+event.optString("node");Log.i("ZfoldPi",event.toString());restoreConfiguration();}
-      if(type.equals("configured")) {configured=true;restoring=false;currentModel=event.optString("model");activeConfig=event.optJSONObject("config");status="模型 · "+currentModel;sessionId=event.optString("sessionId");}
+      if(type.equals("configured")) {configured=true;imageInput=event.optBoolean("imageInput",true);restoring=false;currentModel=event.optString("model");activeConfig=event.optJSONObject("config");status="模型 · "+currentModel;sessionId=event.optString("sessionId");}
       if(type.equals("configured")){currentProvider=event.optString("provider","custom");activeConfig=event.optJSONObject("config");}
       if(type.equals("models_catalog")){modelProviders=event.optJSONArray("providers");selectedModel=event.optJSONObject("selected");}
       if(type.equals("configured")) send(json("type","history"));
@@ -176,6 +177,7 @@ public final class PiRuntime {
       if(type.equals("tool_request")) {
         if(stopped && !event.isNull("turnId")) {toolResult(event.optString("id"),null,"操作已停止");return;}
         String name=event.optString("name");
+        if(name.equals("phone_call")||name.equals("phone_sms")||name.equals("camera_capture")||name.equals("contact_search"))phoneActive=false;
         boolean phoneAction=name.equals("screen_read")||name.equals("screen_capture")||name.equals("ui_act")||name.equals("ui_tap")||name.equals("ui_input")||name.equals("ui_input_focused")||name.equals("ui_swipe")||name.equals("ui_back")||name.equals("app_open")||name.equals("split_screen")||name.equals("open");
         boolean phoneTask=name.equals("phone_task");
         if((phoneAction||phoneTask)&&!callVisible)PhoneHud.show(context,PhoneHud.action(event));
@@ -206,8 +208,8 @@ public final class PiRuntime {
   }
   public void send(JSONObject command) {
     if(!ready){dispatch(json("type","error","message","本地 Pi 尚未就绪"));return;}
-    if(command.optString("type").equals("prompt")){stopped=false;busy=true;lastPromptText=command.optString("text");lastPromptImage=command.optString("image");lastPromptHasImage=!lastPromptImage.isEmpty();}
-    if(command.optString("type").equals("stop")){stopped=true;NativeToolExecution.cancelTurn(activeTurnId);PhoneHud.hide();}
+    if(command.optString("type").equals("prompt")){stopped=false;busy=true;lastPromptText=command.optString("text");lastPromptImage=command.optString("image");org.json.JSONArray images=command.optJSONArray("images");if(lastPromptImage.isEmpty()&&images!=null&&images.length()>0)lastPromptImage=images.optJSONObject(0).optString("data");lastPromptHasImage=!lastPromptImage.isEmpty();}
+    if(command.optString("type").equals("stop")){PromptDispatcher.cancelPending();ScreenContext.cancelCapture();stopped=true;NativeToolExecution.cancelTurn(activeTurnId);PhoneHud.hide();}
     writer.execute(()->writeCommand(command.toString().getBytes(StandardCharsets.UTF_8)));
   }
   private void toolResult(String id,JSONObject result,String error){send(error==null?json("type","tool_result","id",id,"result",result):json("type","tool_result","id",id,"error",error));}

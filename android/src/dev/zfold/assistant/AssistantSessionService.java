@@ -11,6 +11,7 @@ public final class AssistantSessionService extends VoiceInteractionSessionServic
   private static Session active;
   static boolean isShowing(){return active!=null;}
   static AssistantPanel currentPanel(){return active==null?null:active.panel;}
+  static void yieldToCall(){Session session=active;if(session==null||session.panel==null)return;AssistantOverlay.preserveDraft(session.panel.draft());session.hideKeyboard();session.hide();}
   static void yieldToOverlay(){
     Session session=active;if(session==null||session.panel==null)return;
     if(!AssistantOverlay.hasSavedDraft())AssistantOverlay.preserveDraft(session.panel.draft());

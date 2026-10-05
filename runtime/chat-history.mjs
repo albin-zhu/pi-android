@@ -6,7 +6,7 @@ const clip = (value, limit = 12000) => {
 };
 export function toolCard(call, result, status) {
   const content = result?.content || [];
-  const output = content.map(part => part.type === 'text' ? part.text : part.type === 'image' ? '[屏幕图片]' : '').filter(Boolean).join('\n');
+  const output = content.map(part => part.type === 'text' ? part.text : part.type === 'image' ? '[图片]' : '').filter(Boolean).join('\n');
   let performed = result?.details?.performed;
   let taskStatus = result?.details?.status;
   let verified=result?.details?.verified;
@@ -14,7 +14,7 @@ export function toolCard(call, result, status) {
     try { const data=JSON.parse(content[0].text);performed=data.performed;taskStatus??=data.status;verified??=data.verified; } catch {}
   }
   if(taskStatus===undefined&&content.length===1&&content[0].type==='text'){try{taskStatus=JSON.parse(content[0].text).status;}catch{}}
-  const taskState=taskStatus==='cancelled'?'cancelled':taskStatus==='blocked'?'blocked':taskStatus==='unverified'?'unverified':undefined;
+  const taskState=taskStatus==='cancelled'?'cancelled':taskStatus==='blocked'?'blocked':['unverified','unknown','partial','partial_unknown'].includes(taskStatus)?'unverified':['failed','permission_denied','timeout'].includes(taskStatus)?'error':undefined;
   return {role:'tool', id:call.id, name:call.name, args:clip(call.arguments),
     status:status || taskState || (result ? result.isError ? 'error' : performed === false ? 'not_performed' : 'success' : 'interrupted'),
     output:clip(output), hasImage:content.some(part => part.type === 'image'),...(taskStatus?{taskStatus,verified:verified===true}:{})};

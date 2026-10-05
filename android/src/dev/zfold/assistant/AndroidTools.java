@@ -36,12 +36,15 @@ public final class AndroidTools {
     String name=request.optString("name");
     JSONObject args=request.optJSONObject("args");if(args==null)args=new JSONObject();
     try {
+      if(name.equals("phone_capabilities")||name.equals("phone_call")||name.equals("phone_sms")||name.equals("camera_capture")||name.equals("contact_search")){
+        PhoneActions.execute(context,name,args,request.optString("id"),result);return;
+      }
       if(name.equals("runtime_environment")){result.done(RuntimeEnvironment.base(context),null);return;}
       if(name.equals("device_info")) {
         Intent battery=context.registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         int level=battery==null?-1:battery.getIntExtra(BatteryManager.EXTRA_LEVEL,-1),scale=battery==null?100:battery.getIntExtra(BatteryManager.EXTRA_SCALE,100);
         result.done(PiRuntime.json("manufacturer",Build.MANUFACTURER,"model",Build.MODEL,"android",Build.VERSION.RELEASE,"batteryPercent",scale>0?level*100/scale:-1,
-          "accessibility",PhoneAccessibility.instance!=null,"overlay",Settings.canDrawOverlays(context),"runtimeLocation","inside-apk","packageName",context.getPackageName()),null);return;
+          "accessibility",PhoneAccessibility.instance!=null,"overlay",Settings.canDrawOverlays(context),"runtimeLocation","inside-apk","packageName",context.getPackageName(),"phoneCapabilities",PhoneActions.capabilities(context)),null);return;
       }
       if(name.equals("app_list")) {
         Intent intent=new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);

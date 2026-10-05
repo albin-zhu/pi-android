@@ -37,7 +37,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
 
   AssistantPanel(Context context,Host host){
     super(context);this.host=host;screenSharing=ScreenContext.enabled();runtime=PiRuntime.get(context);theme=new Ui.Theme(context);
-    voice=new VoiceTurnController(context,new VoiceTurnController.Callback(){
+    voice=VoiceCoordinator.get(context).observe(this,new VoiceTurnController.Callback(){
       public boolean active(){return speakingMode&&!disposed;}
       public void status(String text){state.setText(text);}
       public void voiceState(boolean session,boolean speaking){speakingMode=session;mic.setText(session?(speaking?"打断":"结束对话"):"说话");mic.setIcon(session&&speaking?R.drawable.ic_stop:R.drawable.ic_microphone);updateControls();}
@@ -263,18 +263,18 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
       case "agent_identity":updateAgentIdentity();break;
       case "session_changed":restoreTools();lastSentText="";lastSentImage=null;lastSentImageLabel=null;rawReply="";sentCard.setVisibility(GONE);answerBlock.setVisibility(GONE);pendingTaskPrompt=null;localFiles.clear();renderFiles();state.setText("随时待命");break;
       case "history":restoreTools();if(!runtime.lastPromptText.isEmpty()||runtime.lastPromptHasImage){lastSentText=runtime.lastPromptText;lastSentImage=runtime.lastPromptImage;showSent(lastSentText,lastSentImage,runtime.lastPromptHasImage);showReply(runtime.lastResponse);}else{sentCard.setVisibility(GONE);answerBlock.setVisibility(GONE);rawReply="";}break;
-      case "turn_start":restoreTools();lastSentText=runtime.lastPromptText;lastSentImage=runtime.lastPromptImage;showSent(lastSentText,lastSentImage,runtime.lastPromptHasImage);if(!lastSentFiles.isEmpty())sentText.append(lastSentFiles);showReply("");voice.turnStart();break;
-      case "assistant_start":voice.assistantStart();break;
-      case "delta":if(!renderPending){renderPending=true;handler.postDelayed(()->{renderPending=false;if(!disposed)showReply(runtime.lastResponse);},32);}voice.append(e.optString("text"));break;
+      case "turn_start":restoreTools();lastSentText=runtime.lastPromptText;lastSentImage=runtime.lastPromptImage;showSent(lastSentText,lastSentImage,runtime.lastPromptHasImage);if(!lastSentFiles.isEmpty())sentText.append(lastSentFiles);showReply("");break;
+      case "assistant_start":break;
+      case "delta":if(!renderPending){renderPending=true;handler.postDelayed(()->{renderPending=false;if(!disposed)showReply(runtime.lastResponse);},32);}break;
       case "tool_execution":showTool(e);state.setText("running".equals(e.optString("status"))?PhoneHud.action(e):"正在处理…");
-        if(voice.sessionActive()&&"running".equals(e.optString("status")))voice.toolAnnounce(PhoneHud.action(e));break;
+        break;
       case "turn_end":{
-        showReply(runtime.lastResponse);if(e.optBoolean("aborted"))state.setText(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");voice.turnEnded(e.optBoolean("aborted"));if(!e.optBoolean("aborted")&&!voice.sessionActive())state.setText(ScreenContext.enabled()?ScreenContext.label():"随时待命");
+        showReply(runtime.lastResponse);if(e.optBoolean("aborted"))state.setText(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");if(!e.optBoolean("aborted")&&!voice.sessionActive())state.setText(ScreenContext.enabled()?ScreenContext.label():"随时待命");
         String queued=pendingTaskPrompt;pendingTaskPrompt=null;
         if(queued!=null&&!disposed)handler.postDelayed(()->{if(!disposed){voice();send(queued);}},380);
         break;
       }
-      case "error":voice.error();pendingTaskPrompt=null;state.setText("这次没有完成，排队的新指令已取消");showReply(runtime.lastResponse);errorLabel.setText(Ui.errorMessage(e.optString("message")));errorLabel.setVisibility(VISIBLE);errorActions.setVisibility(VISIBLE);retry.setVisibility(lastSentText.isEmpty()?GONE:VISIBLE);if(input.getText().length()==0&&!lastSentText.isEmpty()){input.setText(lastSentText);if(lastSentImage!=null)attachImage(lastSentImage,lastSentImageLabel==null?"圈选区域":lastSentImageLabel);}break;
+      case "error":pendingTaskPrompt=null;state.setText("这次没有完成，排队的新指令已取消");showReply(runtime.lastResponse);errorLabel.setText(Ui.errorMessage(e.optString("message")));errorLabel.setVisibility(VISIBLE);errorActions.setVisibility(VISIBLE);retry.setVisibility(lastSentText.isEmpty()?GONE:VISIBLE);if(input.getText().length()==0&&!lastSentText.isEmpty()){input.setText(lastSentText);if(lastSentImage!=null)attachImage(lastSentImage,lastSentImageLabel==null?"圈选区域":lastSentImageLabel);}break;
     }updateControls();
   }
   void voice(){
@@ -283,13 +283,13 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
       setup();return;
     }
     if(getContext().checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){state.setText("需要麦克风权限");getContext().startActivity(new Intent(getContext(),MicrophonePermissionActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));return;}
+    VoiceCallActivity.show(getContext());
     if(runtime.busy){voice.beginTaskVoice();updateControls();return;}
     if(voice.sessionActive()){voice.forceInterrupt();return;}
     voice.beginSession();
     updateControls();
   }
   void wakeVoice(){
-    if(voice.sessionActive()){voice.stopSession(false);handler.postDelayed(this::voice,220);return;}
     voice();
   }
   void openSidebar(){
@@ -347,7 +347,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     },section);
   }
   void stop(){pendingTaskPrompt=null;localFiles.clear();renderFiles();voice.stopSession(true);VoiceWakeService.resume(getContext());if(runtime.busy){runtime.send(PiRuntime.json("type","stop"));state.setText("正在停止…");primary.setEnabled(false);}else state.setText("随时待命");}
-  void dispose(){if(disposed)return;disposed=true;voice.destroy();runtime.unlisten(this);ScreenContext.unlisten(screenListener);handler.removeCallbacksAndMessages(null);if(imagePreview!=null){thumbnail.setImageDrawable(null);preview.setImageDrawable(null);imagePreview.recycle();imagePreview=null;}if(sentBitmap!=null){sentThumbnail.setImageDrawable(null);sentExpanded.setImageDrawable(null);sentBitmap.recycle();sentBitmap=null;}pendingTaskPrompt=null;}
+  void dispose(){if(disposed)return;disposed=true;VoiceCoordinator.get(getContext()).forget(this);runtime.unlisten(this);ScreenContext.unlisten(screenListener);handler.removeCallbacksAndMessages(null);if(imagePreview!=null){thumbnail.setImageDrawable(null);preview.setImageDrawable(null);imagePreview.recycle();imagePreview=null;}if(sentBitmap!=null){sentThumbnail.setImageDrawable(null);sentExpanded.setImageDrawable(null);sentBitmap.recycle();sentBitmap=null;}pendingTaskPrompt=null;}
   void pickFiles(){
     FilePickActivity.request(getContext(),uris->{
       if(uris.isEmpty())return;

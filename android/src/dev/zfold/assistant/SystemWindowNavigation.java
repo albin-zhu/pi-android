@@ -36,7 +36,7 @@ final class SystemWindowNavigation {
     for(ActivityManager.AppTask task:manager.getAppTasks()){
       ActivityManager.RecentTaskInfo info=task.getTaskInfo();
       if(info.baseIntent.getComponent()!=null&&info.baseIntent.getComponent().getClassName().equals(MainActivity.class.getName())){
-        try{task.moveToFront();MainActivity main=MainActivity.current();if(voice&&main!=null)main.root.post(()->{if(!main.isFinishing()&&!main.isDestroyed())main.toggleVoice();});return;}catch(IllegalArgumentException ignored){} // Task may have just been removed.
+        try{task.moveToFront();MainActivity main=MainActivity.current();if(voice&&main==null)context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));else if(voice)main.root.post(()->{if(!main.isFinishing()&&!main.isDestroyed())main.toggleVoice();});return;}catch(IllegalArgumentException ignored){} // Task may have just been removed.
       }
     }
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);Rect bounds=restoredBounds(context);

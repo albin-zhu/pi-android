@@ -44,12 +44,12 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     current=this;
     runtime=PiRuntime.get(this);runtime.listen(this);
     if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)VoiceWakeService.resume(this);
-    voice=new VoiceTurnController(this,new VoiceTurnController.Callback(){
+    voice=VoiceCoordinator.get(this).observe(this,new VoiceTurnController.Callback(){
       public boolean active(){return continuous&&!isFinishing();}
-      public void status(String text){MainActivity.this.showStatus(text);VoiceCallActivity.onControllerStatus(text);}
-      public void voiceState(boolean session,boolean speaking){continuous=session;voiceButton.setText(session?(speaking?"打断":"结束对话"):"说话");VoiceCallActivity.onControllerState(session,speaking);}
+      public void status(String text){MainActivity.this.showStatus(text);}
+      public void voiceState(boolean session,boolean speaking){continuous=session;voiceButton.setText(session?(speaking?"打断":"结束对话"):"说话");}
       public void prompt(String text){VoiceCallActivity.onPrompt(text);sendText(text);}
-      public void sessionEnded(String reason){continuous=false;voiceButton.setText("说话");showStatus(reason);VoiceCallActivity.onSessionEnded(reason);}
+      public void sessionEnded(String reason){continuous=false;voiceButton.setText("说话");showStatus(reason);}
     });
     foregroundVoice=voice;
     getWindow().setDecorFitsSystemWindows(false);
@@ -67,7 +67,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   }
   int dp(float value){return Math.round(value*getResources().getDisplayMetrics().density);}
   static MainActivity current(){return current;}
-  static VoiceTurnController activeVoice(){return current!=null?current.voice:foregroundVoice;}
+  static VoiceTurnController activeVoice(){return VoiceCoordinator.current();}
   static void clearForegroundVoice(){foregroundVoice=null;}
   String idleStatus(){return runtime.configured?"本机 Pi · 随时待命":runtime.ready?"连接模型后开始":"正在准备助手…";}
   TextView text(String value,int size,int color){TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(color);v.setFontFeatureSettings("kern");return v;}
@@ -258,19 +258,15 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     if(pendingImage!=null){draftBitmap=Ui.thumbnail(pendingImage,480);if(draftBitmap!=null){draftThumbnail.setImageBitmap(draftBitmap);draftExpanded.setImageBitmap(draftBitmap);}else draftThumbnail.setImageDrawable(Ui.icon(this,R.drawable.ic_image,theme.muted));}
   }
   void sendText(String value){
-    String text=value.trim();if(text.isEmpty())return;
+    String text=value.trim();if(text.isEmpty()&&pendingImage==null&&localFiles.isEmpty())return;
     if(!runtime.configured){settings();return;}
-    if(runtime.busy){
-      boolean stopOnly=isStopCommand(text);pendingTaskPrompt=stopOnly?null:text;
-      showStatus(stopOnly?"收到停止指令 · 正在停止":"收到新指令 · 停止旧任务后执行");
-      runtime.send(PiRuntime.json("type","stop"));updateSend();return;
-    }
+    if(PromptDispatcher.isStop(text)){stop();return;}
     if(ScreenContext.enabled()){openScreenWorkspace(text,true);return;}
     dispatchText(text);
   }
   private void dispatchText(String text){
     if(text.isBlank())text="请分析这些本地文件。";
-    voice.beginPrompt();input.setText("");input.setHint("说说你的想法…");
+    String draftText=input.getText().toString(),draftImage=pendingImage;List<LocalFileAttachment> submittedFiles=new ArrayList<>(localFiles);
     JSONObject command=PiRuntime.json("type","prompt","id",UUID.randomUUID().toString(),"text",text);
     try{
       if(pendingImage!=null)command.put("image",pendingImage);
@@ -281,9 +277,15 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
         for(String image:file.images)images.put(PiRuntime.json("data",image,"mime","image/jpeg"));
       }
       if(images.length()>0)command.put("images",images);if(files.length()>0)command.put("files",files);
-      lastSentFiles=fileSummary(localFiles);pendingImage=null;pendingImageLabel=null;localFiles.clear();updateDraftAttachment();
+      lastSentFiles=fileSummary(submittedFiles);
     }catch(Exception ignored){}
-    runtime.send(command);showStatus("正在思考…");updateSend();
+    PromptDispatcher.get(this).submit(command,true,(accepted,queued,error)->{
+      if(isFinishing()||isDestroyed())return;
+      if(!accepted){showStatus(error);notice(error);return;}
+      if(input.getText().toString().equals(draftText))input.setText("");
+      if(Objects.equals(pendingImage,draftImage)){pendingImage=null;pendingImageLabel=null;}
+      localFiles.removeAll(submittedFiles);updateDraftAttachment();showStatus(queued?"已排队，完成当前任务后继续":"正在思考…");updateSend();
+    });
   }
   boolean followsBottom(){return conversation.getHeight()-scroll.getHeight()-scroll.getScrollY()<dp(48);}
   void followBottom(boolean follow){if(follow)scroll.post(()->scroll.fullScroll(View.FOCUS_DOWN));}
@@ -317,23 +319,23 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
         if(intro.getParent()==conversation)conversation.removeView(intro);conversation.setGravity(Gravity.TOP);
         JSONArray files=event.optJSONArray("files");StringBuilder summary=new StringBuilder(runtime.lastPromptText);
         if(files!=null&&files.length()>0){if(summary.length()>0)summary.append('\n');summary.append("[本地文件：");for(int i=0;i<files.length();i++){if(i>0)summary.append('，');summary.append(files.optJSONObject(i)==null?"文件":files.optJSONObject(i).optString("name","文件"));}summary.append(']');}
-        bubble(summary.toString(),true,runtime.lastPromptImage,runtime.lastPromptHasImage);answer=null;response.setLength(0);voice.turnStart();followBottom(true);break;
+        bubble(summary.toString(),true,runtime.lastPromptImage,runtime.lastPromptHasImage);answer=null;response.setLength(0);followBottom(true);break;
       }
-      case "assistant_start":answer=null;voice.assistantStart();break;
-      case "delta":boolean follow=followsBottom();String delta=event.optString("text");response.append(delta);if(answer==null)bubble("",false);answer.setText(response.toString());followBottom(follow);voice.append(delta);break;
+      case "assistant_start":answer=null;break;
+      case "delta":boolean follow=followsBottom();String delta=event.optString("text");response.append(delta);if(answer==null)bubble("",false);answer.setText(response.toString());followBottom(follow);break;
       case "tool_execution":boolean followTool=followsBottom();showTool(event);answer=null;showStatus("running".equals(event.optString("status"))?PhoneHud.action(event):"正在处理…");if("running".equals(event.optString("status"))&&!voice.listeningForInput())VoiceCallActivity.onControllerStatus(PhoneHud.action(event));followBottom(followTool);break;
       case "turn_end":{
-        if(event.optBoolean("aborted"))showStatus(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");voice.turnEnded(event.optBoolean("aborted"));
+        if(event.optBoolean("aborted"))showStatus(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");
         String queued=pendingTaskPrompt;pendingTaskPrompt=null;
         if(queued!=null&&!isFinishing())handler.postDelayed(()->{if(!isFinishing()){toggleVoice();sendText(queued);}},380);
         break;
       }
-      case "error":showStatus("需要处理，排队的新指令已取消");pendingTaskPrompt=null;notice(Ui.errorMessage(event.optString("message")));voice.error();break;
+      case "error":showStatus("需要处理，排队的新指令已取消");pendingTaskPrompt=null;notice(Ui.errorMessage(event.optString("message")));break;
       case "probe":JSONObject d=event.optJSONObject("device");new AlertDialog.Builder(this).setTitle("本地运行正常").setMessage("Pi "+event.optString("pi")+"\nNode "+event.optString("node")+"\n架构 "+event.optString("arch")+"\n\n原生工具返回：\n"+(d==null?"":d.toString())).setPositiveButton("完成",null).show();break;
     }
     updateSend();updateModelChip();
   }
-  void updateSend(){if(sendButton==null)return;sendButton.setIcon(runtime.busy?R.drawable.ic_stop:R.drawable.ic_arrow_up);sendButton.setContentDescription(runtime.busy?"停止当前任务":"发送");sendButton.setEnabled(runtime.busy||!localFiles.isEmpty()||input.getText().toString().trim().length()>0);}
+  void updateSend(){if(sendButton==null)return;sendButton.setIcon(runtime.busy?R.drawable.ic_stop:R.drawable.ic_arrow_up);sendButton.setContentDescription(runtime.busy?"停止当前任务":"发送");sendButton.setEnabled(runtime.busy||pendingImage!=null||!localFiles.isEmpty()||input.getText().toString().trim().length()>0);}
   void updateComposerToolbar(float width){
     if(actionToolbar==null)return;
     int pixels=Math.round(width);float scale=getResources().getConfiguration().fontScale;
@@ -561,7 +563,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     String text=value.toLowerCase(Locale.ROOT).replaceAll("[\\s，,。：:！!？?]+","");
     return text.equals("停")||text.equals("停止")||text.equals("停下")||text.equals("取消")||text.equals("别做了")||text.equals("请停止")||text.equals("停止任务")||text.equals("停止当前任务");
   }
-  void stop(){pendingTaskPrompt=null;localFiles.clear();updateDraftAttachment();voice.stopSession(true);showStatus(runtime.busy?"正在停止…":"已停止");VoiceWakeService.resume(this);}
+  void stop(){PromptDispatcher.cancelPending();pendingTaskPrompt=null;localFiles.clear();updateDraftAttachment();voice.stopSession(true);showStatus(runtime.busy?"正在停止…":"已停止");VoiceWakeService.resume(this);}
   void toggleWake(){
     ArrayList<String> missing=new ArrayList<>();
     if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)missing.add(Manifest.permission.RECORD_AUDIO);
@@ -620,5 +622,5 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   @Override public void onActionModeStarted(ActionMode mode){super.onActionModeStarted(mode);textSelection=mode;if(swipeNavigation!=null)swipeNavigation.selecting(true);}
   @Override public void onActionModeFinished(ActionMode mode){super.onActionModeFinished(mode);if(textSelection==mode)textSelection=null;if(swipeNavigation!=null)swipeNavigation.selecting(false);}
   @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(root!=null)SystemWindowNavigation.remember(this);}
-  @Override protected void onDestroy(){ChatBackNavigation.unregister(this,backCallback);if(swipeNavigation!=null)swipeNavigation.dispose();if(current==this)current=null;runtime.unlisten(this);ScreenContext.unlisten(screenListener);pendingTaskPrompt=null;if(VoiceCallActivity.isActive());else{continuous=false;foregroundVoice=null;voice.destroy();}if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
+  @Override protected void onDestroy(){ChatBackNavigation.unregister(this,backCallback);if(swipeNavigation!=null)swipeNavigation.dispose();if(current==this)current=null;runtime.unlisten(this);ScreenContext.unlisten(screenListener);pendingTaskPrompt=null;VoiceCoordinator.get(this).forget(this);if(isFinishing()&&!VoiceCallActivity.isActive())voice.stopSession(false);if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
 }

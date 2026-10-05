@@ -20,6 +20,7 @@ import { createPtyTool } from './pty.mjs';
 import { NativeToolBridge } from './native-tools.mjs';
 import { resolveRuntimeCommand, shellWithEnvironment } from './command-environment.mjs';
 import { ConnectorManager } from './connectors.mjs';
+import { cameraWorkingContext, cameraPromptSuffix } from './camera-context.mjs';
 
 const inputFd = Number(process.argv[2]), outputFd = Number(process.argv[3]);
 registerBundledOAuthFlowLoaders({anthropic:()=>anthropicOAuth,openaiCodex:()=>openaiCodexOAuth,githubCopilot:()=>githubCopilotOAuth,openrouter:()=>openRouterOAuth,kimiCoding:()=>kimiCodingOAuth,xai:()=>xaiOAuth,radius:createRadiusOAuth});
@@ -347,6 +348,11 @@ const fileTools=[
   createLsToolDefinition(root)
 ].map(workspaceFileTool);
 const definitions = [
+  ['phone_capabilities','检查电话与相机能力','查看相机、电话、短信、联系人权限和默认短信 SIM 状态，不申请权限、不发起外部操作。',Type.Object({})],
+  ['phone_call','拨打电话','dial 打开指定号码的拨号页；call 在用户已明确授权拨打该号码时发起呼叫。首次使用按需申请电话权限。call_dispatched 只表示交给系统，connected:false 不代表已接通；未知结果不要重复拨号。联系人姓名先用 contact_search 消除歧义。',Type.Object({number:Type.String({minLength:3,maxLength:40}),action:Type.Union([Type.Literal('dial'),Type.Literal('call')])})],
+  ['camera_capture','拍照并获取图片','在可见的相机预览中按用户要求拍一张照片，返回压缩 JPEG 图片和当前工作区 photos 内的文件路径；可选 front/back。复用正在预览的同一镜头；没有预览时显示拍照页并按需申请权限。相机图片没有手机屏幕坐标，不可用于 ui_tap。',Type.Object({facing:Type.Optional(Type.Union([Type.Literal('front'),Type.Literal('back')]))})],
+  ['contact_search','查找联系人号码','按姓名或号码搜索系统通讯录，首次按需申请联系人权限。返回候选名称与号码；重名或多个号码不能随意挑选，不包含通话和消息记录。',Type.Object({query:Type.String({minLength:1,maxLength:100})})],
+  ['phone_sms','发送短信与查询回执','compose 填好短信草稿，不代表发送；send 仅用于用户已经明确指定收件号码、正文并要求发送的短信。status 用 operationId 查询发送回执；subscriptions 列出可用 SIM。send 必须提供稳定 operationId，重复相同 ID 不会重发；unknown/partial 不要自动重发。sent 只表示系统发送回执成功，不表示对方已收到或已读。微信等消息用其 App 的界面工具。',Type.Object({action:Type.Union([Type.Literal('compose'),Type.Literal('send'),Type.Literal('status'),Type.Literal('subscriptions')]),number:Type.Optional(Type.String({minLength:3,maxLength:40})),text:Type.Optional(Type.String({minLength:1,maxLength:2000})),operationId:Type.Optional(Type.String({minLength:1,maxLength:96})),subscriptionId:Type.Optional(Type.Integer({minimum:0}))})],
   ['device_info','读取手机状态','读取真实手机型号、Android 版本、电量和当前授权能力。',Type.Object({})],
   ['screen_read','读取当前界面','读取节点；若应用返回空树，会直接附上截图和坐标信息。此时切换到视觉操作，不要重复读空树或让 Jev 猜目标。',Type.Object({})],
   ['screen_capture','查看屏幕','返回截图、screenshotId、图片尺寸。后续坐标必须使用图片像素，由工具映射到真实屏幕；每帧只支持一次动作。',Type.Object({})],
@@ -727,6 +733,7 @@ async function configure(raw) {
   const model = modelRuntime.getModel(next.provider,next.model);
   if (!model) throw new Error('模型配置未能加载');
   resourceLoader = new DefaultResourceLoader({cwd:workspace,agentDir,noExtensions:true,noSkills:true,additionalSkillPaths:[phoneSkillPath,skillCreatorPath],noPromptTemplates:true,noThemes:true,
+    extensionFactories:[{name:'camera-context',hidden:true,factory:pi=>pi.on('context',event=>({messages:cameraWorkingContext(event.messages)}))}],
     skillsOverride:current=>{
       const project=loadSkillsFromDir({dir:projectSkillDir(),source:'zfold-project-skills'});
       const global=loadSkillsFromDir({dir:globalSkillDir,source:'zfold-global-skills'});
@@ -740,7 +747,7 @@ async function configure(raw) {
   config=next;
   if(session)await session.setModel(model);
   else await activateSession(await selectedSessionManager());
-  emit({type:'configured',model:next.model,provider:next.provider,config:next,sessionId:session.sessionId,skills:resourceLoader.getSkills().skills.map(skill=>skill.name),tools:session.getActiveToolNames().sort()});
+  emit({type:'configured',model:next.model,provider:next.provider,config:next,imageInput:model.input.includes('image'),sessionId:session.sessionId,skills:resourceLoader.getSkills().skills.map(skill=>skill.name),tools:session.getActiveToolNames().sort()});
   emitCatalog();
   emitModelsCatalog();
 }
@@ -821,6 +828,8 @@ async function receive(command) {
   if(command.type==='prompt') {
     if(changingSession)throw new Error('会话正在切换，请稍后再试');
     if(!session) throw new Error('请先配置模型地址、名称和 API Key');
+    if(command.sessionId&&command.sessionId!==session.sessionId)throw new Error('发送目标会话已经改变，请重新提交');
+    if(command.cameraFrame&&activeModel?.input&&!activeModel.input.includes('image'))throw new Error('当前模型不支持图片，请换用视觉模型或选择仅发文字');
     if(busy) throw new Error('当前任务正在执行，请先停止');
     const text=String(command.text||'').trim();
     if(!text && !(Array.isArray(command.images)&&command.images.length) && !command.image) return;
@@ -828,8 +837,8 @@ async function receive(command) {
     try {
       const images=[];
       if(command.image)images.push({type:'image',data:command.image,mimeType:'image/png'});
-      for(const image of command.images||[])if(image?.data)images.push({type:'image',data:image.data,mimeType:image.mime||'image/png'});
-      await session.prompt(text+attachmentPrompt(command.files),{images:images.length?images:undefined});
+      for(const image of command.images||[])if(image?.data)images.push({type:'image',data:image.data,mimeType:image.mime||'image/png',...(image.source==='camera'&&image.frameId?{_zfoldCameraFrame:image.frameId}:{})});
+      await session.prompt(text+attachmentPrompt(command.files)+cameraPromptSuffix(command.cameraFrame),{images:images.length?images:undefined});
       const messages=session.messages;
       const last=[...messages].reverse().find(m=>m.role==='assistant');
       if(last?.stopReason==='error') throw new Error(last.errorMessage||'模型请求失败');
