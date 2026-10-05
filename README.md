@@ -503,7 +503,9 @@ adb reverse --remove tcp:18868
 
 ## 明确的当前边界
 
-语音选型与诊断：在线候选采用豆包 TTS 2.0 / ASR 2.0，详见 [PRODUCT_PLAN.md](PRODUCT_PLAN.md) 的语音服务接入契约；APK 尚未接入云端语音。`node scripts/probe-volc-speech.mjs` 从本地 `.env` 读取 `VOLC_API_KEY`，仅检查官方 WebSocket 握手；加 `--samples` 才会消耗 API 额度生成三段固定试听并做合成音 ASR 回环。脚本不录麦克风、不上传聊天，也不输出密钥。当前凭证在两项服务均返回 401，效果与时延尚待验证。
+语音选型与诊断：在线候选采用豆包 TTS 2.0 / ASR 2.0，详见 [PRODUCT_PLAN.md](PRODUCT_PLAN.md) 的语音服务接入契约；APK 尚未接入云端语音。`node scripts/probe-volc-speech.mjs` 从本地 `.env` 读取 `VOLC_API_KEY`，仅检查官方 WebSocket 握手；加 `--samples` 才会消耗 API 额度生成三段固定试听并做合成音 ASR 回环。脚本不录麦克风、不上传聊天，也不输出密钥。更新后的凭证已完成真实合成与合成音识别验证；不代表真人识别或手机实际播放验收。
+
+`node scripts/provision-speech.mjs --serial <真机序列号>` 将 `.env` 中的语音 Key 写入应用私有 `no_backup/credentials/speech.json`，权限 600，并回读校验；保留已有选项、不重启应用。Fold7 已导入，当前 APK 尚不读取该语音配置，因此“已保存”不等于“已启用”。
 
 以 0.2.75 为当前代码版本；PRODUCT_AUDIT.md 保留 0.2.72 的系统核对基线，后续产品目标见 PRODUCT_PLAN.md。
 

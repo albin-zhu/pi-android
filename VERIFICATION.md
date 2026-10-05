@@ -1,11 +1,21 @@
 # 验证记录 · 2026-09-22
 
-当前交付状态（2026-10-05）：0.2.75-compat28 已构建并在模拟器安装验收，包含 0.2.74 视频/手机能力更新及对话 minimap；Fold7 最后确认安装的是 0.2.73-compat28。真机 ADB 仍断开，真机安装、前置镜头与真人语音联测待重新连接。下面保留各版本原始记录。
+当前交付状态（2026-10-05）：0.2.75-compat28 已构建并在模拟器安装验收，包含 0.2.74 视频/手机能力更新及对话 minimap；Fold7 最后确认安装的是 0.2.73-compat28。真机 ADB 已恢复，并完成私有语音凭据写入；0.2.75 真机安装、前置镜头与真人语音联测仍待完成。下面保留各版本原始记录。
+
+## 更新语音凭据与真实 API 验证 · 2026-10-05
+
+- Fold7 `RFCY71NCKBA` / SM_F9660 已通过 USB ADB 连接，安装版本仍为 0.2.73-compat28 / 273。没有安装更新、强停或重启应用。
+- `.env` 只有 `VOLC_API_KEY`。更新后的 Key 已写入应用 `no_backup/credentials/speech.json`；内容通过 stdin 传输，临时文件原子替换，目录 700 / 文件 600，完整回读一致。保留已有配置选项和其他凭据，未将 Key 写进 APK、Git、命令参数或日志。该文件为后续云端适配准备；当前 APK 不读取它。
+- 桌面当前网络真实调用豆包 TTS 2.0 双向 WebSocket，按 8 字片段 / 80 ms 输入同一测试文本，16 kHz 单声道 PCM：Vivi 首文本→首 PCM 251 ms，冷连接开始→首 PCM 491 ms；小何为 263 / 490 ms；云舟为 518 / 753 ms。每音色只有一次样本，不能当作 p50/p95、首实际出声或手机网络数据。
+- 三个完整 WAV：`artifacts/speech-evaluation/2026-10-05T10-44-11-228Z/{vivi,xiaohe,yunzhou}.wav`，分别约 11.19 / 9.60 / 10.00 秒。合成成功不代表已经进行主观音质盲听。
+- Vivi 合成音按 200 ms 包实时回送 ASR 2.0，首字 649 ms、最后音频发出→最终结果 723 ms。中英 API 与数字 403 被识别；“橙橙”识别成“程程”。加入橙橙/Pi/API/ADB 热词后第二次同音回环仍为“程程”，731 ms 返回最终结果；保留这一限制，没有硬改转写结果。此为合成音测试，不是用户录音或真人准确率测试。
+- 脱敏报告：同目录 `results.json`、`asr-hotwords.json`。测试没有收音、读取手机聊天或发送消息/拨号。
+- `node --test tests/speech-provision.test.mjs tests/volc-speech-probe.test.mjs` 15/15 通过；覆盖已有配置保留、stdin 传密钥、模拟器与真机目标隔离、回读不一致拒报成功，以及原语音协议测试。
 
 ## 语音服务选型诊断 · 2026-10-05
 
 - 核对豆包官方 TTS 双向流、ASR 2.0 和音色文档，选型与接入契约已写入 PRODUCT_PLAN.md。没有修改 Android 当前语音路由，没有新建 APK 或更新手机。
-- 用户提供的本地 `VOLC_API_KEY` 对 `openspeech.bytedance.com` 的 TTS 2.0、ASR 2.0 均返回 HTTP 401，响应为 `Invalid X-Api-Key`。最新脱敏诊断：`artifacts/speech-evaluation/2026-10-05T06-55-21-229Z/results.json`。未生成音频、未得到识别文本，因此没有音色试听、ASR 准确率或首包时延的实测结论。
+- 当时的旧 `VOLC_API_KEY` 对 `openspeech.bytedance.com` 的 TTS 2.0、ASR 2.0 均返回 HTTP 401，响应为 `Invalid X-Api-Key`。该次脱敏诊断：`artifacts/speech-evaluation/2026-10-05T06-55-21-229Z/results.json`。该阶段未生成音频、未得到识别文本；后续更新 Key 的结果见上节。
 - `scripts/probe-volc-speech.mjs` 默认只做两项握手；`--samples` 在通过握手后才生成固定文本三音色 WAV，以及一次合成音 ASR 回环。限官方地址、拒绝重定向、有超时/大小限制、不录音、不读取聊天；结果只输出分类错误，密钥不进入日志或结果。
 - `node --test tests/volc-speech-probe.test.mjs`：12/12 通过，覆盖二进制帧、压缩边界、鉴权拒绝、超时/迟到回调、增量文本、音频 session 隔离、ASR 中间结果修订与末包、WAV 格式。全部成功流测试为合成协议 fixture，不能代替供应商端到端验证。
 - `.env` / `.env.*` 已加入 Git 忽略（`.env.example` 除外）；未修改用户密钥内容。诊断依赖 `ws` 显式固定为项目已安装的 8.21.3 开发依赖。

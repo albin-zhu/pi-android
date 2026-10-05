@@ -14,6 +14,7 @@ export const VOICES = Object.freeze([
   {name:'yunzhou', label:'云舟 2.0', speaker:'zh_male_m191_uranus_bigtts'},
 ]);
 export const SAMPLE_TEXT = '你好，我是橙橙。你先忙，我来检查这段代码。API 返回了 403，可能是权限配置的问题。修好后我会告诉你，别担心。';
+export const ASR_HOTWORDS = Object.freeze(['橙橙','Pi','API','ADB']);
 const MAX_FRAME = 2 * 1024 * 1024;
 const MAX_AUDIO = 16000 * 2 * 60;
 
@@ -168,7 +169,8 @@ export async function recognizeSample(apiKey,pcm,options = {}) {
     onOpen:({ws,active,finish}) => {
       opened = performance.now();
       ws.send(asrRequest(1,sequence++,{user:{uid:'chengcheng-evaluation'},audio:{format:'pcm',codec:'raw',rate:16000,bits:16,channel:1},
-        request:{model_name:'bigmodel',enable_nonstream:true,enable_itn:true,enable_punc:true,show_utterances:true,result_type:'full',end_window_size:800}}));
+        request:{model_name:'bigmodel',enable_nonstream:true,enable_itn:true,enable_punc:true,show_utterances:true,result_type:'full',end_window_size:800,
+          corpus:{context:JSON.stringify({hotwords:ASR_HOTWORDS.map(word => ({word}))})}}}));
       let offset = 0;
       const sendNext = () => {
         if (!active()) return;
