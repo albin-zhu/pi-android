@@ -23,7 +23,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   static final int BG=Color.rgb(245,246,247), INK=Color.rgb(16,20,24), MUTED=Color.rgb(95,107,120), ACCENT=Color.rgb(47,111,237), LINE=Color.rgb(226,230,234);
   static volatile MainActivity current;
   PiRuntime runtime; LinearLayout conversation,root,intro,draftAttachment,fileList,composerSurface,statusRow,actionToolbar; android.view.View slashSuggest; FrameLayout composerFrame;ConversationMinimap.Scroll scroll;ConversationMinimap minimap; TextView status,draftLabel,appTitle; Ui.RichBlock answer; Ui.Action voiceButton,modelButton,circleButton,attachButton,screenShareButton,sendButton,sessionButton,overflowButton; EditText input; ImageView draftThumbnail,draftExpanded; Bitmap draftBitmap; Ui.Theme theme;
-  StringBuilder response=new StringBuilder(); boolean continuous,compactHeader,screenSharing,capturingScreen,composerCompact;
+  StringBuilder response=new StringBuilder(); boolean continuous,compactHeader,screenSharing,capturingScreen,composerCompact,screenWindowPending;
   final Runnable screenListener=()->{screenSharing=ScreenContext.enabled();updateScreenShareControl();};
   private boolean returnWorkbench,temporarySettingsHost,smallWindow,windowLayoutApplied;
   LinearLayout navigation,inputRow; Ui.Action workbenchButton; View welcomeMark,suggestions; TextView welcomeTitle,welcomeDescription; ScrollView attachmentScroll;
@@ -263,7 +263,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     String text=value.trim();if(text.isEmpty()&&pendingImage==null&&localFiles.isEmpty())return;
     if(!runtime.configured){settings();return;}
     if(PromptDispatcher.isStop(text)){stop();return;}
-    if(ScreenContext.enabled()){openScreenWorkspace(text,true);return;}
+    if(ScreenContext.enabled()||screenWindowPending){openScreenWorkspace(text,true);return;}
     dispatchText(text);
   }
   private void dispatchText(String text){
@@ -464,7 +464,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       if(i==0)startActivity(new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS));
       if(i==1)startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
       if(i==2)startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));
-      if(i==3){SystemWindowNavigation.explain(this);}
+      if(i==3){SystemWindowNavigation.openSmallWindow(this);}
   }).setNegativeButton("关闭",null).show();
   }
   void runtimePacksSettings(){
@@ -544,14 +544,31 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   void notice(String message){Toast.makeText(this,message,Toast.LENGTH_LONG).show();}
   private String draftLabelText(){return pendingImageLabel==null?"圈选区域":pendingImageLabel;}
   private void toggleScreenShare(){
+    if(screenWindowPending)return;
     if(ScreenContext.enabled()){ScreenContext.setEnabled(false);showStatus("看屏幕已关闭");return;}
     if(PhoneAccessibility.instance==null){new AlertDialog.Builder(this).setTitle("开启读屏与操作").setMessage("从悬浮窗查看其他应用，需要先在系统设置开启 Zfold 的无障碍服务。").setNegativeButton("返回",null).setPositiveButton("前往设置",(d,w)->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))).show();return;}
-    if(!isInMultiWindowMode()){SystemWindowNavigation.explain(this);return;}
+    if(!isInMultiWindowMode()){
+      screenWindowPending=true;
+      showStatus("正在切换系统小窗…");
+      SystemWindowNavigation.enterSmallWindow(this,success->{
+        screenWindowPending=false;
+        if(isFinishing()||isDestroyed())return;
+        if(!success){showStatus("未能切换小窗，看屏幕尚未开启");SystemWindowNavigation.explain(this);return;}
+        ScreenContext.setEnabled(true);showStatus("已开启看屏幕，每次发送读取旁边的应用");
+      });return;
+    }
     ScreenContext.setEnabled(true);showStatus("已开启看屏幕，每次发送读取旁边的应用");
   }
   private void openScreenWorkspace(String text,boolean send){
     if(capturingScreen)return;capturingScreen=true;
-    if(!isInMultiWindowMode()){capturingScreen=false;SystemWindowNavigation.explain(this);return;}
+    if(screenWindowPending||!isInMultiWindowMode()){
+      showStatus("正在切换系统小窗…");
+      SystemWindowNavigation.enterSmallWindow(this,success->{
+        capturingScreen=false;if(isFinishing()||isDestroyed())return;
+        if(!success){showStatus("未能切换小窗，请求尚未发送");SystemWindowNavigation.explain(this);return;}
+        if(ScreenContext.enabled())openScreenWorkspace(text,send);
+      });return;
+    }
     if(!send){capturingScreen=false;return;}
     pendingImage=null;pendingImageLabel=null;updateDraftAttachment();
     ((android.view.inputmethod.InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(),0);

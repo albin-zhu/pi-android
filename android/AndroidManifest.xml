@@ -60,6 +60,7 @@
  </service>
  </application>
  <instrumentation android:name=".PackageCliInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold package CLI check (emulator only)" />
+ <instrumentation android:name=".WindowEntryInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold direct system window entry (emulator only)" />
  <instrumentation android:name=".VideoCallInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold video call check (emulator only)" />
  <instrumentation android:name=".MinimapInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold conversation minimap check (emulator only)" />
  <instrumentation android:name=".PhoneActionsInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold phone capability check (emulator only, no calls or SMS)" />

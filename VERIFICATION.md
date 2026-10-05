@@ -1,6 +1,18 @@
 # 验证记录 · 2026-09-22
 
-当前交付状态（2026-10-05）：Fold7 已覆盖安装 0.2.76-compat28，补齐新图标的实际接入；此前 0.2.75 包含视频/手机能力更新及对话 minimap，并已在模拟器验收。真机已验证新启动图标、应用打开和私有配置保持一致；前置镜头与真人语音联测仍待完成。豆包语音凭据已保存，但当前 APK 尚未接入该服务。下面保留各版本原始记录。
+当前交付状态（2026-10-05）：Fold7 已安装 0.2.77-compat28 的首个修复包；最终增加切换期间发送请求保护的包只在模拟器验收，真机 ADB 随后断开。0.2.76 的新图标已在 Fold7 实际确认。前置镜头、真人语音与完整全屏到系统小窗的真机按钮路径仍待完成。豆包语音凭据已保存，但当前 APK 尚未接入该服务。下面保留各版本原始记录。
+
+## 0.2.77 看屏幕入口与系统小窗 · 2026-10-05
+
+- ADB 截图 `artifacts/screen-context-dialog/current.png` 确认用户看到的是应用自己的“使用系统小窗”说明框。全屏 `toggleScreenShare` / `openScreenWorkspace` 原先直接调用 explain 后返回，没有实际切换或启用读屏。
+- 现在通过当前 Activity 向原 task 发送系统窗口提示，附保存的几何或默认 bounds；最多等待 2.5 秒，以实际 `isInMultiWindowMode()` 为准。成功后才开启看屏幕；失败保留草稿并解释。工作台和手机能力共用同一入口。已经分屏或小窗时不改变布局。
+- 依据 Android 16 AOSP ActivityOptions 的 `android.activity.windowingMode` 选项请求 freeform。它属于可被系统忽略的框架参数，不能据此承诺所有 OEM 可用。首轮 AppTask.startActivity 被 singleTask 根限制拒绝；已改为从前台 Activity 启动同一页面，不使用 NEW_TASK、不销毁聊天。
+- 合并同一 Activity 的并发请求，所有等待者收到完成回调。看屏幕切换期间发出的请求等待窗口/读屏就绪，不能悄悄退成纯文本发送。
+- 最终 `WindowEntryInstrumentation` 在 Android 16 模拟器通过 7 项断言，结束码 -1：App UID 请求原生窗口、相同 task/聊天实例/草稿/光标、重复请求、已有几何、无旧自绘 Overlay、看屏幕成功后启用与关闭。测试的 freeform 全局值恢复为原来的 null，恢复早于 instrumentation finish。
+- 最终构建 `artifacts/Zfold-0.2.77-compat28-debug.apk` SHA-256 `1960d26096617ce7d4654ba36bf1d4d8b14fc6b2731314c0f9e6661a9fdabfe4`；构建和模拟器安装完成，结果见 `artifacts/screen-context-dialog/window-entry-final.txt`。
+- Fold7 已安装并启动的首个修复包 SHA-256 为 `0606d78db59fd709f28b1c4d87ebfaf9316a526a9a65e4e2eeef128fb3465d88`；此后增加上述发送期间保护并重新构建。真机 ADB 随后断开，最终包未再次覆盖到手机。
+- 真机截图 `split-current.png` 已观察到左侧助手、右侧 Chrome 的原生全高分屏，且看屏幕控件开启。用户在验证期间调整窗口、折叠形态，并转为讨论固定左侧工作区；没有完成可归因到该按钮的全屏→小窗对照，因此不把模拟器结果或已有分屏冒充该真机路径已通过。没有在真机运行 instrumentation 或代用户发起模型请求。
+- 现有分屏工具另有待修问题：普通 app_open 不绑定右侧；部分读屏/视觉操作跟随焦点；awaitSplitLaunch 错读嵌套 state，位置计算也不统一。左侧助手 / 右侧操作区的完整契约已加入 PRODUCT_PLAN.md，尚未在本次窗口入口修复中宣称完成。
 
 ## 0.2.76 启动图标修复 · 2026-10-05
 
