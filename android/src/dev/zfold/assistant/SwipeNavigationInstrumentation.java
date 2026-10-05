@@ -11,13 +11,14 @@ import android.widget.*;
 
 /** Actual touch streams and platform Back, not synthetic click-only navigation. Emulator only. */
 public final class SwipeNavigationInstrumentation extends Instrumentation {
-  private MainActivity chat;private Bundle report=new Bundle();private float scale;private String freeform;
-  @Override public void onCreate(Bundle args){PiRuntime.testMode=true;start();}
+  private MainActivity chat;private Bundle report=new Bundle();private float scale;private String freeform;private boolean settingsSaved;
+  @Override public void onCreate(Bundle args){if(!Build.HARDWARE.contains("ranchu")&&!Build.HARDWARE.contains("goldfish")){Bundle result=new Bundle();result.putString("error","Emulator only");finish(0,result);return;}PiRuntime.testMode=true;start();}
   @Override public void onStart(){String error="";
     try{
       EmulatorChecks.accessibility(this);EmulatorChecks.cancelPointer(this);
       scale=Settings.Global.getFloat(getTargetContext().getContentResolver(),Settings.Global.ANIMATOR_DURATION_SCALE,1);
       freeform=EmulatorChecks.shell(this,"settings get global enable_freeform_support").trim();
+      settingsSaved=true;
       launch(false);fill();int task=chat.getTaskId();
       back();settle();require(MainActivity.current()==chat&&!chat.isFinishing()&&chat.getTaskId()==task,"Root Back exited chat");report.putBoolean("rootBackStaysInChat",true);
       Rect window=chat.getWindowManager().getCurrentWindowMetrics().getBounds();int y=rect(chat.scroll).centerY();
@@ -43,7 +44,7 @@ public final class SwipeNavigationInstrumentation extends Instrumentation {
       runOnMainSync(chat::finish);settle();launch(true);fill();openBySwipe();EmulatorChecks.screenshot(this,"swipe-small-drawer.png");
       drawer=rect(chat.swipeNavigation.currentPicker().drawer);swipe(drawer.right-chat.dp(15),drawer.centerY(),drawer.left+chat.dp(10),drawer.centerY());settle();require(!hasDrawer()&&!chat.isFinishing(),"Small-window swipe failed");back();settle();require(!chat.isFinishing(),"Small-window Back removed task");EmulatorChecks.screenshot(this,"swipe-small-chat.png");report.putBoolean("smallWindowGesturesAndBack",true);
     }catch(Throwable failure){error=failure.toString();report.putString("error",error);try{EmulatorChecks.screenshot(this,"swipe-failure.png");}catch(Exception ignored){}}
-    finally{EmulatorChecks.cancelPointer(this);try{setScale(scale);EmulatorChecks.shell(this,"settings "+("null".equals(freeform)?"delete global enable_freeform_support":"put global enable_freeform_support "+freeform));}catch(Exception ignored){}}
+    finally{EmulatorChecks.cancelPointer(this);if(settingsSaved)try{setScale(scale);EmulatorChecks.shell(this,"settings "+("null".equals(freeform)?"delete global enable_freeform_support":"put global enable_freeform_support "+freeform));}catch(Exception ignored){}}
     finish(error.isEmpty()?-1:0,report);
   }
   private void launch(boolean small)throws Exception{
@@ -51,7 +52,7 @@ public final class SwipeNavigationInstrumentation extends Instrumentation {
     if(small)EmulatorChecks.shell(this,"settings put global enable_freeform_support 1");
     EmulatorChecks.shell(this,"am start --windowingMode "+(small?5:1)+" -n dev.zfold.assistant/.MainActivity");
     for(int i=0;i<150;i++){MainActivity candidate=MainActivity.current();if(candidate!=null&&candidate!=previous&&candidate.swipeNavigation!=null&&candidate.swipeNavigation.isLaidOut()){chat=candidate;break;}Thread.sleep(100);}
-    require(chat!=null&&chat!=previous,"Chat did not launch");for(int i=0;i<200&&!chat.runtime.ready;i++)Thread.sleep(100);
+    require(chat!=null&&chat!=previous,"Chat did not launch");for(int i=0;i<200&&!chat.runtime.ready;i++)Thread.sleep(100);runOnMainSync(()->chat.runtime.unlisten(chat));
     if(small){int w=chat.dp(239),h=chat.dp(282);EmulatorChecks.shell(this,"am task resize "+chat.getTaskId()+" 220 500 "+(220+w)+" "+(500+h));}
     settle();
   }

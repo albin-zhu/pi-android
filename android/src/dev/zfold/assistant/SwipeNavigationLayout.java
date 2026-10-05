@@ -26,6 +26,7 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
   void show(SessionPicker next){
     if(picker!=null){if(picker==next){open();return;}removeDrawer();}
     picker=next;addView(next.frame,new FrameLayout.LayoutParams(-1,-1));next.resize(getWidth(),getHeight());
+    owner.syncMinimapSuppression();
     getChildAt(0).setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
     position=0;paint();next.frame.requestApplyInsets();next.frame.requestFocus();open();
   }
@@ -33,6 +34,7 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
   void close(){if(picker!=null)settle(0,0);}
   private void removeDrawer(){
     cancelSpring();if(picker==null)return;SessionPicker old=picker;picker=null;removeView(old.frame);old.detached();position=0;
+    owner.syncMinimapSuppression();
     if(getChildCount()>0)getChildAt(0).setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_AUTO);
   }
   private void paint(){if(picker!=null){picker.drawer.setTranslationX((position-1)*picker.drawerWidth);picker.scrim.setAlpha(position);}}
@@ -112,6 +114,7 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
   private boolean ownsHorizontal(View view,float x,float y){
     if(view.getVisibility()!=VISIBLE)return false;int[] at=new int[2];view.getLocationOnScreen(at);
     if(x<at[0]||x>=at[0]+view.getWidth()||y<at[1]||y>=at[1]+view.getHeight())return false;
+    if(view instanceof ConversationMinimap&&((ConversationMinimap)view).ownsTouch(x-at[0],y-at[1]))return true;
     if(view instanceof EditText||view instanceof HorizontalScrollView||view.canScrollHorizontally(-1)||view.canScrollHorizontally(1))return true;
     if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=group.getChildCount()-1;i>=0;i--)if(ownsHorizontal(group.getChildAt(i),x,y))return true;}
     return false;

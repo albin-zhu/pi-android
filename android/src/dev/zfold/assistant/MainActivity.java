@@ -22,7 +22,7 @@ import java.util.*;
 public final class MainActivity extends Activity implements PiRuntime.Listener {
   static final int BG=Color.rgb(245,246,247), INK=Color.rgb(16,20,24), MUTED=Color.rgb(95,107,120), ACCENT=Color.rgb(47,111,237), LINE=Color.rgb(226,230,234);
   static volatile MainActivity current;
-  PiRuntime runtime; LinearLayout conversation,root,intro,draftAttachment,fileList,composerSurface,statusRow,actionToolbar; android.view.View slashSuggest; FrameLayout composerFrame;ScrollView scroll; TextView status,draftLabel,appTitle; Ui.RichBlock answer; Ui.Action voiceButton,modelButton,circleButton,attachButton,screenShareButton,sendButton,sessionButton,overflowButton; EditText input; ImageView draftThumbnail,draftExpanded; Bitmap draftBitmap; Ui.Theme theme;
+  PiRuntime runtime; LinearLayout conversation,root,intro,draftAttachment,fileList,composerSurface,statusRow,actionToolbar; android.view.View slashSuggest; FrameLayout composerFrame;ConversationMinimap.Scroll scroll;ConversationMinimap minimap; TextView status,draftLabel,appTitle; Ui.RichBlock answer; Ui.Action voiceButton,modelButton,circleButton,attachButton,screenShareButton,sendButton,sessionButton,overflowButton; EditText input; ImageView draftThumbnail,draftExpanded; Bitmap draftBitmap; Ui.Theme theme;
   StringBuilder response=new StringBuilder(); boolean continuous,compactHeader,screenSharing,capturingScreen,composerCompact;
   final Runnable screenListener=()->{screenSharing=ScreenContext.enabled();updateScreenShareControl();};
   private boolean returnWorkbench,temporarySettingsHost,smallWindow,windowLayoutApplied;
@@ -91,8 +91,8 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     TextView name=text(runtime.agentName,20,theme.ink);appTitle=name;name.setTypeface(Typeface.create("sans-serif-medium",0));name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);navigation.addView(name,new LinearLayout.LayoutParams(0,-2,1));
     navigation.addView(new Ui.Action(this,R.drawable.ic_sidebar,"","会话",theme.muted,Color.TRANSPARENT,this::openSidebar),new LinearLayout.LayoutParams(dp(48),dp(48)));
     workbenchButton=new Ui.Action(this,R.drawable.ic_workbench,"工作台","打开工作台",theme.ink,Color.TRANSPARENT,()->WorkbenchActivity.open(this));navigation.addView(workbenchButton);root.addView(navigation);
-    scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.setClipToPadding(false);
-    conversation=new LinearLayout(this);conversation.setOrientation(LinearLayout.VERTICAL);conversation.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(conversation);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+    scroll=new ConversationMinimap.Scroll(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.setClipToPadding(false);
+    conversation=new LinearLayout(this);conversation.setOrientation(LinearLayout.VERTICAL);conversation.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(conversation);FrameLayout viewport=new FrameLayout(this);viewport.setMotionEventSplittingEnabled(false);viewport.addView(scroll,new FrameLayout.LayoutParams(-1,-1));minimap=new ConversationMinimap(this,scroll,conversation);viewport.addView(minimap,new FrameLayout.LayoutParams(dp(48),-1,Gravity.RIGHT));root.addView(viewport,new LinearLayout.LayoutParams(-1,0,1));
     intro=new LinearLayout(this);intro.setOrientation(LinearLayout.VERTICAL);intro.setGravity(Gravity.CENTER);intro.setPadding(dp(12),dp(34),dp(12),dp(30));
     welcomeMark=new Ui.Mark(this);welcomeMark.setElevation(dp(6));intro.addView(welcomeMark,new LinearLayout.LayoutParams(dp(54),dp(54)));
     TextView title=text("今天想做什么？",27,theme.ink);welcomeTitle=title;title.setGravity(Gravity.CENTER);title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));title.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams titleParams=new LinearLayout.LayoutParams(-1,-2);titleParams.topMargin=dp(22);intro.addView(title,titleParams);
@@ -161,6 +161,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     LinearLayout.LayoutParams titleParams=(LinearLayout.LayoutParams)welcomeTitle.getLayoutParams();titleParams.topMargin=dp(small?0:22);welcomeTitle.setLayoutParams(titleParams);
   }
   void openSidebar(){
+    if(minimap!=null)minimap.hideNow();
     if(textSelection!=null)textSelection.finish();
     if(swipeNavigation.hasDrawer()){swipeNavigation.open();return;}
     if(input!=null){android.view.inputmethod.InputMethodManager manager=(android.view.inputmethod.InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);if(manager!=null)manager.hideSoftInputFromWindow(input.getWindowToken(),0);}
@@ -172,6 +173,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       public void openToolCenter(){showToolCenter(sessionButton);}
     });
   }
+  void syncMinimapSuppression(){if(minimap!=null)minimap.suppress(textSelection!=null||swipeNavigation!=null&&swipeNavigation.hasDrawer());}
   boolean runSlashCommand(String name,String argument){
     switch(name){
       case "tools":showToolCenter(sessionButton);return true;
@@ -213,7 +215,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     },section);
   }
   void bubble(String value,boolean user){
-    LinearLayout line=new LinearLayout(this);line.setGravity(user?Gravity.END:Gravity.START);line.setOrientation(LinearLayout.HORIZONTAL);
+    LinearLayout line=new LinearLayout(this);ConversationMinimap.mark(line,user?ConversationMinimap.USER:ConversationMinimap.ASSISTANT);line.setGravity(user?Gravity.END:Gravity.START);line.setOrientation(LinearLayout.HORIZONTAL);
     LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setBackground(null);
     if(user){
       TextView view=text(value,16,theme.ink);
@@ -236,16 +238,16 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     }
     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(user?14:18);lp.bottomMargin=dp(user?4:6);conversation.addView(line,lp);
     if(Ui.motion()){line.setAlpha(0);line.setTranslationY(dp(9));line.animate().alpha(1).translationY(0).setDuration(150).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();}
-    scroll.post(()->scroll.fullScroll(View.FOCUS_DOWN));
+    minimap.changed();
   }
   void bubble(String value,boolean user,String picture,boolean hasPicture){
     bubble(value,user);
     if(!user||!hasPicture)return;
     Bitmap bitmap=Ui.thumbnail(picture,480);
-    LinearLayout imageRow=new LinearLayout(this);imageRow.setGravity(Gravity.END);
+    LinearLayout imageRow=new LinearLayout(this);ConversationMinimap.mark(imageRow,ConversationMinimap.IMAGE);imageRow.setGravity(Gravity.END);
     if(bitmap!=null){ImageView image=new ImageView(this);image.setImageBitmap(bitmap);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setBackground(Ui.card(this,theme.surface,18,theme.line));image.setElevation(dp(3));image.setPadding(dp(4),dp(4),dp(4),dp(4));image.setClipToOutline(true);image.setContentDescription("本条消息附带的屏幕图片");imageRow.addView(image,new LinearLayout.LayoutParams(dp(180),dp(140)));}
     else{TextView label=text("已附图片",13,theme.muted);label.setPadding(dp(12),dp(8),dp(12),dp(8));label.setBackground(Ui.shape(this,theme.field,12,0));imageRow.addView(label);}
-    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(5);conversation.addView(imageRow,lp);
+    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(5);conversation.addView(imageRow,lp);minimap.changed();
   }
   void updateDraftAttachment(){
     if(draftAttachment==null)return;
@@ -287,13 +289,14 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       localFiles.removeAll(submittedFiles);updateDraftAttachment();showStatus(queued?"已排队，完成当前任务后继续":"正在思考…");updateSend();
     });
   }
-  boolean followsBottom(){return conversation.getHeight()-scroll.getHeight()-scroll.getScrollY()<dp(48);}
-  void followBottom(boolean follow){if(follow)scroll.post(()->scroll.fullScroll(View.FOCUS_DOWN));}
+  boolean followsBottom(){return !scroll.touching()&&!minimap.interacting()&&conversation.getHeight()-scroll.getHeight()-scroll.getScrollY()<dp(48);}
+  void followBottom(boolean follow){if(follow)scroll.post(scroll::followLatest);}
   void showTool(JSONObject item){
     String id=item.optString("id");ToolCallView card=toolViews.get(id);
-    if(card==null){card=new ToolCallView(this,item);toolViews.put(id,card);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(8);lp.leftMargin=dp(38);conversation.addView(card,lp);}else card.update(item);
+    if(card==null){card=new ToolCallView(this,item);toolViews.put(id,card);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(8);lp.leftMargin=dp(38);conversation.addView(card,lp);}else card.update(item);minimap.changed();
   }
   void showHistory(JSONObject event){
+    minimap.reset();
     JSONArray items=event.optJSONArray("items");conversation.removeAllViews();toolViews.clear();answer=null;response.setLength(0);response.append(runtime.lastResponse);
     if(items==null||items.length()==0){conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);return;}
     conversation.setGravity(Gravity.TOP);
@@ -313,7 +316,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       case "agent_identity":if(appTitle!=null)appTitle.setText(runtime.agentName);runtime.send(PiRuntime.json("type","history"));break;
       case "jev_status":break;
       case "jev_error":notice(event.optString("message"));break;
-      case "session_changed":conversation.removeAllViews();toolViews.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
+      case "session_changed":minimap.reset();conversation.removeAllViews();toolViews.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
       case "history":showHistory(event);showStatus(runtime.busy?"正在处理…":idleStatus());break;
       case "turn_start":{
         if(intro.getParent()==conversation)conversation.removeView(intro);conversation.setGravity(Gravity.TOP);
@@ -619,8 +622,8 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     showStatus("已在当前对话");
   }
   @Override public void onBackPressed(){handleBack();}
-  @Override public void onActionModeStarted(ActionMode mode){super.onActionModeStarted(mode);textSelection=mode;if(swipeNavigation!=null)swipeNavigation.selecting(true);}
-  @Override public void onActionModeFinished(ActionMode mode){super.onActionModeFinished(mode);if(textSelection==mode)textSelection=null;if(swipeNavigation!=null)swipeNavigation.selecting(false);}
+  @Override public void onActionModeStarted(ActionMode mode){super.onActionModeStarted(mode);textSelection=mode;syncMinimapSuppression();if(swipeNavigation!=null)swipeNavigation.selecting(true);}
+  @Override public void onActionModeFinished(ActionMode mode){super.onActionModeFinished(mode);if(textSelection==mode)textSelection=null;syncMinimapSuppression();if(swipeNavigation!=null)swipeNavigation.selecting(false);}
   @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(root!=null)SystemWindowNavigation.remember(this);}
-  @Override protected void onDestroy(){ChatBackNavigation.unregister(this,backCallback);if(swipeNavigation!=null)swipeNavigation.dispose();if(current==this)current=null;runtime.unlisten(this);ScreenContext.unlisten(screenListener);pendingTaskPrompt=null;VoiceCoordinator.get(this).forget(this);if(isFinishing()&&!VoiceCallActivity.isActive())voice.stopSession(false);if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
+  @Override protected void onDestroy(){ChatBackNavigation.unregister(this,backCallback);if(minimap!=null)minimap.dispose();if(swipeNavigation!=null)swipeNavigation.dispose();if(current==this)current=null;runtime.unlisten(this);ScreenContext.unlisten(screenListener);pendingTaskPrompt=null;VoiceCoordinator.get(this).forget(this);if(isFinishing()&&!VoiceCallActivity.isActive())voice.stopSession(false);if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
 }
