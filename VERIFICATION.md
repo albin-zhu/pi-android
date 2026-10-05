@@ -1,6 +1,14 @@
 # 验证记录 · 2026-09-22
 
-当前交付状态（2026-10-05）：0.2.75-compat28 已构建并在模拟器安装验收，包含 0.2.74 视频/手机能力更新及对话 minimap；Fold7 最后确认安装的是 0.2.73-compat28。真机 ADB 已恢复，并完成私有语音凭据写入；0.2.75 真机安装、前置镜头与真人语音联测仍待完成。下面保留各版本原始记录。
+当前交付状态（2026-10-05）：0.2.75-compat28 已在模拟器验收，并覆盖安装到 Fold7，包含 0.2.74 视频/手机能力更新及对话 minimap。真机已验证主界面与 Pi 运行时正常启动、私有配置保持一致；前置镜头与真人语音联测仍待完成。豆包语音凭据已保存，但当前 APK 尚未接入该服务。下面保留各版本原始记录。
+
+## 0.2.75 Fold7 覆盖更新 · 2026-10-05
+
+- 用户明确要求更新真机；更新前主界面显示“发送”（空输入禁用）与“开始语音对话”，没有停止任务或进行中的语音状态；应用 UID 无其他 CLI 子进程。
+- 安装既有已验收的 `Zfold-0.2.75-compat28-debug.apk`，SHA-256 `2fd82f19d2c41c058374664e5c59018ca0d44bd5c31da9b98bba6f2ff91267a5`。`adb -s RFCY71NCKBA install -r` 返回 Success，包管理器报告 versionCode 275 / versionName 0.2.75-compat28。
+- 更新后打开 MainActivity，主界面可见，发送/语音入口正常；新进程日志确认 Pi 0.85.1、Node v24.21.0、android / arm64 ready，未发现该进程 FATAL EXCEPTION。
+- 安装前后私有 `auth.json`、`models.json`、`jev.json`、`agent.json`、`system.md`、`speech.json` 文件指纹全部一致。未清数据、未运行真机 instrumentation、未开启摄像头或麦克风。
+- 脱敏安装验证记录：`artifacts/install-0.2.75-fold7/verification.json`。此记录确认安装/启动与配置保留，不代替前后摄像头、真人 ASR/TTS、手机工具实际外部动作的真机验收。
 
 ## 更新语音凭据与真实 API 验证 · 2026-10-05
 
