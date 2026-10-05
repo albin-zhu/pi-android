@@ -1,6 +1,17 @@
 # 验证记录 · 2026-09-22
 
-当前交付状态（2026-10-05）：Fold7 已安装 0.2.77-compat28 的首个修复包；最终增加切换期间发送请求保护的包只在模拟器验收，真机 ADB 随后断开。0.2.76 的新图标已在 Fold7 实际确认。前置镜头、真人语音与完整全屏到系统小窗的真机按钮路径仍待完成。豆包语音凭据已保存，但当前 APK 尚未接入该服务。下面保留各版本原始记录。
+当前交付状态（2026-10-05）：0.2.78-compat28 已完成构建与模拟器验收，新增独立语音 provider 设置、真实豆包 ASR/TTS 和试听。Fold7 仍为 0.2.77 的首个修复包，ADB 与无线发现均未连接，因此尚未安装新的语音接入版。0.2.76 的新图标已在 Fold7 实际确认。前置镜头、真人语音/声学回声/蓝牙与完整全屏到系统小窗的真机按钮路径仍待完成。下面保留各版本原始记录。
+
+## 0.2.78 语音 provider 与真实链路 · 2026-10-05
+
+- 工作台 → 语音新增独立 ASR/TTS 选择、Vivi/小何/云舟音色、密码输入和保存/保存并试听；已有 Key 不回填到控件，空输入保留。旧 speech.json 没有 provider 选择时默认系统；导入 Key 不启用云录音。更改后结束当前语音但不停止 Agent Run，下一次通话加载新选择。
+- 手机内 Node SpeechBridge 连接官方 WebSocket，私有 speech.json 提供 Key；运行时不回传原始鉴权响应或 Key。Android AudioTrack 播放流式 PCM，等待实际播放头排空；点击停止立即 pause/flush/release，旧代次事件丢弃。ASR 使用既有 AudioRecord/VAD 的 PCM，终稿前不派发部分结果；静音兜底只结束音频等待终稿，失败不提交旧 partial。
+- 唤醒后的缓存音频与插话确认可走所选豆包 ASR；插话 VAD/AEC 仍在手机。此次只验证合成音/协议与按钮，不把这些代码路径写成真人外放回声或蓝牙已通过。TTS 文本仍按既有切句策略送入双向 session，尚未完成 token 级语音文本清理。
+- `npm test` 80/80 通过，含 6 项 SpeechBridge 新测试：片段/顺序/连接复用、取消与迟到音频、Key 轮换重新读取、ASR 中间到最终修订、鉴权错误不泄漏、缓冲上限；原有 15 项协议/凭据写入测试继续通过。记录：`artifacts/speech-providers/node-tests.txt`。
+- 最终 APK 的 SpeechProviderInstrumentation 6 项断言通过，结束码 -1：独立选项与空 Key 保留、设置控件不显示 Key、云 ASR 静音等待终稿、真实豆包 TTS → Android AudioTrack 播放、真实取消后不接受旧完成事件、固定合成 WAV → 手机 Node → 豆包 ASR。文件：`native-live-final.txt`。真实测试仅使用预先生成的 16 kHz 单声道 WAV，不录麦克风，不发模型请求。
+- 头像回归首次因模拟器原本拒绝麦克风权限而触发权限页，测试夹具在后续反射断言中崩溃；按夹具前提临时授权后，6 项头像/旧播报抑制断言通过，结束码 -1，并恢复原来的拒绝权限。夹具在延迟识别启动前退出，没有录音。记录：`avatar-regression.txt`。BargeEchoInstrumentation 的 4 项分类回归通过，记录：`echo-regression.txt`。
+- 设置页截图 `artifacts/speech-providers/settings.png` 已检查。测试配置位于独立 agent-smoke-credentials，结束恢复原文件，权限 600。真实 Key 经扫描未出现在变更源码或 APK 中。
+- 最终包 `artifacts/Zfold-0.2.78-compat28-debug.apk`，SHA-256 `9e2e7b91cfc45ce655dd98c5f58b82aacc2c723f58bad8c28f4f881efd0451e9`；构建/签名验证、模拟器覆盖安装完成。真机与 mDNS 列表均未发现 Fold7，未声称新设置已出现在真机上。
 
 ## 0.2.77 看屏幕入口与系统小窗 · 2026-10-05
 

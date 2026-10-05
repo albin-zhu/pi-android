@@ -519,6 +519,9 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     }));dialog.show();
   }
   void speechCapabilities(){
+    SpeechSettings.show(this,voice,this::localSpeechCapabilities);
+  }
+  private void localSpeechCapabilities(){
     showStatus("检查本机语音能力…");PhoneSpeech.inspectMandarin(this,support->{
       if(isFinishing())return;
       String recognition=support.installed?"简体中文识别包已安装，语音输入会优先在本机完成。":support.downloadable?"简体中文识别包可下载，但尚未安装；当前语音输入仍用系统默认识别，可能联网。":support.service?"本机识别服务存在，但暂未报告可用的简体中文模型。":"这台设备暂未提供本机识别服务。";
@@ -527,7 +530,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
         String synthesis=localVoice==null?"尚未检测到已安装的离线中文声线。":"已安装离线中文声线："+localVoice;
         boolean auto=VoiceVadMonitor.enabled(this);String interruption="自动插话 · "+(auto?"已开启":"未开启")+"。开启后只在播报期间用本机 VAD 确认真人插话，并保留最近约 2 秒声音送本机识别；噪声、外放与蓝牙仍需实测。";
         boolean wake=VoiceWakeService.enabled(this);String wakeState=wake?"常驻前台监听“小派”":"未开启；开启后会显示麦克风前台通知";
-        AlertDialog.Builder dialog=new AlertDialog.Builder(this).setTitle("本机语音").setMessage("识别 · "+recognition+"\n\n播报 · "+synthesis+"\n\n"+interruption+"\n\n唤醒 · "+wakeState).setNegativeButton("关闭",null).setNeutralButton(auto?"关闭自动插话":"开启自动插话",(d,w)->{VoiceVadMonitor.setEnabled(this,!auto);speechCapabilities();});
+        AlertDialog.Builder dialog=new AlertDialog.Builder(this).setTitle("本机语音").setMessage("识别 · "+recognition+"\n\n播报 · "+synthesis+"\n\n"+interruption+"\n\n唤醒 · "+wakeState).setNegativeButton("关闭",null).setNeutralButton(auto?"关闭自动插话":"开启自动插话",(d,w)->{VoiceVadMonitor.setEnabled(this,!auto);localSpeechCapabilities();});
         if(!support.installed&&support.downloadable)dialog.setPositiveButton("下载中文识别包",(d,w)->PhoneSpeech.downloadMandarin(this,message->{if(isFinishing())return;if(message.endsWith("%"))showStatus(message);else{showStatus(idleStatus());notice(message);}}));
         else dialog.setPositiveButton(wake?"关闭“小派”唤醒":"开启“小派”唤醒",(d,w)->toggleWake());
         dialog.show();

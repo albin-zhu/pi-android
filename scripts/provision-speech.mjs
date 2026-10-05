@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Install a user-supplied speech credential without placing it in an APK or argv.
-// This only stores configuration: the current Android build does not consume it yet.
+// Stores credentials while preserving provider choices; a key import never enables cloud recording.
 import fs from 'node:fs';
 import {parseArgs} from 'node:util';
 import {spawnSync} from 'node:child_process';
@@ -69,7 +69,7 @@ export function provision({serial,apiKey,testing = false,run = spawnSync}) {
 function main() {
   const {values} = parseArgs({options:{serial:{type:'string'},env:{type:'string',default:'.env'},test:{type:'boolean',default:false},help:{type:'boolean',short:'h'}}});
   if (values.help) {
-    console.log('node scripts/provision-speech.mjs --serial <physical-device> [--env .env]\n从 .env 读取 VOLC_API_KEY，写入应用私有 no_backup/credentials/speech.json，并回读校验。\n不重启应用、不修改其他凭据、不启用尚未接入的云语音。--test 仅写模拟器的隔离配置。');
+    console.log('node scripts/provision-speech.mjs --serial <physical-device> [--env .env]\n从 .env 读取 VOLC_API_KEY，写入应用私有 no_backup/credentials/speech.json，并回读校验。\n不重启应用、不修改其他凭据，保留 ASR/TTS 选择；单独导入 Key 不启用在线录音。--test 仅写模拟器的隔离配置。');
     return;
   }
   const apiKey = readApiKey(fs.readFileSync(values.env,'utf8'));

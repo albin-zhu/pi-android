@@ -21,6 +21,7 @@ import { NativeToolBridge } from './native-tools.mjs';
 import { resolveRuntimeCommand, shellWithEnvironment } from './command-environment.mjs';
 import { ConnectorManager } from './connectors.mjs';
 import { cameraWorkingContext, cameraPromptSuffix } from './camera-context.mjs';
+import { SpeechBridge } from './speech-bridge.mjs';
 
 const inputFd = Number(process.argv[2]), outputFd = Number(process.argv[3]);
 registerBundledOAuthFlowLoaders({anthropic:()=>anthropicOAuth,openaiCodex:()=>openaiCodexOAuth,githubCopilot:()=>githubCopilotOAuth,openrouter:()=>openRouterOAuth,kimiCoding:()=>kimiCodingOAuth,xai:()=>xaiOAuth,radius:createRadiusOAuth});
@@ -38,6 +39,7 @@ catch(error){
 const emit = data => fs.writeSync(outputFd, JSON.stringify(data) + '\n');
 const agentDir = path.join(root, '.pi'), sessions = path.join(root, 'sessions');
 const credentialsDir = process.env.ZFOLD_CREDENTIALS_DIR || path.join(root, '.pi', 'agent');
+const speechBridge=new SpeechBridge({emit,readConfig:()=>JSON.parse(fs.readFileSync(path.join(credentialsDir,'speech.json'),'utf8'))});
 const modelsPath = path.join(credentialsDir,'models.json');
 const defaultWorkspace = path.join(root, 'workspace'), workspacesRoot = path.join(root, 'workspaces');
 let workspace = defaultWorkspace, workspaceName = 'default';
@@ -753,6 +755,7 @@ async function configure(raw) {
 }
 
 async function receive(command) {
+  if(speechBridge.receive(command))return;
   if(command.type==='agent_identity'){
     if(command.action==='save'){
       try{

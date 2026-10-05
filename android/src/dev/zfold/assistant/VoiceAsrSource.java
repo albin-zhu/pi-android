@@ -17,6 +17,7 @@ final class VoiceAsrSource {
   private AudioRecord audio;private Thread writer;private volatile boolean running;
   private final java.util.function.DoubleConsumer level;
   private final VoiceEndpointGate endpoint;
+  private java.util.function.Consumer<String> cloudFailure;
 
   VoiceAsrSource(Context context,java.util.function.DoubleConsumer level,VoiceEndpointGate endpoint){
     this.context=context.getApplicationContext();this.level=level;this.endpoint=endpoint;
@@ -38,7 +39,7 @@ final class VoiceAsrSource {
       audio=record;running=true;record.startRecording();
       if(record.getRecordingState()!=AudioRecord.RECORDSTATE_RECORDING)throw new IllegalStateException("连续识别麦克风没有开始");
       ParcelFileDescriptor output=pipe[1];int sourceId=record.getAudioSessionId();
-      writer=new Thread(()->write(output,sourceId),"zfold-live-asr");writer.setDaemon(true);writer.start();
+      writer=new Thread(()->write(new ParcelFileDescriptor.AutoCloseOutputStream(output),sourceId),"zfold-live-asr");writer.setDaemon(true);writer.start();
       return true;
     }catch(Throwable error){
       running=false;
@@ -47,6 +48,18 @@ final class VoiceAsrSource {
       failed.accept(error.getMessage()==null?error.getClass().getSimpleName():error.getMessage());
       return false;
     }
+  }
+
+  boolean startPcm(java.util.function.Consumer<byte[]> sink,java.util.function.Consumer<String> failed){
+    try{
+      int minimum=AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
+      AudioRecord record=new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(minimum,8192));
+      if(record.getState()!=AudioRecord.STATE_INITIALIZED){record.release();throw new IllegalStateException();}
+      audio=record;running=true;cloudFailure=failed;record.startRecording();
+      if(record.getRecordingState()!=AudioRecord.RECORDSTATE_RECORDING)throw new IllegalStateException();
+      OutputStream output=new OutputStream(){public void write(int value){}public void write(byte[] bytes,int offset,int length){sink.accept(java.util.Arrays.copyOfRange(bytes,offset,offset+length));}};
+      int sourceId=record.getAudioSessionId();writer=new Thread(()->write(output,sourceId),"chengcheng-cloud-mic");writer.setDaemon(true);writer.start();return true;
+    }catch(Exception error){stop();failed.accept("麦克风不可用");return false;}
   }
 
   synchronized void stop(){
@@ -60,7 +73,7 @@ final class VoiceAsrSource {
   private synchronized boolean running(){return running;}
   private synchronized AudioRecord record(){return audio;}
 
-  private void write(ParcelFileDescriptor descriptor,int sessionId){
+  private void write(OutputStream destination,int sessionId){
     Vad vad=null;
     try{
       vad=new Vad(context.getAssets(),new VadModelConfig(new SileroVadModelConfig("models/silero_vad.int8.onnx",0.55f,0.35f,0.20f,512,10f),new TenVadModelConfig(),16000,1,"cpu",false));
@@ -68,7 +81,7 @@ final class VoiceAsrSource {
       android.util.Log.w("ZfoldSpeech","Listening VAD unavailable; falling back to RMS endpointing",error);
       vad=null;
     }
-    try(OutputStream output=new ParcelFileDescriptor.AutoCloseOutputStream(descriptor)){
+    try(OutputStream output=destination){
       short[] pcm=new short[512];float[] samples=new float[512];int debugFrames=0;double debugMaxRms=0;
       while(running()){
         AudioRecord record=record();if(record==null)return;
@@ -97,7 +110,7 @@ final class VoiceAsrSource {
         output.write(bytes);
         output.flush();
       }
-    }catch(Exception ignored){}
+    }catch(Exception error){if(running&&cloudFailure!=null)cloudFailure.accept("麦克风读取中断");}
     finally{if(vad!=null)vad.release();}
   }
 }

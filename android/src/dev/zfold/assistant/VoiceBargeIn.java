@@ -31,8 +31,10 @@ final class VoiceBargeIn {
   private volatile int streamEpoch;private volatile long candidateDeadline,echoCooldownUntil;
   private volatile AudioRecord recorder;private volatile String partial="",spoken="";
   private SpeechRecognizer recognizer;
+  private final boolean cloud;private volatile CloudAsrClient cloudRecognizer;
 
-  VoiceBargeIn(Context context,Callback callback){this.context=context.getApplicationContext();this.callback=callback;}
+  VoiceBargeIn(Context context,Callback callback){this(context,callback,false);}
+  VoiceBargeIn(Context context,Callback callback,boolean cloud){this.context=context.getApplicationContext();this.callback=callback;this.cloud=cloud;}
   void setSpoken(String value){synchronized(this){spoken=value==null?"":value;}}
   void spoken(String value){
     if(value==null||value.isBlank())return;
@@ -40,12 +42,12 @@ final class VoiceBargeIn {
   }
   void start(){if(running)return;cancelled=false;running=true;new Thread(this::watch,"zfold-barge-in").start();}
   void stop(boolean waitForResult){
-    boolean wasRunning=running;running=false;streamEpoch++;
+    boolean wasRunning=running;running=false;if(!waitForResult)streamEpoch++;
     if(wasRunning&&!waitForResult)stream.clear();
-    if(!wasRunning)return;
     if(waitForResult&&!cancelled)closeStream();else{cancelled=true;closeStream();}
     AudioRecord active=recorder;if(active!=null)try{active.stop();}catch(IllegalStateException ignored){}
     if(waitForResult&&recognized&&!cancelled)return;
+    closeCloud();
     SpeechRecognizer activeRecognizer=recognizer;recognizer=null;
     if(activeRecognizer!=null)main.post(()->{try{activeRecognizer.cancel();activeRecognizer.destroy();}catch(Exception ignored){}});
   }
@@ -67,6 +69,7 @@ final class VoiceBargeIn {
         if(resetCandidate){
           resetCandidate=false;candidate=false;recognized=false;delivered=false;partial="";speechFrames=0;silentFrames=0;
           echoCooldownUntil=SystemClock.elapsedRealtime()+1800;streamEpoch++;stream.clear();
+          closeCloud();
           SpeechRecognizer activeRecognizer=recognizer;recognizer=null;
           if(activeRecognizer!=null)main.post(()->{try{activeRecognizer.cancel();activeRecognizer.destroy();}catch(Exception ignored){}});
           continue;
@@ -97,16 +100,17 @@ final class VoiceBargeIn {
     }
     if(cancelled)return;
     if(speech)closeStream();
-    else if(failure!=null){cancelled=true;closeStream();SpeechRecognizer activeRecognizer=recognizer;recognizer=null;String reason=failure;
+    else if(failure!=null){cancelled=true;closeStream();closeCloud();SpeechRecognizer activeRecognizer=recognizer;recognizer=null;String reason=failure;
       if(activeRecognizer!=null)main.post(()->{try{activeRecognizer.cancel();activeRecognizer.destroy();}catch(Exception ignored){}});
       main.post(()->callback.failed(reason));return;
-    }else{cancelled=true;closeStream();SpeechRecognizer activeRecognizer=recognizer;recognizer=null;
+    }else{cancelled=true;closeStream();closeCloud();SpeechRecognizer activeRecognizer=recognizer;recognizer=null;
       if(activeRecognizer!=null)main.post(()->{try{activeRecognizer.cancel();activeRecognizer.destroy();}catch(Exception ignored){}});return;}
   }
   private void offer(ArrayDeque<byte[]> queue,byte[] value,int limit){
     synchronized(queue){queue.addLast(value);while(queue.size()>limit)queue.removeFirst();}
   }
   private void beginRecognition(ArrayList<byte[]> history){
+    if(cloud){beginCloudRecognition(history);return;}
     try{
       int epoch=++streamEpoch;stream.clear();
       ParcelFileDescriptor[] pipe=ParcelFileDescriptor.createPipe();
@@ -154,6 +158,31 @@ final class VoiceBargeIn {
         }
       });
     }catch(Exception error){requestReject();Log.w("ZfoldSpeech","Barge audio channel unavailable",error);}
+  }
+  private void closeCloud(){CloudAsrClient active=cloudRecognizer;cloudRecognizer=null;if(active!=null)main.post(active::cancel);}
+  private void beginCloudRecognition(ArrayList<byte[]> history){
+    int token=++streamEpoch;stream.clear();
+    main.post(()->{
+      if(cancelled||!running||token!=streamEpoch)return;
+      CloudAsrClient client=new CloudAsrClient(context,new CloudAsrClient.Callback(){
+        public void ready(){}
+        public void partial(String text){if(cancelled||token!=streamEpoch)return;Classified value=classify(text);partial=value.text;if(value.echo)requestReject();else deliverSpeech(value.text);}
+        public void result(String text){
+          if(cancelled||token!=streamEpoch)return;cloudRecognizer=null;Classified value=classify(text);
+          if(value.echo){requestReject();if(!running)callback.failed("未确认插话，请点头像后说话");return;}
+          if(!value.text.isEmpty())partial=value.text;if(!delivered)deliverSpeech(value.text);
+          if(delivered)callback.result(partial);else callback.failed("没有听清插话，请点头像后说话");
+        }
+        public void error(String reason){if(cancelled||token!=streamEpoch)return;cloudRecognizer=null;stop(false);callback.failed("豆包插话识别不可用");}
+      });cloudRecognizer=client;recognized=true;client.start();
+      Thread writer=new Thread(()->{
+        try{
+          for(byte[] bytes:history){if(cancelled||token!=streamEpoch)return;client.pcm(bytes);}
+          while(!cancelled&&token==streamEpoch){byte[] bytes=stream.take();if(bytes.length==0)break;client.pcm(bytes);}
+          if(!cancelled&&token==streamEpoch)client.finish();
+        }catch(InterruptedException ignored){}
+      },"chengcheng-barge-cloud");writer.setDaemon(true);writer.start();
+    });
   }
   private void deliverSpeech(String value){
     if(delivered||value==null||value.isBlank())return;delivered=true;partial=value;

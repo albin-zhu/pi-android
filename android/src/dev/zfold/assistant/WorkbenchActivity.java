@@ -56,7 +56,7 @@ public final class WorkbenchActivity extends Activity implements PiRuntime.Liste
     LinearLayout phone=section("手机能力");
     row(phone,R.drawable.ic_screen_share,"读屏与操作",PhoneAccessibility.instance!=null?"已连接 · 可读取和操作其他应用":"未开启 · 前往系统设置",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
     row(phone,R.drawable.ic_arrows_out_simple,"系统小窗","进入系统弹出视图，恢复上次大小与位置",()->SystemWindowNavigation.openSmallWindow(this));
-    row(phone,R.drawable.ic_microphone,"语音","检查本机识别、播报与唤醒",()->openMain("open_speech"));
+    row(phone,R.drawable.ic_microphone,"语音","分别选择识别与播报服务、音色和试听",()->openMain("open_speech"));
     LinearLayout advanced=section("高级");
     row(advanced,R.drawable.ic_sidebar,"工具目录","查询工具能力、参数和命令",()->openMain("open_tools"));
     row(advanced,R.drawable.ic_gear_six,"Runtime Packs","管理可选运行环境",()->openMain("open_runtime_packs"));

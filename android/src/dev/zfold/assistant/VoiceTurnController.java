@@ -27,6 +27,8 @@ final class VoiceTurnController {
   private final Context context;private final Callback callback;private final Handler main=new Handler(Looper.getMainLooper());
   private final PiRuntime runtime;
   private SpeechRecognizer recognizer,wakeRecognizer;private TextToSpeech tts;private VoiceBargeIn barge;
+  private SpeechConfig speechConfig;private CloudTtsPlayer cloudTts;private CloudAsrClient cloudAsr,wakeCloud;
+  private String cloudSegment;private boolean asrCloudFailed,ttsCloudFailed;
   private VoiceAsrSource liveAsr;
   private Mode mode=Mode.IDLE;private String activeUtterance,speechPending="",asrLanguage="zh-CN";
   private final StringBuilder spoken=new StringBuilder();
@@ -47,7 +49,7 @@ final class VoiceTurnController {
   void beginSession(){
     if(sessionActive())return;
     android.util.Log.i("ZfoldSpeech","Voice session begin");
-    VoiceWakeService.stop(context);ensureTts();
+    VoiceWakeService.stop(context);speechConfig=SpeechConfig.load(context);asrCloudFailed=false;ttsCloudFailed=false;ensureTts();
     AudioModeOwner.enterSession(context);
     if(recognizer!=null){recognizer.destroy();recognizer=null;}
     recognizerReleasedAt=SystemClock.elapsedRealtime();
@@ -84,7 +86,7 @@ final class VoiceTurnController {
     if(!force&&!speaking())return;
     if(mode==Mode.LISTENING&&(listening||asrChecking)){callback.status("正在听，请说话…");return;}
     speechSuppressed=true;taskVoice=runtime.busy;asrChecking=false;listening=false;
-    epoch++;activeUtterance=null;speechPending="";stopBarge(false);if(tts!=null)tts.stop();
+    epoch++;activeUtterance=null;speechPending="";stopBarge(false);stopTts();
     cancelWakeCommand();stopLiveAsr();livePartial="";partialFinalToken++;endpointFinalToken++;
     if(recognizer!=null){SpeechRecognizer old=recognizer;recognizer=null;old.cancel();cleanupRecognizer(old);}
     mode=Mode.LISTENING;callback.voiceState(true,false);callback.status("已打断，正在切换收听…");
@@ -96,7 +98,7 @@ final class VoiceTurnController {
     cancelWakeCommand();
     stopLiveAsr();
     if(recognizer!=null){SpeechRecognizer old=recognizer;recognizer=null;old.cancel();cleanupRecognizer(old);}
-    if(tts!=null)tts.stop();
+    stopTts();
     callback.voiceState(false,false);
     taskVoice=false;
     if(cancelTask)runtime.send(PiRuntime.json("type","stop"));
@@ -106,7 +108,7 @@ final class VoiceTurnController {
   void beginPrompt(){
     speechSuppressed=false;
     epoch++;activeUtterance=null;speechPending="";spoken.setLength(0);stopBarge(false);
-    if(tts!=null)tts.stop();
+    stopTts();
     stopLiveAsr();
     if(sessionActive())mode=Mode.THINKING;
     taskVoice=false;
@@ -116,6 +118,7 @@ final class VoiceTurnController {
   }
   void assistantStart(){
     if(!sessionActive())return;
+    if(useCloudTts()){finishResidual();finishCloudSegment();return;}
     // A Pi turn can emit multiple assistant messages around tool calls. Keep the
     // spoken-text reference while the existing TTS queue is still alive so BargeIn
     // can still recognize the next echoed sentence.
@@ -123,7 +126,7 @@ final class VoiceTurnController {
     speechPending="";spoken.setLength(0);
   }
   void append(String delta){
-    if(speechSuppressed||!sessionActive()||!ttsReady||tts==null||delta==null||delta.isEmpty())return;
+    if(speechSuppressed||!sessionActive()||!speechReady()||delta==null||delta.isEmpty())return;
     String trimmed=delta.trim();
     if(trimmed.startsWith("{")||trimmed.startsWith("["))return;
     StringBuilder pending=new StringBuilder(speechPending+delta);
@@ -131,17 +134,20 @@ final class VoiceTurnController {
     speechPending=pending.toString();
   }
   void toolAnnounce(String action){
-    if(speechSuppressed||!sessionActive()||!ttsReady||tts==null||action==null||action.isEmpty())return;
+    if(speechSuppressed||!sessionActive()||!speechReady()||action==null||action.isEmpty())return;
+    if(useCloudTts()){finishResidual();finishCloudSegment();}
     String label=PhoneSpeech.speakable(action);
     if(label.length()>40)label=label.substring(0,40);
     if(!label.endsWith("。")&&!label.endsWith("！")&&!label.endsWith("？"))label+="。";
     queue(label);
+    if(useCloudTts())finishCloudSegment();
   }
   void turnEnded(boolean aborted){
     if(aborted){stopSession(false);callback.status(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");return;}
     if(!sessionActive())return;
     if(mode==Mode.LISTENING&&(listening||asrChecking)){callback.status("正在听…");return;}
-    if(ttsReady&&finishResidual())return;
+    if(useCloudTts()){finishResidual();finishCloudSegment();}
+    else if(ttsReady&&finishResidual())return;
     if(engineSpeaking()){mode=Mode.SPEAKING;callback.status("正在播报 · 播完自动听");return;}
     if(SystemClock.elapsedRealtime()<audioCooldownUntil){mode=Mode.LISTENING;callback.status("正在播报 · 播完自动听");return;}
     mode=Mode.LISTENING;listen();
@@ -155,6 +161,7 @@ final class VoiceTurnController {
     stopLiveAsr();
     if(recognizer!=null){recognizer.cancel();recognizer.destroy();recognizer=null;}
     if(tts!=null){tts.stop();tts.shutdown();tts=null;}
+    if(cloudTts!=null){cloudTts.close();cloudTts=null;}
     AudioModeOwner.exitSession(context);
   }
   void availableOfflineVoice(Consumer<String> callback){
@@ -171,6 +178,12 @@ final class VoiceTurnController {
   }
   private boolean queue(String sentence){
     if(speechSuppressed)return false;
+    if(useCloudTts()){
+      if(cloudSegment==null){cloudSegment="cloud-"+(++serial);activeUtterance=cloudSegment;cloudPlayer().begin(cloudSegment);}
+      cloudPlayer().text(cloudSegment,sentence);
+      spoken.append(sentence).append('\n');if(barge!=null)barge.spoken(sentence);
+      if(sessionActive()){mode=Mode.SPEAKING;callback.voiceState(true,true);}return true;
+    }
     boolean fresh=activeUtterance==null;activeUtterance=(mode==Mode.IDLE?"voice":"turn")+"-"+(++serial);
     int result=tts.speak(sentence,fresh?TextToSpeech.QUEUE_FLUSH:TextToSpeech.QUEUE_ADD,null,activeUtterance);
     if(result!=TextToSpeech.SUCCESS){
@@ -219,7 +232,7 @@ final class VoiceTurnController {
       public void speech(String partial){
         if(!sessionActive()||!speaking())return;
         speechSuppressed=true;
-        activeUtterance=null;speechPending="";if(tts!=null)tts.stop();mode=Mode.LISTENING;
+        activeUtterance=null;speechPending="";stopTts();mode=Mode.LISTENING;
         callback.voiceState(true,false);
         callback.status(partial.isEmpty()?"已识别到插话 · 正在听…":"正在听 · "+partial);
       }
@@ -234,12 +247,13 @@ final class VoiceTurnController {
         else{mode=Mode.LISTENING;callback.status(reason+" · 点打断后说话");listen();}
         android.util.Log.w("ZfoldSpeech","Barge ASR unavailable: "+reason);
       }
-    });
+    },useCloudAsr());
     barge.setSpoken(spoken.toString());barge.start();
   }
   private void stopBarge(boolean waitForResult){if(barge!=null){VoiceBargeIn active=barge;barge=null;active.stop(waitForResult);}}
   private void listenWakeCommand(ArrayList<byte[]> audio){
     if(!sessionActive()||audio.isEmpty())return;
+    if(useCloudAsr()){listenCloudWake(audio);return;}
     mode=Mode.LISTENING;wakePartial="";callback.status("正在识别唤醒指令…");
     try{
       ParcelFileDescriptor[] pipe=ParcelFileDescriptor.createPipe();
@@ -321,6 +335,7 @@ final class VoiceTurnController {
     if(sessionActive())main.postDelayed(this::listen,260);
   }
   private void cancelWakeCommand(){
+    if(wakeCloud!=null){wakeCloud.cancel();wakeCloud=null;}
     SpeechRecognizer active=wakeRecognizer;wakeRecognizer=null;wakePartial="";cleanupRecognizer(active);
   }
   private void listen(){
@@ -332,6 +347,7 @@ final class VoiceTurnController {
     endpointFinalToken=0;
     endpointGate.reset();
     stopLiveAsr();
+    if(useCloudAsr()){listenCloud();return;}
     if(recognizer==null){
       asrChecking=true;int token=epoch;callback.status("启动语音识别…");
       main.post(()->{
@@ -445,7 +461,7 @@ final class VoiceTurnController {
     android.util.Log.w("ZfoldSpeech","Voice session pause: "+reason+" mode="+mode+" retries="+retries+" transientErrors="+transientErrors+" emptySpeech="+emptySpeech);
     epoch++;mode=Mode.PAUSED;activeUtterance=null;speechPending="";stopBarge(false);
     if(recognizer!=null)recognizer.cancel();
-    if(tts!=null)tts.stop();
+    stopTts();
     stopLiveAsr();
     callback.voiceState(false,false);callback.sessionEnded(reason);releaseLater();
   }
@@ -453,6 +469,8 @@ final class VoiceTurnController {
   private void stopLiveAsr(){
     VoiceAsrSource source=liveAsr;liveAsr=null;
     if(source!=null)source.stop();
+    if(cloudAsr!=null){cloudAsr.cancel();cloudAsr=null;}
+    listening=false;
     endpointGate.reset();
   }
   private void armPartialFinalizer(){
@@ -475,6 +493,10 @@ final class VoiceTurnController {
     });
   }
   private void stopListeningForFinal(String reason){
+    if(cloudAsr!=null){
+      VoiceAsrSource source=liveAsr;liveAsr=null;if(source!=null)source.stop();
+      listening=false;cloudAsr.finish();callback.status("豆包识别 · 正在确认…");return;
+    }
     long token=++endpointFinalToken;
     android.util.Log.i("ZfoldSpeech","ASR endpoint requested reason="+reason+" partial="+livePartial);
     SpeechRecognizer active=recognizer;
@@ -504,6 +526,7 @@ final class VoiceTurnController {
       return;
     }
     partialFinalToken=0;
+    if(cloudAsr!=null){stopListeningForFinal("silence endpoint");return;}
     android.util.Log.i("ZfoldSpeech","ASR silence accepted partial: "+partial+" quietMs="+quietFor);
     submitLivePartial(partial,"silence fallback");
   }
@@ -517,6 +540,63 @@ final class VoiceTurnController {
       stopBarge(false);
       if(recognizer!=null){recognizer.destroy();recognizer=null;}
       if(tts!=null){tts.shutdown();tts=null;}ttsReady=false;listening=false;
+      if(cloudTts!=null){cloudTts.close();cloudTts=null;}
     },5*60_000);
+  }
+  private boolean useCloudAsr(){return speechConfig!=null&&speechConfig.cloudAsr&&!asrCloudFailed;}
+  private boolean useCloudTts(){return speechConfig!=null&&speechConfig.cloudTts&&!ttsCloudFailed;}
+  private boolean speechReady(){return useCloudTts()?runtime.ready:ttsReady&&tts!=null;}
+  String providerStatus(){
+    SpeechConfig value=sessionActive()?speechConfig:SpeechConfig.load(context);
+    if(value==null)value=SpeechConfig.load(context);
+    return "识别 · "+(value.cloudAsr?sessionActive()&&asrCloudFailed?"系统（豆包失败后回退）":"豆包 ASR 2.0":"系统")+"\n播报 · "+(value.cloudTts?sessionActive()&&ttsCloudFailed?"系统（豆包失败后回退）":"豆包 TTS 2.0":"系统");
+  }
+  private void stopTts(){if(tts!=null)tts.stop();if(cloudTts!=null)cloudTts.stop();cloudSegment=null;}
+  private void finishCloudSegment(){if(cloudTts!=null&&cloudSegment!=null){cloudTts.finish(cloudSegment);cloudSegment=null;}}
+  private CloudTtsPlayer cloudPlayer(){
+    if(cloudTts==null)cloudTts=new CloudTtsPlayer(context,new CloudTtsPlayer.Callback(){
+      public void start(String id){if(!sessionActive()||activeUtterance==null)return;mode=Mode.SPEAKING;callback.voiceState(true,true);callback.status("豆包播报 · 可点头像打断");startBarge();}
+      public void done(String id){finishSpeech(id,true);}
+      public void error(String id,String reason){
+        if(!sessionActive())return;ttsCloudFailed=true;stopTts();activeUtterance=null;speechPending="";stopBarge(false);
+        mode=runtime.busy?Mode.THINKING:Mode.LISTENING;callback.voiceState(true,false);callback.status("豆包播报不可用（"+reason+"），后续改用系统播报");
+        if(!runtime.busy){int token=epoch;main.postDelayed(()->{if(token==epoch&&sessionActive())listen();},500);}
+      }
+    });return cloudTts;
+  }
+  private void listenCloud(){
+    int token=epoch;mode=Mode.LISTENING;callback.status("连接豆包识别…");
+    final CloudAsrClient[] holder=new CloudAsrClient[1];
+    holder[0]=new CloudAsrClient(context,new CloudAsrClient.Callback(){
+      private boolean valid(){return token==epoch&&sessionActive()&&cloudAsr==holder[0];}
+      public void ready(){if(valid())callback.status("豆包识别 · 在线 · 正在听…");}
+      public void partial(String text){if(!valid())return;boolean changed=!text.equals(livePartial);livePartial=text;endpointGate.setCandidate(text);callback.status("豆包识别 · "+text);if(changed)armPartialFinalizer();}
+      public void result(String text){
+        if(!valid())return;stopLiveAsr();livePartial="";
+        if(usablePrompt(text)){mode=Mode.THINKING;taskVoice=false;callback.prompt(text);}
+        else main.postDelayed(()->{if(token==epoch&&sessionActive())listen();},400);
+      }
+      public void error(String reason){
+        if(!valid())return;stopLiveAsr();asrCloudFailed=true;livePartial="";
+        callback.status("豆包识别不可用（"+reason+"），改用系统，请再说一次");
+        main.postDelayed(()->{if(token==epoch&&sessionActive()&&!engineSpeaking())listen();},600);
+      }
+    });
+    cloudAsr=holder[0];cloudAsr.start();if(cloudAsr!=holder[0])return;
+    VoiceAsrSource source=new VoiceAsrSource(context,value->{if(token==epoch&&value>=.035)lastLiveVoiceAt=SystemClock.elapsedRealtime();},endpointGate);
+    liveAsr=source;listening=true;
+    source.startPcm(holder[0]::pcm,reason->main.post(()->{if(token==epoch&&cloudAsr==holder[0]){stopLiveAsr();pause(reason);}}));
+  }
+  private void listenCloudWake(ArrayList<byte[]> audio){
+    int token=epoch;mode=Mode.LISTENING;callback.status("豆包识别 · 正在识别唤醒指令…");
+    final CloudAsrClient[] holder=new CloudAsrClient[1];
+    holder[0]=new CloudAsrClient(context,new CloudAsrClient.Callback(){
+      private boolean valid(){return token==epoch&&sessionActive()&&wakeCloud==holder[0];}
+      public void ready(){}
+      public void partial(String text){if(valid())callback.status("唤醒指令 · "+text);}
+      public void result(String text){if(!valid())return;wakeCloud=null;if(usablePrompt(text))submitWakeCommand(text);else listen();}
+      public void error(String reason){if(!valid())return;wakeCloud=null;asrCloudFailed=true;callback.status("豆包识别不可用，改用系统，请再说一次");listen();}
+    });wakeCloud=holder[0];wakeCloud.start();if(wakeCloud!=holder[0])return;
+    for(byte[] chunk:audio)wakeCloud.pcm(chunk);wakeCloud.finish();
   }
 }
