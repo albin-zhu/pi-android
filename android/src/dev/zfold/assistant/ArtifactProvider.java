@@ -26,7 +26,8 @@ public final class ArtifactProvider extends ContentProvider {
     Uri uri=new Uri.Builder().scheme("content").authority(c.getPackageName()+".artifacts").appendPath(relative).build();
     Intent intent=new Intent(Intent.ACTION_VIEW).setDataAndType(uri,mime(file)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_GRANT_READ_URI_PERMISSION);
     intent.setClipData(ClipData.newRawUri(file.getName(),uri));
-    c.startActivity(intent);
+    if(file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".apk"))UpdateGate.confirm(c,file,()->c.startActivity(intent));
+    else c.startActivity(intent);
   }
   private File resolve(Uri uri)throws IOException {
     if(!uri.getAuthority().equals(getContext().getPackageName()+".artifacts")||uri.getPathSegments().size()!=1)throw new FileNotFoundException("无效文件链接");
