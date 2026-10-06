@@ -39,7 +39,7 @@ public final class PhoneAccessibility extends AccessibilityService {
       result.done(PiRuntime.json("generation",generation,"packageName",observedPackage,"observedAt",System.currentTimeMillis(),"nodes",tree,"readable",tree.length()>0,"reason",tree.length()>0?null:"empty_accessibility_tree","nextTool",tree.length()>0?null:"screen_capture","width",getResources().getDisplayMetrics().widthPixels,"height",getResources().getDisplayMetrics().heightPixels),null);return;
     }
     if(name.equals("ui_act")){act(args,result);return;}
-    if(name.equals("screen_capture")){captureTool(result);return;}
+    if(name.equals("screen_capture")){captureTool(args,result);return;}
     if(name.equals("ui_back")){result.done(PiRuntime.json("performed",performGlobalAction(GLOBAL_ACTION_BACK)),null);return;}
     if(name.equals("ui_tap")) {
       if(args.has("nodeId")){
@@ -145,7 +145,7 @@ public final class PhoneAccessibility extends AccessibilityService {
     if(swipe&&Math.hypot(x2-x1,y2-y1)<8)throw new Exception("滑动起终点必须不同；点击请使用 ui_tap");
     frame.consumed=true;injectedUntil=SystemClock.elapsedRealtime()+1200;gesture(x1,y1,x2,y2,swipe?400:80,result);
   }
-  private void captureTool(AndroidTools.Result result){
+  private void captureTool(JSONObject args,AndroidTools.Result result){
     String pkg=foregroundPackage();AccessibilityNodeInfo root=applicationRoot();int window=root==null?-1:root.getWindowId();if(root!=null)root.recycle();
     int rotation=currentDisplay().getRotation();
     capture((bitmap,error)->{
@@ -154,7 +154,24 @@ public final class PhoneAccessibility extends AccessibilityService {
       Bitmap scaled=ratio<1?Bitmap.createScaledBitmap(bitmap,iw,ih,true):bitmap;
       ByteArrayOutputStream out=new ByteArrayOutputStream();scaled.compress(Bitmap.CompressFormat.JPEG,82,out);if(scaled!=bitmap)scaled.recycle();bitmap.recycle();
       visualFrame=new VisualFrame("screen-"+(++frameSequence),pkg,window,w,h,iw,ih,rotation);
-      result.done(PiRuntime.json("image",Base64.encodeToString(out.toByteArray(),Base64.NO_WRAP),"mimeType","image/jpeg","frame",visualFrame.metadata()),null);
+      JSONObject receipt=PiRuntime.json("image",Base64.encodeToString(out.toByteArray(),Base64.NO_WRAP),"mimeType","image/jpeg","frame",visualFrame.metadata());
+      if(!args.optBoolean("save",false)){result.done(receipt,null);return;}
+      // Persist the exact returned image; disk I/O must not block accessibility.
+      byte[] bytes=out.toByteArray();
+      new Thread(()->{
+        java.io.File file=null;
+        try{
+          java.io.File directory=new java.io.File(RuntimeEnvironment.workingDirectory(this,null),"screenshots");
+          if(!directory.isDirectory()&&!directory.mkdirs())throw new java.io.IOException("无法建立截图目录");
+          file=java.io.File.createTempFile("screen-",".jpg",directory);
+          try(java.io.FileOutputStream stream=new java.io.FileOutputStream(file)){stream.write(bytes);}
+          receipt.put("saved",true);receipt.put("path",file.getAbsolutePath());
+        }catch(Exception failure){
+          if(file!=null)file.delete();
+          try{receipt.put("saved",false);receipt.put("saveError",failure.toString());}catch(JSONException ignored){}
+        }
+        result.done(receipt,null);
+      },"screenshot-save").start();
     });
   }
   private AccessibilityNodeInfo node(String id)throws Exception{
