@@ -1,0 +1,55 @@
+name: CI
+on:
+  push:
+    branches: ['main', 'feat/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run bundle
+      - run: npm test
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [28, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Install pinned Android toolchain
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;28.0.13004108'
+      - run: npm ci
+      - name: Build and verify debug APK
+        env:
+          ZFOLD_TARGET_SDK: ${{ matrix.target }}
+        run: python3 scripts/build.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk-target-${{ matrix.target }}
+          path: artifacts/*.apk
+          if-no-files-found: error
+          retention-days: 7

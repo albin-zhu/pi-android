@@ -4,7 +4,7 @@ import hashlib, io, json, os, pathlib, shutil, subprocess, sys, urllib.request, 
 import tarfile
 ROOT=pathlib.Path(__file__).resolve().parent.parent
 SDK=pathlib.Path(os.environ.get('ANDROID_SDK_ROOT') or os.environ.get('ANDROID_HOME') or pathlib.Path.home()/'Library/Android/sdk')
-JAVA=pathlib.Path('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin')
+JAVA=pathlib.Path(os.environ['JAVA_HOME'])/'bin' if os.environ.get('JAVA_HOME') else pathlib.Path('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin')
 BUILD=ROOT/'.build'; OUT=ROOT/'artifacts'; VENDOR=ROOT/'vendor'
 VERSION='24.21.0-0'
 URL=f'https://github.com/fogtape/nodejs-mobile/releases/download/v{VERSION}/nodejs-mobile-android-{VERSION}.zip'
@@ -104,7 +104,8 @@ def main():
         sherpa_classes.write_bytes(z.read('classes.jar'))
         for name in ('libonnxruntime.so','libsherpa-onnx-c-api.so','libsherpa-onnx-cxx-api.so','libsherpa-onnx-jni.so'):
             (native/name).write_bytes(z.read('jni/arm64-v8a/'+name))
-    ndk=SDK/'ndk/28.0.13004108/toolchains/llvm/prebuilt/darwin-x86_64'
+    host='darwin-x86_64' if sys.platform=='darwin' else 'linux-x86_64'
+    ndk=SDK/'ndk/28.0.13004108/toolchains/llvm/prebuilt'/host
     run(ndk/'bin/aarch64-linux-android30-clang++','-std=c++17','-fPIC','-shared',ROOT/'native/bridge.cpp','-L'+str(native),'-lnode','-llog','-Wl,-z,max-page-size=16384','-Wl,-soname,libzfold.so','-o',native/'libzfold.so')
     run(ndk/'bin/aarch64-linux-android30-clang','-std=c11','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-fPIE','-pie',ROOT/'native/package_cli.c','-Wl,-z,max-page-size=16384','-o',native/'libzfold_pkg.so')
     shutil.copy2(ndk/'sysroot/usr/lib/aarch64-linux-android/libc++_shared.so',native/'libc++_shared.so')
