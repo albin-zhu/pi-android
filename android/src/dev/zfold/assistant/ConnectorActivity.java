@@ -97,10 +97,16 @@ public final class ConnectorActivity extends Activity implements PiRuntime.Liste
     addText(card,server.optString("transport").equals("stdio")?"本机 · "+server.optString("command"):server.optString("address"),12,theme.muted);
     addText(card,stateLabel(server)+(server.optBoolean("connected")?" · "+server.optInt("toolCount")+" 个工具":""),14,server.optBoolean("connected")?theme.success:server.optString("state").equals("error")?theme.error:theme.accent);
     if(!server.optString("error").isEmpty())addText(card,server.optString("error"),12,theme.muted);
+    if(server.optBoolean("oauthNeedsClient"))addAction(card,"配置 OAuth 客户端",true,()->edit(server,true));
     String id=server.optString("id");
     if(server.optBoolean("connected"))addAction(card,"查看工具",false,()->request("tools",PiRuntime.json("id",id),"tools:"+id,false));
-    else if(!server.optString("state").equals("connecting"))addAction(card,server.optString("authUrl").isEmpty()?"连接":"继续登录",true,()->{if(!server.optString("authUrl").isEmpty())browse(server.optString("authUrl"));else request("connect",PiRuntime.json("id",id),"connect",true);});
-    else addAction(card,"取消连接",false,()->request("disconnect",PiRuntime.json("id",id),"disconnect",false));
+    else if(server.optString("state").equals("connecting"))addAction(card,"取消连接",false,()->request("disconnect",PiRuntime.json("id",id),"disconnect",false));
+    else if(!server.optBoolean("oauthNeedsClient"))addAction(card,server.optString("authUrl").isEmpty()?"连接":"继续登录",true,()->{if(!server.optString("authUrl").isEmpty())browse(server.optString("authUrl"));else request("connect",PiRuntime.json("id",id),"connect",true);});
+    if(!server.optString("authUrl").isEmpty()){addAction(card,"手动填写回调地址",false,this::manualCallback);addAction(card,"重新开始登录",false,()->request("connect",PiRuntime.json("id",id),"connect",true));}
+  }
+  private void manualCallback(){
+    EditText input=new EditText(this);input.setSingleLine(true);input.setSaveEnabled(false);input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);input.setHint("粘贴浏览器登录后的完整回调地址");input.setContentDescription("MCP 登录回调地址");
+    new AlertDialog.Builder(this).setTitle("完成 MCP 登录").setMessage("仅在浏览器没有自动返回时使用。请粘贴授权后的回调地址，不是最初的授权链接。").setView(input).setNegativeButton("取消",null).setPositiveButton("继续",(d,w)->request("oauth_callback",PiRuntime.json("url",input.getText().toString().trim()),"callback",false)).show();
   }
   private void manage(JSONObject server){
     String id=server.optString("id");String[] items={"编辑连接",server.optBoolean("enabled")?"断开连接":"重新连接","删除连接"};
@@ -113,7 +119,7 @@ public final class ConnectorActivity extends Activity implements PiRuntime.Liste
   private void chooseAdd(){new AlertDialog.Builder(this).setTitle("添加连接").setItems(new String[]{"远程 MCP 地址","本机 MCP 命令","导入 JSON"},(dialog,which)->{if(which==2)importConfig();else edit(PiRuntime.json("transport",which==0?"http":"stdio","name","","auth",which==0?"oauth":"none"),false);}).show();}
   private EditText field(LinearLayout form,String label,String value,String hint,boolean secret,boolean multiline){
     addText(form,label,13,theme.muted);EditText input=new EditText(this);input.setTextSize(15);input.setTextColor(theme.ink);input.setHintTextColor(theme.muted);input.setText(value);input.setHint(hint);input.setSingleLine(!multiline);input.setMinLines(multiline?2:1);input.setMaxLines(multiline?5:1);
-    input.setInputType(InputType.TYPE_CLASS_TEXT|(multiline?InputType.TYPE_TEXT_FLAG_MULTI_LINE:0)|(secret?InputType.TYPE_TEXT_VARIATION_PASSWORD:InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS));input.setSaveEnabled(!secret);input.setContentDescription(label);
+    input.setInputType(InputType.TYPE_CLASS_TEXT|(multiline?InputType.TYPE_TEXT_FLAG_MULTI_LINE:0)|(secret?InputType.TYPE_TEXT_VARIATION_PASSWORD:InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS));input.setSaveEnabled(!secret);if(secret)input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);input.setContentDescription(label);
     input.setPadding(dp(12),dp(10),dp(12),dp(10));input.setBackground(Ui.shape(this,theme.field,12,theme.line));form.addView(input,new LinearLayout.LayoutParams(-1,-2));return input;
   }
   private void edit(JSONObject data,boolean existing){
@@ -128,12 +134,14 @@ public final class ConnectorActivity extends Activity implements PiRuntime.Liste
     LinearLayout tokenGroup=new LinearLayout(this);tokenGroup.setOrientation(LinearLayout.VERTICAL);if(!local)form.addView(tokenGroup);
     EditText token=!local?field(tokenGroup,"Token", "",existing&&data.optBoolean("hasToken")?"已保存；留空保留":"只用于该服务，保存在手机私有目录",true,false):null;
     tokenGroup.setVisibility(!local&&authentication.getSelectedItemPosition()==1?View.VISIBLE:View.GONE);
-    LinearLayout advanced=new LinearLayout(this);advanced.setOrientation(LinearLayout.VERTICAL);advanced.setVisibility(View.GONE);
+    LinearLayout advanced=new LinearLayout(this);advanced.setOrientation(LinearLayout.VERTICAL);advanced.setVisibility(data.optBoolean("oauthNeedsClient")?View.VISIBLE:View.GONE);
     addAction(form,"高级参数",false,()->advanced.setVisibility(advanced.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE));form.addView(advanced);
     EditText options=field(advanced,local?"环境变量 JSON":"Headers JSON","",existing?"留空保留，{} 清空":"例如 {\"X-API-Key\":\"…\"}",true,true);
     EditText cwd=local?field(advanced,"工作目录",data.optString("cwd"),"留空使用当前项目",false,false):null;
     EditText clientId=!local?field(advanced,"OAuth Client ID（仅预注册时填写）",data.optString("clientId"),"支持动态注册的服务无需填写",false,false):null;
+    EditText clientSecret=!local?field(advanced,"OAuth Client Secret（服务要求时填写）","",data.optBoolean("hasClientSecret")?"已保存；留空保留":"仅保存在手机私有配置中",true,false):null;
     EditText issuer=!local?field(advanced,"对应授权服务地址",data.optString("issuer"),"使用预注册 Client ID 时必填",false,false):null;
+    if(!local){String redirect=data.optString("redirectUrl","dev.zfold.assistant://connector-oauth");addText(advanced,"OAuth 应用需登记此回调地址：\n"+redirect,12,theme.muted);addAction(advanced,"复制 OAuth 回调地址",false,()->{((android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("OAuth callback",redirect));Toast.makeText(this,"回调地址已复制",Toast.LENGTH_SHORT).show();});}
     if(!data.optString("docs").isEmpty())addAction(advanced,"查看接入说明",false,()->browse(data.optString("docs")));
     if(!local)authentication.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onNothingSelected(android.widget.AdapterView<?> parent){}public void onItemSelected(android.widget.AdapterView<?> parent,View view,int position,long id){tokenGroup.setVisibility(position==1?View.VISIBLE:View.GONE);if(position==3)advanced.setVisibility(View.VISIBLE);}});
     TextView error=text("",13,theme.error);editorError=error;editorRequest=null;form.addView(error);ScrollView scroll=new ScrollView(this);scroll.addView(form);
@@ -147,7 +155,7 @@ public final class ConnectorActivity extends Activity implements PiRuntime.Liste
         if(existing)config.put("id",data.getString("id"));
         String json=options.getText().toString().trim();JSONObject extra=json.isEmpty()?new JSONObject():new JSONObject(json);
         if(local){String raw=arguments.getText().toString().trim();JSONArray args=new JSONArray();if(!raw.isEmpty()&&!raw.equals("[]"))for(String item:raw.split("\n"))args.put(item.trim());config.put("command",location).put("args",args).put("keepArgs",existing&&raw.isEmpty()).put("env",extra).put("keepEnvironment",existing&&json.isEmpty()).put("cwd",cwd.getText().toString().trim());}
-        else{String mode=modes[authentication.getSelectedItemPosition()];config.put("url",location).put("keepAddress",existing&&location.isEmpty()).put("auth",mode).put("token",token.getText().toString().trim()).put("headers",mode.equals("headers")?extra:new JSONObject()).put("keepHeaders",existing&&mode.equals("headers")&&json.isEmpty()).put("clientId",clientId.getText().toString().trim()).put("issuer",issuer.getText().toString().trim());}
+        else{String mode=modes[authentication.getSelectedItemPosition()];config.put("url",location).put("keepAddress",existing&&location.isEmpty()).put("auth",mode).put("token",token.getText().toString().trim()).put("headers",mode.equals("headers")?extra:new JSONObject()).put("keepHeaders",existing&&mode.equals("headers")&&json.isEmpty()).put("clientId",clientId.getText().toString().trim()).put("clientSecret",clientSecret.getText().toString().trim()).put("issuer",issuer.getText().toString().trim());}
         error.setTextColor(theme.muted);error.setText("正在保存并连接…");editorRequest=request("save",PiRuntime.json("config",config),"save",true);editor.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
       }catch(Exception failure){error.setTextColor(theme.error);error.setText("请检查高级 JSON 格式："+failure.getMessage());}
     }));editor.show();

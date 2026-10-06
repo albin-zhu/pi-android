@@ -23,6 +23,7 @@ import { ConnectorManager } from './connectors.mjs';
 import { cameraWorkingContext, cameraPromptSuffix } from './camera-context.mjs';
 import { SpeechBridge } from './speech-bridge.mjs';
 import { SessionCatalog, atomicJson } from './session-catalog.mjs';
+import { ProviderAuthManager } from './provider-auth.mjs';
 
 const inputFd = Number(process.argv[2]), outputFd = Number(process.argv[3]);
 registerBundledOAuthFlowLoaders({anthropic:()=>anthropicOAuth,openaiCodex:()=>openaiCodexOAuth,githubCopilot:()=>githubCopilotOAuth,openrouter:()=>openRouterOAuth,kimiCoding:()=>kimiCodingOAuth,xai:()=>xaiOAuth,radius:createRadiusOAuth});
@@ -658,68 +659,13 @@ function emitModelsCatalog(){
   emit({type:'models_catalog',selected:config?{provider:config.provider,model:config.model}:null,providers:providerCatalog(),availableProviders:allProviderCatalog(),error:modelRuntime.getError()||null});
 }
 
-const authFlows=new Map(),authPrompts=new Map();let authPromptSequence=0;
-function authCapabilities(provider){
-  const oauth=Boolean(provider.auth?.oauth),apiKey=Boolean(provider.auth?.apiKey);
-  return {oauth,apiKey,oauthLogin:oauth&&typeof provider.auth.oauth.login==='function',
-    apiKeyLogin:apiKey&&typeof provider.auth.apiKey.login==='function',
-    oauthName:provider.auth?.oauth?.name||provider.auth?.oauth?.loginLabel||'OAuth',
-    apiKeyName:provider.auth?.apiKey?.name||'API Key'};
-}
-
-function finishAuth(id,patch){
-  const flow=authFlows.get(id);if(!flow)return;
-  authFlows.delete(id);
-  const prompt=authPrompts.get(id);
-  if(prompt){authPrompts.delete(id);try{prompt.reject(new Error('登录已取消'));}catch{}}
-  flow.controller.abort();
-  emit({type:'auth_state',requestId:id,provider:flow.provider,authType:flow.authType,state:'error',
-    error:patch.error||'登录已取消',...patch});
-}
-
-async function startAuth(requestId,providerId,authType){
-  if(authFlows.has(requestId))throw new Error('登录请求已存在');
-  await ensureModelRuntime();
-  const provider=modelRuntime.getProvider(providerId);
-  if(!provider)throw new Error(`供应商不存在：${providerId}`);
-  const capabilities=authCapabilities(provider);
-  if(authType==='oauth'&&!capabilities.oauthLogin)throw new Error(`${provider.name} 不支持 OAuth 登录`);
-  if(authType==='api_key'&&!capabilities.apiKeyLogin)throw new Error(`${provider.name} 不支持交互式 API Key 登录`);
-  const controller=new AbortController(),flow={provider:providerId,authType,controller};
-  authFlows.set(requestId,flow);
-  emit({type:'auth_state',requestId,provider:providerId,authType,state:'started',...capabilities});
-  try{
-    const credential=await modelRuntime.login(providerId,authType,{
-      signal:controller.signal,
-      async prompt(prompt){
-        const id=`${requestId}:prompt:${++authPromptSequence}`;
-        const promise=new Promise((resolve,reject)=>authPrompts.set(id,{resolve,reject,prompt}));
-        emit({type:'auth_state',requestId,promptId:id,provider:providerId,authType,state:'prompt',prompt});
-        const onAbort=()=>{const pending=authPrompts.get(id);if(pending){authPrompts.delete(id);pending.reject(new Error('登录已取消'));}};
-        controller.signal.addEventListener('abort',onAbort,{once:true});
-        return promise;
-      },
-      notify(event){emit({type:'auth_state',requestId,provider:providerId,authType,state:'event',event});},
-    });
-    authFlows.delete(requestId);
-    const prompt=authPrompts.get(requestId);
-    if(prompt){authPrompts.delete(requestId);try{prompt.reject(new Error('登录已完成'));}catch{}}
-    emit({type:'auth_state',requestId,provider:providerId,authType,state:'success',
-      credentialType:credential?.type||authType,expires:credential?.expires||null});
-    emitModelsCatalog();
-  }catch(error){
-    authFlows.delete(requestId);
-    const prompt=authPrompts.get(requestId);
-    if(prompt){authPrompts.delete(requestId);try{prompt.reject(error);}catch{}}
-    emit({type:'auth_state',requestId,provider:providerId,authType,state:'error',error:error.message||String(error)});
-  }
-}
+const providerAuth=new ProviderAuthManager({getRuntime:async()=>{await ensureModelRuntime();return modelRuntime;},emit,onSuccess:emitModelsCatalog});
 
 async function receiveAuth(command){
   const action=String(command.action||'list');
   if(action==='list'){
     await ensureModelRuntime();
-    emit({type:'auth_state',state:'providers',providers:providerCatalog(),availableProviders:allProviderCatalog(),flows:[...authFlows.keys()]});
+    emit({type:'auth_state',state:'providers',providers:providerCatalog(),availableProviders:allProviderCatalog(),flows:providerAuth.snapshots()});
     return;
   }
   if(action==='add'){
@@ -732,27 +678,23 @@ async function receiveAuth(command){
     if(!document.providers[providerId]||Object.keys(document.providers[providerId]).length===0)
       document.providers[providerId]={name:provider.name||providerId,modelOverrides:{[model]:{}}};
     writeModelsDocument(document);
-    emit({type:'auth_state',state:'providers',providers:providerCatalog(),availableProviders:allProviderCatalog(),flows:[...authFlows.keys()],added:providerId});
+    emit({type:'auth_state',state:'providers',providers:providerCatalog(),availableProviders:allProviderCatalog(),flows:providerAuth.snapshots(),added:providerId});
     return;
   }
   if(action==='remove'){
     const providerId=String(command.provider||'').trim();
     const document=readModelsDocument();document.providers??={};delete document.providers[providerId];
     writeModelsDocument(document);
-    emit({type:'auth_state',state:'providers',providers:providerCatalog(),availableProviders:allProviderCatalog(),flows:[...authFlows.keys()],removed:providerId});
+    emit({type:'auth_state',state:'providers',providers:providerCatalog(),availableProviders:allProviderCatalog(),flows:providerAuth.snapshots(),removed:providerId});
     return;
   }
   if(action==='login'){
     const requestId=String(command.requestId||`auth-${Date.now()}`);
-    await startAuth(requestId,String(command.provider),String(command.authType||'oauth'));
+    await providerAuth.start({requestId,provider:String(command.provider),authType:String(command.authType||'oauth')});
     return;
   }
-  if(action==='prompt'){
-    const pending=authPrompts.get(String(command.promptId));
-    if(!pending)throw new Error('登录提示已失效');
-    authPrompts.delete(String(command.promptId));pending.resolve(String(command.value||''));return;
-  }
-  if(action==='cancel'){finishAuth(String(command.requestId),{state:'cancelled'});return;}
+  if(action==='prompt'){providerAuth.answer(command);return;}
+  if(action==='cancel'){providerAuth.cancel(String(command.requestId));return;}
   throw new Error('未知 auth 操作');
 }
 
@@ -838,7 +780,7 @@ async function receive(command) {
   if(command.type==='tools_catalog'){emitCatalog();return;}
   if(command.type==='connector_manage'){await manageConnector(command);return;}
   if(command.type==='models_catalog'){emitModelsCatalog();return;}
-  if(command.type==='auth_manage'){await receiveAuth(command);return;}
+  if(command.type==='auth_manage'){try{await receiveAuth(command);}catch(error){providerAuth.rejectCommand(command,'登录操作未完成，请刷新供应商列表后重试');}return;}
   if(command.type==='sessions'){try{await emitSessions();}catch(error){emit({type:'session_error',message:error.message});}return;}
   if(command.type==='session_manage'){await manageSession(command);return;}
   if(command.type==='skills_manage'){receiveSkills(command);return;}

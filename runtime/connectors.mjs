@@ -49,15 +49,19 @@ export function normalizeConnector(raw,previous){
     config.headers=strings(raw.headers,'Headers');
     for(const [key,value] of Object.entries(config.headers))if(!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(key)||/[\r\n]/.test(value))throw new Error('Headers 格式无效');
     config.token=String(raw.token||'');
-    config.clientId=String(raw.clientId||'');config.issuer=raw.issuer?endpoint(raw.issuer):'';
+    config.clientId=String(raw.clientId||'');config.clientSecret=String(raw.clientSecret||'');config.issuer=raw.issuer?endpoint(raw.issuer):'';
     if(config.issuer&&new URL(config.issuer).search)throw new Error('授权服务地址不能包含查询参数');
     if(config.clientId&&!config.issuer)throw new Error('预注册 Client ID 需要填写对应的授权服务地址');
+    if(config.clientSecret&&!config.clientId)throw new Error('Client Secret 需要对应的 Client ID');
   }
   if(previous&&identity(config)===identity(previous)&&config.auth===previous.auth){
     if(raw.keepSecrets){config.token=config.token||previous.token;}
     if(raw.keepHeaders)config.headers=previous.headers||{};
     if(raw.keepEnvironment)config.env=previous.env||{};
-    if(config.clientId===previous.clientId&&config.issuer===previous.issuer)config.oauth=previous.oauth;
+    if(config.clientId===previous.clientId&&config.issuer===previous.issuer){
+      if(raw.keepSecrets&&!config.clientSecret)config.clientSecret=previous.clientSecret||'';
+      if((config.clientSecret||'')===(previous.clientSecret||''))config.oauth=previous.oauth;
+    }
   }
   return config;
 }
@@ -66,7 +70,7 @@ export class ConnectorManager {
   constructor({directory,workspace,onChange=()=>{},environment=async()=>({}),resolveCommand=command=>command,allowStdio=true,redirectUrl='dev.zfold.assistant://connector-oauth',connectTimeout=20000}){
     this.directory=directory;this.workspace=workspace;this.onChange=onChange;this.environment=environment;this.resolveCommand=resolveCommand;
     this.allowStdio=allowStdio;this.redirectUrl=redirectUrl;this.connectTimeout=connectTimeout;this.entries=new Map();this.configs=new Map();
-    this.file=path.join(directory,'connectors.json');this.storeError='';
+    this.file=path.join(directory,'connectors.json');this.storeError='';this.callbacks=new Map();
     try{const saved=JSON.parse(fs.readFileSync(this.file,'utf8'));if(!Array.isArray(saved.servers))throw new Error('format');for(const item of saved.servers){if(!item.id||!item.name)throw new Error('format');this.configs.set(item.id,item);}}
     catch(error){if(error.code!=='ENOENT')this.storeError='连接配置无法读取，原文件已保留。可通过导入配置恢复。';}
   }
@@ -86,8 +90,9 @@ export class ConnectorManager {
       headerNames:Object.keys(config.headers||{}),environmentNames:Object.keys(config.env||{}),hasToken:Boolean(config.token),
       authenticated:Boolean(config.oauth?.tokens),toolCount:entry?.tools?.length||0,
       tools:(entry?.tools||[]).slice(0,12).map(tool=>({name:tool.name,description:String(tool.description||'').slice(0,500)})),
-      authUrl:entry?.authUrl||'',serverName:entry?.serverName||'',clientId:config.clientId||'',issuer:config.issuer||''};
+      authUrl:entry?.authUrl||'',serverName:entry?.serverName||'',clientId:config.clientId||'',issuer:config.issuer||(this.needsClient(config)?config.oauth?.discovery?.authorizationServerUrl:'')||'',hasClientSecret:Boolean(config.clientSecret),oauthNeedsClient:this.needsClient(config),redirectUrl:this.redirectUrl};
   }
+  needsClient(config){const metadata=config.oauth?.discovery?.authorizationServerMetadata;return config.auth==='oauth'&&Boolean(metadata)&&!metadata.registration_endpoint&&!config.clientId&&!config.oauth?.client;}
   snapshot(){
     const servers=[...this.configs.values()].map(config=>this.publicConfig(config));
     return {connected:servers.some(server=>server.connected),servers,error:this.storeError,recipes:connectorRecipes,
@@ -97,7 +102,8 @@ export class ConnectorManager {
     let message=String(error?.message||error||'连接未完成');
     if(config.url)message=message.replaceAll(config.url,publicURL(config.url));
     const headerValues=Object.values(config.headers||{});
-    const secrets=[config.token,...headerValues,...headerValues.flatMap(value=>value.split(/[ ;=]/)),...Object.values(config.env||{}),...(config.args||[]),config.oauth?.tokens?.access_token,config.oauth?.tokens?.refresh_token,config.oauth?.verifier];
+    const secrets=[config.token,config.clientSecret,config.oauth?.client?.client_secret,config.oauth?.state,...(this.entries.get(config.id)?.temporarySecrets||[]),...headerValues,...headerValues.flatMap(value=>value.split(/[ ;=]/)),...Object.values(config.env||{}),...(config.args||[]),config.oauth?.tokens?.access_token,config.oauth?.tokens?.refresh_token,config.oauth?.verifier];
+    for(const client of [{client_id:config.clientId,client_secret:config.clientSecret},config.oauth?.client])if(client?.client_secret)secrets.push(Buffer.from(client.client_id+':'+client.client_secret).toString('base64'));
     if(config.url){try{for(const value of new URL(config.url).searchParams.values())secrets.push(value);}catch{}}
     for(const secret of secrets)if(typeof secret==='string'&&secret.length>=4){message=message.replaceAll(secret,'[已隐藏]').replaceAll(encodeURIComponent(secret),'[已隐藏]');}
     return message.slice(0,600);
@@ -120,19 +126,25 @@ export class ConnectorManager {
   }
   provider(config,entry){
     const stableIdentity=identity(config);const manager=this;
-    const update=mutate=>{const latest=manager.configs.get(config.id);if(latest!==config||identity(latest)!==stableIdentity)throw new Error('连接配置已变化，请重新登录');latest.oauth??={};mutate(latest.oauth);manager.persist();};
+    const update=mutate=>{const latest=manager.configs.get(config.id);if(latest!==config||!config.enabled||manager.entries.get(config.id)!==entry||entry.intentional||identity(latest)!==stableIdentity)throw new Error('连接配置已变化，请重新登录');latest.oauth??={};mutate(latest.oauth);manager.persist();};
     return {
       redirectUrl:this.redirectUrl,
       clientMetadata:{client_name:'Zfold 手机工作台',redirect_uris:[this.redirectUrl],grant_types:['authorization_code','refresh_token'],response_types:['code'],token_endpoint_auth_method:'none'},
       state(){const state=randomUUID();update(oauth=>{oauth.state=state;oauth.startedAt=Date.now();});return state;},
-      clientInformation:()=>config.oauth?.client||(config.clientId?{client_id:config.clientId,issuer:config.issuer||undefined}:undefined),
+      clientInformation:()=>config.oauth?.client||(config.clientId?{client_id:config.clientId,...(config.clientSecret?{client_secret:config.clientSecret}:{}),issuer:config.issuer||undefined}:undefined),
+      // GitHub documents form-encoded client_secret; its discovery document omits
+      // token_endpoint_auth_methods_supported, for which the SDK defaults to Basic.
+      ...(config.clientSecret&&config.issuer==='https://github.com/login/oauth'?{addClientAuthentication(headers,params,url){
+        if(new URL(url).href!=='https://github.com/login/oauth/access_token')throw new Error('GitHub 授权交换地址不匹配');
+        params.set('client_id',config.clientId);params.set('client_secret',config.clientSecret);
+      }}:{}),
       saveClientInformation:client=>update(oauth=>{oauth.client=client;}),
       tokens:()=>config.oauth?.tokens,
       saveTokens:tokens=>update(oauth=>{oauth.tokens=tokens;delete oauth.state;delete oauth.verifier;delete oauth.authorizationUrl;}),
       redirectToAuthorization:url=>{entry.authUrl=endpoint(url.href);update(oauth=>{oauth.authorizationUrl=entry.authUrl;});entry.state='auth_required';manager.changed();},
       saveCodeVerifier:verifier=>update(oauth=>{oauth.verifier=verifier;}),
       codeVerifier:()=>{if(!config.oauth?.verifier)throw new Error('登录会话已过期，请重新连接');return config.oauth.verifier;},
-      saveDiscoveryState:discovery=>update(oauth=>{oauth.discovery=discovery;}),
+      saveDiscoveryState:discovery=>update(oauth=>{if(config.issuer&&endpoint(discovery.authorizationServerUrl)!==config.issuer)throw new Error('发现的授权服务与预注册 Client ID 不匹配');oauth.discovery=discovery;}),
       discoveryState:()=>config.oauth?.discovery,
       invalidateCredentials(scope){update(oauth=>{if(scope==='all')for(const key of Object.keys(oauth))delete oauth[key];else delete oauth[scope==='client'?'client':scope==='tokens'?'tokens':scope==='verifier'?'verifier':'discovery'];});}
     };
@@ -148,11 +160,11 @@ export class ConnectorManager {
     let config=this.configs.get(id);if(!config)throw new Error('连接不存在');
     const old=this.entries.get(id);if(old){old.intentional=true;old.abort?.abort();}
     config.enabled=true;this.persist();
-    const entry={state:'connecting',tools:[],error:'',intentional:false,abort:new AbortController()};this.entries.set(id,entry);this.changed();
+    const entry={state:'connecting',tools:[],error:'',intentional:false,abort:new AbortController(),temporarySecrets:authorizationCode?[authorizationCode]:[]};this.entries.set(id,entry);this.changed();
     const valid=()=>this.entries.get(id)===entry&&!entry.intentional;
     if(old){await Promise.resolve(old.client?old.client.close():old.transport?.close()).catch(()=>{});if(!valid())return this.publicConfig(config);}
     const deadline=setTimeout(()=>entry.abort.abort(new Error('连接超时，请检查 MCP 地址和网络')),this.connectTimeout);
-    const transportFetch=(input,init={})=>fetch(input,{...init,signal:AbortSignal.any([init.signal,entry.abort.signal].filter(Boolean))});
+    const transportFetch=(input,init={})=>{const confidential=String(new Headers(init.headers).get('authorization')||'').startsWith('Basic ')||new URLSearchParams(typeof init.body==='string'||init.body instanceof URLSearchParams?init.body:'').has('client_secret');return fetch(input,{...init,...(confidential?{redirect:'error'}:{}),signal:AbortSignal.any([init.signal,entry.abort.signal].filter(Boolean))});};
     const headers={...config.headers};if(config.auth==='bearer'&&config.token)headers.Authorization='Bearer '+config.token;
     const provider=config.auth==='oauth'?this.provider(config,entry):undefined;
     const createClient=()=>{
@@ -193,11 +205,11 @@ export class ConnectorManager {
       await this.loadTools(config,entry);if(!valid()){await entry.client.close();return this.publicConfig(config);}entry.state='connected';entry.authUrl='';this.changed();return this.publicConfig(config);
     }catch(error){
       if(valid()){
-        entry.state=entry.authUrl?'auth_required':'error';entry.error=entry.authUrl?'请在浏览器完成登录':this.redact(entry.abort.signal.aborted?entry.abort.signal.reason:error,config);
+        entry.state=entry.authUrl?'auth_required':'error';entry.error=entry.authUrl?'请在浏览器完成登录':this.needsClient(config)?'该服务不支持自动注册 OAuth 客户端。请填写预注册 Client ID（服务要求时还需 Client Secret），或使用服务提供的 Token。':this.redact(entry.abort.signal.aborted?entry.abort.signal.reason:error,config);
         entry.intentional=true;await entry.client?.close().catch(()=>{});await entry.transport?.close().catch(()=>{});entry.intentional=false;this.changed();
       }
       return this.publicConfig(config);
-    }finally{clearTimeout(deadline);}
+    }finally{clearTimeout(deadline);entry.temporarySecrets=[];}
   }
   async loadTools(config,entry){
     if(!entry.client.getServerCapabilities()?.tools){entry.tools=[];this.changed();return;}
@@ -207,12 +219,18 @@ export class ConnectorManager {
   }
   async finishOAuth(callback){
     const url=new URL(callback);const expected=new URL(this.redirectUrl);
-    if(url.protocol!==expected.protocol||url.host!==expected.host||url.pathname!==expected.pathname)throw new Error('登录回调地址不匹配');
+    if(url.protocol!==expected.protocol||url.host!==expected.host||url.pathname!==expected.pathname||url.username||url.password||url.hash)throw new Error('登录回调地址不匹配');
     const state=url.searchParams.get('state'),code=url.searchParams.get('code');
+    if(url.searchParams.getAll('state').length!==1||url.searchParams.getAll('code').length>1||url.searchParams.getAll('iss').length>1)throw new Error('登录回调参数无效');
+    const pending=this.callbacks.get(state);
+    if(pending){if(pending.code!==code||pending.issuer!==url.searchParams.get('iss')||url.searchParams.has('error'))throw new Error('回调与正在处理的登录不一致');return pending.operation;}
     const config=[...this.configs.values()].find(config=>state&&config.oauth?.state===state);
-    if(!config||!config.enabled||Date.now()-config.oauth.startedAt>10*60_000)throw new Error('登录已过期，请从连接页面重新登录');
+    if(!config||!config.enabled||!Number.isFinite(config.oauth.startedAt)||Date.now()-config.oauth.startedAt>10*60_000)throw new Error('登录已过期，请从连接页面重新登录');
+    const metadata=config.oauth.discovery?.authorizationServerMetadata;
+    if((metadata?.authorization_response_iss_parameter_supported||url.searchParams.has('iss'))&&url.searchParams.get('iss')!==metadata?.issuer)throw new Error('回调的授权服务不匹配，请重新登录');
     if(url.searchParams.has('error')||!code)throw new Error('登录未完成，可重新连接后重试');
-    return this.connect(config.id,{authorizationCode:code});
+    const operation=this.connect(config.id,{authorizationCode:code}).then(result=>{if(result?.state!=='connected')throw new Error(result?.authenticated?'授权已保存，连接尚未完成，请在连接页重试':result?.error||'登录未完成，请重新连接');return result;});
+    this.callbacks.set(state,{operation,code,issuer:url.searchParams.get('iss')});try{return await operation;}finally{this.callbacks.delete(state);}
   }
   async restore(){
     const pending=[];

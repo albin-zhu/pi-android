@@ -58,12 +58,16 @@
  <service android:name=".TerminalKeepAliveService" android:exported="false" android:foregroundServiceType="specialUse">
    <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-started local interactive terminal sessions" />
  </service>
+ <service android:name=".AuthSessionService" android:exported="false" android:foregroundServiceType="specialUse">
+   <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Keep a user-initiated OAuth callback and device-code polling alive while the user signs in with the browser" />
+ </service>
  </application>
  <instrumentation android:name=".PackageCliInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold package CLI check (emulator only)" />
  <instrumentation android:name=".WindowEntryInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold direct system window entry (emulator only)" />
  <instrumentation android:name=".SpeechProviderInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng speech providers (emulator only)" />
  <instrumentation android:name=".AudioRouteInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng call audio routes (emulator only, no microphone)" />
  <instrumentation android:name=".SessionManagementInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng session management (isolated emulator only)" />
+ <instrumentation android:name=".OAuthInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng OAuth UI and callback (isolated emulator fixtures)" />
  <instrumentation android:name=".WakePipelineInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng wake word and ready cue (emulator only, synthetic WAV)" />
  <instrumentation android:name=".VideoCallInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold video call check (emulator only)" />
  <instrumentation android:name=".MinimapInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold conversation minimap check (emulator only)" />

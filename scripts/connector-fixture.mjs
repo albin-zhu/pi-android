@@ -3,22 +3,25 @@ import http from 'node:http';
 import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 
-export async function startConnectorFixture(port=0){
+export async function startConnectorFixture(port=0,{registration=true,clientSecret='',issuerResponse=false,tokenDelayMs=0}={}){
   const state={calls:[],authorization:undefined,tokenExchanges:0};const streams=new Map();let origin;
   const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url,origin);let body='';for await(const part of req)body+=part;
     const json=(code,value,headers={})=>{res.writeHead(code,{'content-type':'application/json',...headers});res.end(JSON.stringify(value));};
     if(url.pathname==='/.well-known/oauth-protected-resource'){json(200,{resource:origin+'/oauth',authorization_servers:[origin],scopes_supported:['tools']});return;}
-    if(url.pathname==='/.well-known/oauth-authorization-server'){json(200,{issuer:origin,authorization_endpoint:origin+'/authorize',token_endpoint:origin+'/token',registration_endpoint:origin+'/register',response_types_supported:['code'],grant_types_supported:['authorization_code','refresh_token'],code_challenge_methods_supported:['S256'],token_endpoint_auth_methods_supported:['none']});return;}
+    if(url.pathname==='/.well-known/oauth-authorization-server'){json(200,{issuer:origin,authorization_endpoint:origin+'/authorize',token_endpoint:origin+'/token',...(registration?{registration_endpoint:origin+'/register'}:{}),response_types_supported:['code'],grant_types_supported:['authorization_code','refresh_token'],code_challenge_methods_supported:['S256'],token_endpoint_auth_methods_supported:[clientSecret?'client_secret_post':'none'],authorization_response_iss_parameter_supported:issuerResponse});return;}
     if(url.pathname==='/.well-known/oauth-protected-resource/oauth'){json(200,{resource:origin+'/oauth',authorization_servers:[origin]});return;}
     if(url.pathname==='/register'){const input=JSON.parse(body);json(201,{...input,client_id:'fixture-client'});return;}
     if(url.pathname==='/authorize'){
       state.authorization=Object.fromEntries(url.searchParams);const redirect=new URL(url.searchParams.get('redirect_uri'));
       redirect.searchParams.set('code','fixture-code');redirect.searchParams.set('state',url.searchParams.get('state'));
+      if(issuerResponse)redirect.searchParams.set('iss',origin);
       res.writeHead(302,{location:redirect.href});res.end();return;
     }
     if(url.pathname==='/token'){
       const input=new URLSearchParams(body);state.tokenExchanges++;
+      if(clientSecret&&input.get('client_secret')!==clientSecret){json(401,{error:'invalid_client'});return;}
+      if(tokenDelayMs)await new Promise(resolve=>setTimeout(resolve,tokenDelayMs));
       if(input.get('grant_type')!=='refresh_token'){
         const challenge=createHash('sha256').update(input.get('code_verifier')||'').digest('base64url');
         if(input.get('code')!=='fixture-code'||challenge!==state.authorization?.code_challenge){json(400,{error:'invalid_grant'});return;}

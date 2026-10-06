@@ -6,6 +6,47 @@ import os from 'node:os';
 import {ConnectorManager} from '../runtime/connectors.mjs';
 import {startConnectorFixture} from '../scripts/connector-fixture.mjs';
 
+test('non-DCR MCP explains registration and supports private pre-registered client credentials',async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'mcp-preregistered-')),fixture=await startConnectorFixture(0,{registration:false,clientSecret:'fixture-client-secret'});
+  const manager=new ConnectorManager({directory:root,workspace:()=>root});
+  try{
+    const id=manager.save({name:'Static OAuth',url:fixture.origin+'/oauth',auth:'oauth'});const missing=await manager.connect(id);
+    assert.equal(missing.oauthNeedsClient,true);assert.match(missing.error,/Client ID/);assert.equal(missing.issuer,fixture.origin);
+    manager.save({id,name:'Static OAuth',url:fixture.origin+'/oauth',auth:'oauth',clientId:'fixture-client',clientSecret:'fixture-client-secret',issuer:fixture.origin});
+    const login=await manager.connect(id);assert.equal(login.state,'auth_required');assert.equal(login.hasClientSecret,true);assert.ok(!JSON.stringify(login).includes('fixture-client-secret'));
+    const redirect=await fetch(login.authUrl,{redirect:'manual'});await manager.finishOAuth(redirect.headers.get('location'));
+    assert.equal(manager.publicConfig(manager.configs.get(id)).state,'connected');assert.equal(fixture.state.tokenExchanges,1);
+    manager.save({id,name:'Renamed connection',url:fixture.origin+'/oauth',auth:'oauth',clientId:'fixture-client',issuer:fixture.origin,keepSecrets:true});
+    assert.equal(manager.configs.get(id).clientSecret,'fixture-client-secret');assert.ok(manager.configs.get(id).oauth.tokens);
+    const redacted=manager.redact(new Error('fixture-client-secret '+Buffer.from('fixture-client:fixture-client-secret').toString('base64')),manager.configs.get(id));assert.ok(!redacted.includes('fixture-client-secret'));assert.ok(!redacted.includes(Buffer.from('fixture-client:fixture-client-secret').toString('base64')));
+    manager.save({id,name:'Different client',url:fixture.origin+'/oauth',auth:'oauth',clientId:'different',issuer:fixture.origin,keepSecrets:true});assert.equal(manager.configs.get(id).clientSecret,'');assert.equal(manager.configs.get(id).oauth,undefined);
+  }finally{await manager.close();await fixture.close();fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('MCP validates callback issuer, parameters and deduplicates the same code exchange',async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'mcp-callback-')),fixture=await startConnectorFixture(0,{issuerResponse:true,tokenDelayMs:50});
+  const manager=new ConnectorManager({directory:root,workspace:()=>root});
+  try{
+    const id=manager.save({name:'Issuer OAuth',url:fixture.origin+'/oauth',auth:'oauth'}),login=await manager.connect(id);
+    const redirect=await fetch(login.authUrl,{redirect:'manual'}),callback=redirect.headers.get('location');
+    const wrong=new URL(callback);wrong.searchParams.set('iss','https://other.example');await assert.rejects(manager.finishOAuth(wrong.href),/授权服务/);assert.equal(fixture.state.tokenExchanges,0);
+    await assert.rejects(manager.finishOAuth(callback+'&state=duplicate'),/参数/);
+    const first=manager.finishOAuth(callback);await assert.rejects(manager.finishOAuth(wrong.href),/不一致/);
+    const both=await Promise.all([first,manager.finishOAuth(callback)]);assert.equal(both[0].connected,true);assert.equal(both[1].connected,true);assert.equal(fixture.state.tokenExchanges,1);
+    await assert.rejects(manager.finishOAuth(callback),/过期/);
+  }finally{await manager.close();await fixture.close();fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('GitHub client secret exchange is form encoded and pinned to its token endpoint',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'mcp-github-'));const manager=new ConnectorManager({directory:root,workspace:()=>root});
+  try{
+    const id=manager.save({name:'GitHub',url:'https://api.githubcopilot.com/mcp/',auth:'oauth',clientId:'fixture-client',clientSecret:'fixture-secret',issuer:'https://github.com/login/oauth'});
+    const provider=manager.provider(manager.configs.get(id),{}),params=new URLSearchParams();
+    provider.addClientAuthentication(new Headers(),params,'https://github.com/login/oauth/access_token');assert.equal(params.get('client_secret'),'fixture-secret');
+    assert.throws(()=>provider.addClientAuthentication(new Headers(),new URLSearchParams(),'https://other.example/token'),/不匹配/);
+  }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
 test('remote MCP saves privately, connects, discovers, calls and restores without exposing secrets',async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'connectors-'));const fixture=await startConnectorFixture();
   const events=[];const create=()=>new ConnectorManager({directory:root,workspace:()=>root,onChange:event=>events.push(event)});let manager=create();

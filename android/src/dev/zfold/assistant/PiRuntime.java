@@ -144,6 +144,7 @@ public final class PiRuntime {
     if(event.optString("type").equals("tool_cancel")){NativeToolExecution.cancel(event.optString("id"));return;}
     main.post(() -> {
       String type=event.optString("type");
+      if(type.equals("auth_state"))AuthSessionService.update(context,event);
       boolean callVisible=VoiceCallActivity.isForeground()||VoiceMiniOverlay.showing();
       if(type.equals("phone_halt"))stopped=true;
       if(type.equals("jev_status")){jevConfigured=event.optBoolean("configured");jevEnabled=event.optBoolean("enabled");jevModel=event.optString("model","jev-1.13.0");}

@@ -1,6 +1,20 @@
 # 验证记录 · 2026-09-22
 
-当前交付状态（2026-10-05）：Fold7 已覆盖安装 0.2.80-compat28，增加通话默认免提和声音输出切换，保留独立语音 provider 与“橙橙”唤醒/接通音。六份私有配置保留已核对。前置镜头、真人声学回声/蓝牙/唤醒听感与完整全屏到系统小窗的真机按钮路径仍待完成。下面保留各版本原始记录。
+当前交付状态（2026-10-06）：Fold7 已覆盖安装 0.2.82-compat28，包含通话免提、去掉聊天顶栏、会话重命名/归档/回收。六份私有配置保留已核对。前置镜头、真人声学回声/蓝牙/唤醒听感与完整全屏到系统小窗的真机按钮路径仍待完成。下面保留各版本原始记录。
+
+## 0.2.83 OAuth 修复验收 · 2026-10-06
+
+- 手机私有配置的脱敏检查显示，GitHub MCP 选择 OAuth，但没有预注册 Client ID/Secret，发现元数据无 registration_endpoint；仅有 xAI 供应商 OAuth 凭据。未输出 Token、授权码、PKCE verifier 或账号信息。GitHub [官方集成说明](https://github.com/github/github-mcp-server/blob/main/docs/host-integration.md)确认不支持 DCR；[OAuth 文档](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)规定令牌交换需 Client Secret。没有通过借用电脑或其他客户端凭据绕过注册。
+- 供应商桥接原来把 requestId 当作 promptId，且 auth_url 后到来的 manual_code prompt 会盖掉浏览器入口；prompt 自身 AbortSignal 没有处理，清理也用了错误的键。新 ProviderAuthManager 保留进程内快照、真实 prompt ID、每供应商单一登录、取消/超时及提示信号清理，错误为独立 auth_state，不触发任务 error。前端浏览器和手动回填共存，恢复入口重放快照，设备码打开/复制不丢失，终态真正关闭弹窗。AuthSessionService 在等待授权时维持后台进程，结束后释放。
+- MCP 支持私有预注册 Client Secret、保留空输入、issuer 绑定、GitHub 表单令牌交换，敏感请求不跟随重定向；无动态注册时显示配置入口。回调核验地址/state/issuer、拒绝重复参数，同一回调并发只交换一次；过期和重放被拒绝。支持手动完整回调和重新开始登录。
+- `npm test` 92/92 通过；新增供应商与 MCP 用例使用受控 HTTP/模拟 OpenAI 响应。实际调用固定版本 Pi 的 Codex 浏览器/设备码 OAuth 实现，验证 PKCE、回填、凭据结构、提示清理和脱敏，不是真实账号登录。记录 `artifacts/oauth-fix/all-tests.txt`、`core-tests.txt`。
+- OAuthInstrumentation 最终结束码 -1，8 项通过：合并浏览器/回填、成功关闭弹窗、恢复与取消、设备码页面保留、后台通知生命周期、预注册密码框/无 DCR 提示、Android VIEW 回调到 Node 完成私有 Secret 交换、已保存 Secret 不回填。供应商浏览器 Intent 由测试拦截，MCP 使用电脑 18875 的受控 issuer 经 emulator ADB reverse；没有真实外部账号授权。记录 `native-oauth-final.txt`。
+- 0.2.83 代码和 APK 验证完成，等待与后续提问工具、系统助手入口修复一起更新真机。真实 Codex 授权需用户重新发起并完成；GitHub 仍需用户提供预注册应用或 Token。
+
+## 0.2.82 Fold7 覆盖安装 · 2026-10-06
+
+- 用户要求安装后，检查到手机仅应用主进程、MODE_NORMAL，聊天“发送”禁用且无未提交输入/任务停止状态。`adb install -r` 返回 Success；包管理器确认 282 / 0.2.82-compat28，已打开 MainActivity。未清除应用数据。
+- auth/models/jev/agent/system/speech 六份私有配置指纹相同。APK SHA-256 为 `fafcd90d41e23db9856520d34925b691ef9da8c7effedc5c0a413caa2f103258`，脱敏结果见 `artifacts/install-0.2.82/verification.json`。安装后的进一步 UI 检查被用户转入 OAuth 排查，没有将其声称为完整真机 CRUD 验收。
 
 ## 0.2.82 会话管理 · 2026-10-05
 
