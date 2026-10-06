@@ -81,8 +81,15 @@ public final class AndroidTools {
           String position=args.optString("position","secondary");
           android.graphics.Rect bounds=new android.graphics.Rect();
           boolean landscape=display.width()>=display.height();
-          if(position.equals("left")||position.equals("primary")||(landscape?position.equals("right"):position.equals("bottom")))bounds.set(display.left,display.top,display.centerX(),display.bottom);
-          else bounds.set(display.centerX(),display.top,display.right,display.bottom);
+          if(!position.equals("left")&&!position.equals("right")&&!position.equals("primary")&&!position.equals("secondary"))throw new Exception("不支持的分屏位置");
+          boolean primary=position.equals("left")||position.equals("primary");
+          if(landscape){
+            if(primary)bounds.set(display.left,display.top,display.centerX(),display.bottom);
+            else bounds.set(display.centerX(),display.top,display.right,display.bottom);
+          }else{
+            if(primary)bounds.set(display.left,display.top,display.right,display.centerY());
+            else bounds.set(display.left,display.centerY(),display.right,display.bottom);
+          }
           android.app.ActivityOptions options=android.app.ActivityOptions.makeBasic();
           try{android.app.ActivityOptions.class.getMethod("setLaunchWindowingMode",int.class).invoke(options,6);}catch(Exception ignored){}
           options.setLaunchBounds(bounds);

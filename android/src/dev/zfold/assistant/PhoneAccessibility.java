@@ -103,17 +103,35 @@ public final class PhoneAccessibility extends AccessibilityService {
     Handler handler=new Handler(Looper.getMainLooper());long deadline=SystemClock.uptimeMillis()+3500;
     Runnable check=new Runnable(){public void run(){
       if(PhoneAccessibility.instance!=PhoneAccessibility.this){result.done(null,"无障碍服务已断开");return;}
-      final JSONObject[] stateHolder={new JSONObject()};splitState(new AndroidTools.Result(){@Override public void done(org.json.JSONObject value,String error){try{stateHolder[0].put("state",value.optJSONObject("state"));stateHolder[0].put("split",value.optBoolean("split"));stateHolder[0].put("applicationWindows",value.optInt("applicationWindows"));stateHolder[0].put("windows",value.optJSONArray("windows"));}catch(org.json.JSONException ignored){}}});
-      JSONObject state=stateHolder[0],stateValue=state.optJSONObject("state");
-      boolean target=false;
-      if(stateValue!=null)for(int i=0;i<stateValue.optJSONArray("windows").length();i++){
-        org.json.JSONObject window=stateValue.optJSONArray("windows").optJSONObject(i);
-        if(window!=null&&packageName.equals(window.optString("package")))target=true;
+      final JSONObject[] stateHolder={new JSONObject()};
+      splitState((value,error)->{if(value!=null)stateHolder[0]=value;});
+      JSONObject state=stateHolder[0];JSONArray windows=state.optJSONArray("windows");
+      boolean target=false,paired=false;
+      if(windows!=null)for(int i=0;i<windows.length();i++){
+        JSONObject first=windows.optJSONObject(i);
+        if(first==null||!packageName.equals(first.optString("package")))continue;
+        target=true;
+        for(int j=0;j<windows.length();j++){
+          JSONObject second=windows.optJSONObject(j);
+          if(second==null||packageName.equals(second.optString("package")))continue;
+          if(isPanePair(first,second,state.optInt("displayWidth"),state.optInt("displayHeight")))paired=true;
+        }
       }
-      if(state.optBoolean("split")&&target){result.done(PiRuntime.json("launched",true,"ready",true,"split",true,"state",stateValue,"position",stateValue.optString("mode")),null);return;}
-      if(SystemClock.uptimeMillis()>=deadline){result.done(PiRuntime.json("launched",true,"ready",false,"split",state.optBoolean("split"),"state",stateValue,"reason",state.optBoolean("split")?"target_not_visible":"split_not_confirmed"),null);return;}
+      if(paired){result.done(PiRuntime.json("launched",true,"ready",true,"split",true,"state",state),null);return;}
+      if(SystemClock.uptimeMillis()>=deadline){result.done(PiRuntime.json("launched",true,"ready",false,"split",state.optBoolean("split"),"state",state,"reason",target?"split_not_confirmed":"target_not_visible"),null);return;}
       handler.postDelayed(this,140);
     }};handler.postDelayed(check,180);
+  }
+  // Reject floating overlays: two substantial, non-overlapping panes must share an axis.
+  static boolean isPanePair(JSONObject a,JSONObject b,int width,int height){
+    if(width<=0||height<=0)return false;
+    Rect x=new Rect(a.optInt("left"),a.optInt("top"),a.optInt("right"),a.optInt("bottom"));
+    Rect y=new Rect(b.optInt("left"),b.optInt("top"),b.optInt("right"),b.optInt("bottom"));
+    long minimum=(long)width*height/5;
+    if(x.isEmpty()||y.isEmpty()||(long)x.width()*x.height()<minimum||(long)y.width()*y.height()<minimum||Rect.intersects(x,y))return false;
+    int overlapX=Math.min(x.right,y.right)-Math.max(x.left,y.left);
+    int overlapY=Math.min(x.bottom,y.bottom)-Math.max(x.top,y.top);
+    return overlapY>=height/2||overlapX>=width/2;
   }
   private JSONObject splitSnapshot(){
     JSONArray rows=new JSONArray();
