@@ -30,9 +30,10 @@ final class ToolCallView extends LinearLayout {
     details.setPadding(Ui.dp(context,12),0,Ui.dp(context,12),Ui.dp(context,12));
     details.setVisibility(GONE);addView(details,new LayoutParams(-1,-2));update(data);
   }
-  void toggle(){expanded=!expanded;details.setVisibility(expanded?VISIBLE:GONE);toggle.setRotation(expanded?180:0);toggle.setContentDescription((expanded?"收起":"展开")+title.getText()+"详情");}
+  void toggle(){if(record!=null&&UserQuestions.matchesTool(record.optString("id"))){UserQuestions.show(getContext());return;}expanded=!expanded;details.setVisibility(expanded?VISIBLE:GONE);toggle.setRotation(expanded?180:0);toggle.setContentDescription((expanded?"收起":"展开")+title.getText()+"详情");}
   static String label(String name){
     switch(name){
+      case "ask_user_question":return "向用户提问";
       case "phone_capabilities":return "电话与相机能力";case "phone_call":return "拨打电话";case "phone_sms":return "短信与回执";case "contact_search":return "查找联系人";case "camera_capture":return "拍照并获取图片";
       case "read":return "读取文件";case "write":return "写入文件";case "edit":return "编辑文件";
       case "ls":return "列出文件";case "bash":return "执行 Shell";case "reload_skills":return "重载 Skills";case "phone_task":return "Jev 操作手机";case "device_info":return "读取手机状态";
@@ -48,6 +49,7 @@ final class ToolCallView extends LinearLayout {
   void update(JSONObject data){
     record=data;String state=data.optString("status"),name=data.optString("name");
     String stateLabel=state.equals("running")?"执行中":state.equals("error")?"失败":state.equals("blocked")?"需重新判断":state.equals("unverified")?"待验证":state.equals("cancelled")?"已停止":state.equals("interrupted")?"已中断":state.equals("not_performed")?"未执行":"已返回";
+    if(name.equals("ask_user_question")&&state.equals("running"))stateLabel="等你回答";
     title.setText(label(name));status.setText(stateLabel);status.setTextColor(state.equals("error")?theme.error:state.equals("running")?theme.accent:theme.muted);
     String output=data.optString("output");
     details.setText(name+"\n\n参数\n"+pretty(data.optString("args","{}"))+"\n\n结果\n"+(output.isEmpty()?(state.equals("running")?"等待工具返回…":"没有返回内容"):pretty(output)));

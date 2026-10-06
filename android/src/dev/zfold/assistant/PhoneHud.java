@@ -82,6 +82,7 @@ final class PhoneHud {
       case "split_screen":return args!=null&&"launch".equals(args.optString("action"))?"启动分屏应用":args!=null&&"state".equals(args.optString("action"))?"读取分屏状态":"切换分屏";
       case "screen_read":return "读取当前界面";
       case "screen_capture":return "查看屏幕";
+      case "ask_user_question":return "等待你回答";
       case "phone_task":return "Jev 操作手机"+value;
       case "read":return "读取文件";case "write":return "写入文件";case "edit":return "编辑文件";
       case "ls":return "列出目录";case "bash":return "执行命令";case "pty":return "打开终端";

@@ -42,6 +42,7 @@
  </activity>
   <activity android:name=".VoiceCallActivity" android:theme="@style/WorkScreenTheme" android:exported="false" android:launchMode="singleTop"
    android:showWhenLocked="true" android:turnScreenOn="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+  <activity android:name=".UserQuestionActivity" android:theme="@style/WorkScreenTheme" android:exported="false" android:launchMode="singleTop" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
   <service android:name=".PhoneAccessibility" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
    <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
    <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility"/>
@@ -61,6 +62,9 @@
  <service android:name=".AuthSessionService" android:exported="false" android:foregroundServiceType="specialUse">
    <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Keep a user-initiated OAuth callback and device-code polling alive while the user signs in with the browser" />
  </service>
+ <service android:name=".QuestionSessionService" android:exported="false" android:foregroundServiceType="specialUse">
+   <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Keep the user-started agent task alive while waiting for a requested user answer and delivering its result" />
+ </service>
  </application>
  <instrumentation android:name=".PackageCliInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold package CLI check (emulator only)" />
  <instrumentation android:name=".WindowEntryInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold direct system window entry (emulator only)" />
@@ -68,6 +72,7 @@
  <instrumentation android:name=".AudioRouteInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng call audio routes (emulator only, no microphone)" />
  <instrumentation android:name=".SessionManagementInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng session management (isolated emulator only)" />
  <instrumentation android:name=".OAuthInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng OAuth UI and callback (isolated emulator fixtures)" />
+ <instrumentation android:name=".UserQuestionInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng structured user questions (isolated emulator fixture)" />
  <instrumentation android:name=".WakePipelineInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng wake word and ready cue (emulator only, synthetic WAV)" />
  <instrumentation android:name=".VideoCallInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold video call check (emulator only)" />
  <instrumentation android:name=".MinimapInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold conversation minimap check (emulator only)" />

@@ -73,6 +73,7 @@ public final class PiRuntime {
     return chooseDataRoot(context,testMode);
   }
   boolean isTestRuntime(){return testing;}
+  String activeTurnId(){return activeTurnId;}
   private static File chooseDataRoot(Context context,boolean testing) {
     if(testing)return new File(context.getNoBackupFilesDir(),"agent-smoke");
     if(Environment.isExternalStorageManager()) {
@@ -156,7 +157,7 @@ public final class PiRuntime {
       if(type.equals("models_catalog")){modelProviders=event.optJSONArray("providers");selectedModel=event.optJSONObject("selected");}
       if(type.equals("configured")) send(json("type","history"));
       if(type.equals("error")) restoring=false;
-      if(type.equals("session_changed")){sessionId=event.optString("sessionId");lastPromptText="";lastPromptImage=null;lastPromptHasImage=false;lastResponse="";lastTools.clear();}
+      if(type.equals("session_changed")){UserQuestions.endTurn(context,null);sessionId=event.optString("sessionId");lastPromptText="";lastPromptImage=null;lastPromptHasImage=false;lastResponse="";lastTools.clear();}
       if(type.equals("history")){
         String previousSession=sessionId,previousText=lastPromptText,previousImage=lastPromptImage;
         sessionId=event.optString("sessionId",sessionId);lastPromptText="";lastPromptImage=null;lastPromptHasImage=false;lastResponse="";
@@ -171,13 +172,14 @@ public final class PiRuntime {
       if(type.equals("tool_execution")) {lastTools.put(event.optString("id"),event);String toolName=event.optString("name");
         if(!callVisible&&(toolName.equals("phone_task")||toolName.equals("screen_read")||toolName.equals("screen_capture")||toolName.equals("ui_act")||toolName.equals("ui_tap")||toolName.equals("ui_input")||toolName.equals("ui_swipe")||toolName.equals("ui_back")||toolName.equals("app_open")||toolName.equals("split_screen")))PhoneHud.show(context,PhoneHud.action(event));}
       if(type.equals("delta")) lastResponse+=event.optString("text");
-      if(type.equals("turn_end")||type.equals("error")) {busy=false;PhoneHud.hide();phoneActive=false;}
+      if(type.equals("turn_end")||type.equals("error")) {busy=false;UserQuestions.endTurn(context,event.optString("turnId"));PhoneHud.hide();phoneActive=false;}
       if(type.equals("turn_start")||type.equals("turn_end")||type.equals("error"))CircleOverlay.setBusy(busy);
       if(type.equals("phone_halt")){PhoneHud.hide();phoneActive=false;}
       if(type.equals("probe")) Log.i("ZfoldPi",event.toString());
       if(type.equals("tool_request")) {
         if(stopped && !event.isNull("turnId")) {toolResult(event.optString("id"),null,"操作已停止");return;}
         String name=event.optString("name");
+        if(name.equals("ask_user_question")){phoneActive=false;PhoneHud.hide();}
         if(name.equals("phone_call")||name.equals("phone_sms")||name.equals("camera_capture")||name.equals("contact_search"))phoneActive=false;
         boolean phoneAction=name.equals("screen_read")||name.equals("screen_capture")||name.equals("ui_act")||name.equals("ui_tap")||name.equals("ui_input")||name.equals("ui_input_focused")||name.equals("ui_swipe")||name.equals("ui_back")||name.equals("app_open")||name.equals("split_screen")||name.equals("open");
         boolean phoneTask=name.equals("phone_task");

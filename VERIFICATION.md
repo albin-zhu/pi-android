@@ -1,6 +1,17 @@
 # 验证记录 · 2026-09-22
 
-当前交付状态（2026-10-06）：Fold7 已覆盖安装 0.2.82-compat28，包含通话免提、去掉聊天顶栏、会话重命名/归档/回收。六份私有配置保留已核对。前置镜头、真人声学回声/蓝牙/唤醒听感与完整全屏到系统小窗的真机按钮路径仍待完成。下面保留各版本原始记录。
+当前交付状态（2026-10-06）：Fold7 已覆盖安装 0.2.84-compat28，新增 OAuth 修复、原生提问和系统助手入口统一。六份私有配置保留已核对。前置镜头、真人声学回声/蓝牙/唤醒听感与完整全屏到系统小窗的真机按钮路径仍待完成。下面保留各版本原始记录。
+
+## 0.2.84 提问工具与真机安装 · 2026-10-06
+
+- `ask_user_question` 支持 1–4 问、无预选的单选/多选/文字回答；native 请求、turn、session、model tool call 共同绑定。停止/会话切换清除等待，过期回执被拒绝；稍后/返回保留进程内草稿，skip 返回 declined。语音只填草稿，提交仍为显式操作。
+- QuestionToolGate 阻止含提问的同一批次中的其余工具（包括排在提问之前的工具），模型读取答案后才能重新调用。等待期持续原生 heartbeat，QuestionSessionService 以可见通知维持等待与续跑，不声明进程死亡后的恢复能力。
+- `npm test` 96/96 通过，新增 4 项涵盖结构验证/跳过、长等待/取消、批次执行门禁、真实 bundled Agent 与受控模型的回答续跑。`UserQuestionInstrumentation` 结束码 -1，6 项通过，覆盖无默认答案/必答校验、单选多选自由输入及草稿恢复、同 task 小窗、原生回答续跑、停止/旧回执、明确跳过。没有运行真机 instrumentation。
+- 目视检查真实模拟器截图 `artifacts/user-question/full.png` 与 `small.png`，239×282 dp 内问题可滚动，稍后/跳过/提交可见。测试模型来自本机 18876 fixture，仅使用测试凭据与独立 agent-smoke 会话。
+- 系统 Session 禁用自带聊天 UI，恢复普通 MainActivity task；原浮球入口同样转交主聊天。旧 AssistantPanel 的 instrumentation 不再用于验收新入口；系统角色切换会撤销权限并杀掉 instrumentation，角色设置/恢复已移到宿主执行，instrumentation 启动后重新绑定 VoiceInteractionService。最终 SystemEntryInstrumentation 结束码 -1，5 项通过：真实系统角色唤起同一 Main/task/runtime、已有草稿/附件保留、重复唤起不重复创建、空草稿接收框架上下文、迟到/取消上下文拒绝。记录 `artifacts/user-question/system-entry-final.txt`；结束后恢复原系统助手角色。
+- 用户临行要求立即安装；真机重新连接后，确认当前 audio mode 为 NORMAL，UID 仅主进程与 bash、未见 bash 子任务。UI dump 未获取到聊天控件，未据此声称草稿为空或完整 UI 验收。覆盖安装返回 Success，包管理器确认 284 / 0.2.84-compat28，随后打开 MainActivity。auth/models/jev/agent/system/speech 六份私有配置指纹一致。
+- 安装包 SHA-256 `491f030aedc36dbc3434629c5bf34e7ecfa314600aa70e8a07511d127b378c85`，变更源码及 APK 未命中本机 `.env` 已知秘密。记录 `artifacts/install-0.2.84/verification.json`、`artifacts/user-question/all-tests.txt`、`native.txt`、`secret-scan.json`。
+- GitHub MCP 仍需要自己的预注册 Client ID/Secret 或 PAT，真实 Codex 账号授权需用户完成；受控 OAuth 测试不代表真实账号已登录。Fold7 的物理电源长按入口、语音填写问题仍需实际交互确认。
 
 ## 0.2.83 OAuth 修复验收 · 2026-10-06
 

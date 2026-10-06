@@ -37,6 +37,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   String pendingImage,pendingImageLabel; final Handler handler=new Handler(Looper.getMainLooper());
   final List<LocalFileAttachment> localFiles=new ArrayList<>();
   String pendingTaskPrompt;
+  private Ui.Action questionAction;private final Runnable questionChanged=this::updateQuestionAction;
   final Map<String,ToolCallView> toolViews=new LinkedHashMap<>();
   @Override public void onCreate(Bundle state){
     super.onCreate(state);returnWorkbench=getIntent().getBooleanExtra("return_workbench",false);temporarySettingsHost=returnWorkbench;theme=new Ui.Theme(this);getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);
@@ -53,7 +54,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     });
     foregroundVoice=voice;
     getWindow().setDecorFitsSystemWindows(false);
-    buildUI();backCallback=ChatBackNavigation.register(this);ScreenContext.listen(screenListener);screenListener.run();
+    buildUI();UserQuestions.listen(questionChanged);backCallback=ChatBackNavigation.register(this);ScreenContext.listen(screenListener);screenListener.run();
     if(runtime.ready&&!runtime.configured)runtime.restoreConfiguration();
     else if(runtime.configured)runtime.send(PiRuntime.json("type","history"));
     if(getIntent().getBooleanExtra("open_capabilities",false)){getIntent().removeExtra("open_capabilities");permissions();}
@@ -109,6 +110,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     composerSurface=new LinearLayout(this);composerSurface.setOrientation(LinearLayout.VERTICAL);composerSurface.setBackground(Ui.shape(this,theme.surface,28,0));composerSurface.setElevation(0);composerSurface.setPadding(dp(10),dp(8),dp(10),dp(8));
     attachmentScroll=new ScrollView(this){@Override protected void onMeasure(int width,int height){super.onMeasure(width,View.MeasureSpec.makeMeasureSpec(dp(smallWindow?64:200),View.MeasureSpec.AT_MOST));}};
     attachmentScroll.setVisibility(View.GONE);attachmentScroll.addView(draftAttachment);composerSurface.addView(attachmentScroll,new LinearLayout.LayoutParams(-1,-2));
+    questionAction=new Ui.Action(this,R.drawable.ic_chat_circle_text,"需要回答","回答助手的问题",theme.accent,theme.accentSoft,()->UserQuestions.show(this));questionAction.setVisibility(View.GONE);composerSurface.addView(questionAction,new LinearLayout.LayoutParams(-1,-2));
     statusRow=new LinearLayout(this);statusRow.setGravity(Gravity.CENTER_VERTICAL);statusRow.setPadding(dp(8),0,dp(8),dp(4));
     status=text(idleStatus(),11,theme.muted);status.setSingleLine(true);status.setEllipsize(android.text.TextUtils.TruncateAt.END);statusRow.addView(status,new LinearLayout.LayoutParams(0,-2,1));
     statusRow.setVisibility(View.GONE);
@@ -258,6 +260,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   }
   void sendText(String value){
     String text=value.trim();if(text.isEmpty()&&pendingImage==null&&localFiles.isEmpty())return;
+    SystemAssistEntry.cancel();
     if(!runtime.configured){settings();return;}
     if(PromptDispatcher.isStop(text)){stop();return;}
     if(ScreenContext.enabled()||screenWindowPending){openScreenWorkspace(text,true);return;}
@@ -336,6 +339,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     updateSend();updateModelChip();
   }
   void updateSend(){if(sendButton==null)return;sendButton.setIcon(runtime.busy?R.drawable.ic_stop:R.drawable.ic_arrow_up);sendButton.setContentDescription(runtime.busy?"停止当前任务":"发送");sendButton.setEnabled(runtime.busy||pendingImage!=null||!localFiles.isEmpty()||input.getText().toString().trim().length()>0);}
+  private void updateQuestionAction(){if(questionAction==null)return;UserQuestions.Request question=UserQuestions.current();questionAction.setVisibility(question==null?View.GONE:View.VISIBLE);if(question!=null){questionAction.setText("有 "+question.questions.length()+" 个问题需要回答");questionAction.setContentDescription("回答助手的问题");}}
   void updateComposerToolbar(float width){
     if(actionToolbar==null)return;
     int pixels=Math.round(width);float scale=getResources().getConfiguration().fontScale;
@@ -596,6 +600,10 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     boolean next=!VoiceWakeService.enabled(this);VoiceWakeService.setEnabled(this,next);String word=WakeConfig.get(this).word;notice(next?"已开启“"+word+"”唤醒":"已关闭“"+word+"”唤醒");
   }
   void acceptImage(){if(CircleOverlay.selectedImage!=null){pendingImage=CircleOverlay.selectedImage;pendingImageLabel="圈选区域";CircleOverlay.selectedImage=null;input.setHint("已附上屏幕内容，想怎么处理？");updateDraftAttachment();}}
+  void acceptLegacyDraft(){
+    if(!AssistantOverlay.hasSavedDraft()||input.getText().length()!=0||pendingImage!=null||!localFiles.isEmpty())return;
+    AssistantPanel.Draft draft=AssistantOverlay.takeDraft();if(draft==null)return;input.setText(draft.text);pendingImage=draft.image;pendingImageLabel=draft.label;if(draft.files!=null)localFiles.addAll(draft.files);updateDraftAttachment();
+  }
   void pickFiles(){
     FilePickActivity.request(this,uris->{
       if(uris.isEmpty())return;
@@ -634,7 +642,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){VoiceWakeService.discard(id);showStatus("麦克风权限不可用，语音尚未接通");return;}
     VoiceCallActivity.show(this);VoiceCoordinator.get(this).requestWake(id);
   }
-  @Override protected void onResume(){super.onResume();acceptImage();acceptWakeEntry();if(getIntent().getBooleanExtra("open_voice",false)){getIntent().removeExtra("open_voice");root.post(this::toggleVoice);}}
+  @Override protected void onResume(){super.onResume();acceptLegacyDraft();acceptImage();acceptWakeEntry();if(getIntent().getBooleanExtra("open_voice",false)){getIntent().removeExtra("open_voice");root.post(this::toggleVoice);}}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);root.post(this::acceptWakeEntry);returnWorkbench=intent.getBooleanExtra("return_workbench",false);acceptImage();if(intent.getBooleanExtra("open_tools",false)){intent.removeExtra("open_tools");sessionButton.post(()->showToolCenter(sessionButton));}if(intent.getBooleanExtra("open_models",false)){intent.removeExtra("open_models");settings();}if(intent.getBooleanExtra("open_capabilities",false)){intent.removeExtra("open_capabilities");permissions();}if(intent.getBooleanExtra("open_speech",false)){intent.removeExtra("open_speech");speechCapabilities();}if(intent.getBooleanExtra("open_sessions",false)){intent.removeExtra("open_sessions");sessionButton.post(this::openSidebar);}if(intent.getBooleanExtra("open_provider_auth",false)){intent.removeExtra("open_provider_auth");sessionButton.post(()->ProviderAuthDialog.show(sessionButton,runtime));}if(intent.getBooleanExtra("open_runtime_packs",false)){intent.removeExtra("open_runtime_packs");runtimePacksSettings();}}
   @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==21&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)toggleVoice();if(request==22)toggleWake();}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);super.onPause();if(voice.sessionActive()&&!VoiceCallActivity.isActive()){VoiceWakeService.resume(this);}}
@@ -651,6 +659,6 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   @Override public void onBackPressed(){handleBack();}
   @Override public void onActionModeStarted(ActionMode mode){super.onActionModeStarted(mode);textSelection=mode;syncMinimapSuppression();if(swipeNavigation!=null)swipeNavigation.selecting(true);}
   @Override public void onActionModeFinished(ActionMode mode){super.onActionModeFinished(mode);if(textSelection==mode)textSelection=null;syncMinimapSuppression();if(swipeNavigation!=null)swipeNavigation.selecting(false);}
-  @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(root!=null)SystemWindowNavigation.remember(this);}
-  @Override protected void onDestroy(){ChatBackNavigation.unregister(this,backCallback);if(minimap!=null)minimap.dispose();if(swipeNavigation!=null)swipeNavigation.dispose();if(current==this)current=null;runtime.unlisten(this);ScreenContext.unlisten(screenListener);pendingTaskPrompt=null;VoiceCoordinator.get(this).forget(this);if(isFinishing()&&!VoiceCallActivity.isActive())voice.stopSession(false);if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
+  @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(root!=null)SystemWindowNavigation.remember(this);if(focus)SystemAssistEntry.attach(this);}
+  @Override protected void onDestroy(){UserQuestions.unlisten(questionChanged);ChatBackNavigation.unregister(this,backCallback);if(minimap!=null)minimap.dispose();if(swipeNavigation!=null)swipeNavigation.dispose();if(current==this)current=null;runtime.unlisten(this);ScreenContext.unlisten(screenListener);pendingTaskPrompt=null;VoiceCoordinator.get(this).forget(this);if(isFinishing()&&!VoiceCallActivity.isActive())voice.stopSession(false);if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
 }

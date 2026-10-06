@@ -47,6 +47,7 @@ final class VoiceCoordinator implements PiRuntime.Listener {
   void submit(String text,boolean camera){
     if(text==null||text.trim().isEmpty())return;
     if(PromptDispatcher.isStop(text)){PromptDispatcher.cancelPending();runtime.send(PiRuntime.json("type","stop"));return;}
+    if(UserQuestions.offerVoice(context,text))return;
     pendingVoice=text;VoiceCallActivity.onPrompt(text);
     JSONObject command=PiRuntime.json("type","prompt","id",UUID.randomUUID().toString(),"text",text,"sessionId",runtime.sessionId);
     PromptDispatcher.Result result=(accepted,queued,error)->{

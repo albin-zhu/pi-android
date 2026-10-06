@@ -24,6 +24,7 @@ import { cameraWorkingContext, cameraPromptSuffix } from './camera-context.mjs';
 import { SpeechBridge } from './speech-bridge.mjs';
 import { SessionCatalog, atomicJson } from './session-catalog.mjs';
 import { ProviderAuthManager } from './provider-auth.mjs';
+import { createAskUserQuestionTool, QuestionToolGate } from './user-question.mjs';
 
 const inputFd = Number(process.argv[2]), outputFd = Number(process.argv[3]);
 registerBundledOAuthFlowLoaders({anthropic:()=>anthropicOAuth,openaiCodex:()=>openaiCodexOAuth,githubCopilot:()=>githubCopilotOAuth,openrouter:()=>openRouterOAuth,kimiCoding:()=>kimiCodingOAuth,xai:()=>xaiOAuth,radius:createRadiusOAuth});
@@ -127,6 +128,7 @@ if(!fs.existsSync(agentIdentityFile))fs.writeFileSync(agentIdentityFile,JSON.str
 if(!fs.existsSync(agentSystemFile))fs.writeFileSync(agentSystemFile,agentIdentity.prompt,{encoding:'utf8',mode:0o600});
 let session, modelRuntime, resourceLoader, activeModel, config, busy = false, turnId = null, stopRequested=false;
 let streamingAssistant, changingSession=false;
+const questionGate=new QuestionToolGate();
 let phoneGuard=new PhoneTurnGuard(),phoneFailure;
 function stopPhoneLoop(message){phoneFailure=message;emit({type:'phone_halt',turnId});queueMicrotask(()=>{session?.abort().catch(()=>{});});}
 const nativeTools = new NativeToolBridge(emit);
@@ -167,12 +169,13 @@ async function selectedSessionManager(){
 async function activateSession(manager){
   sessionCatalog.persist(manager);
   const result=await createAgentSession({cwd:workspace,agentDir,resourceLoader,modelRuntime,model:activeModel,
-    sessionManager:manager,settingsManager:SettingsManager.inMemory({}),customTools:tools,
+    sessionManager:manager,settingsManager:SettingsManager.inMemory({}),customTools:tools.map(tool=>questionGate.wrap(tool)),
     tools:['read','edit','write','ls','bash',...tools.map(t=>t.name)]});
   try{saveActiveSession(result.session.sessionId);}catch(error){result.session.dispose();throw error;}
   const previous=session;session=result.session;
   activeTools.clear();streamingAssistant=undefined;
   session.subscribe(event=>{
+    questionGate.observe(event);
     if((event.type==='message_start'||event.type==='message_update')&&event.message?.role==='assistant')streamingAssistant=event.message;
     if(event.type==='message_end'&&event.message?.role==='assistant')streamingAssistant=undefined;
     if(event.type==='message_start'&&event.message?.role==='assistant')emit({type:'assistant_start',turnId});
@@ -534,6 +537,7 @@ const tools = [...fileTools,selectTool,phoneTaskTool,sandboxStatusTool,toolInsta
     return androidToolResult(result);
   }
 }))];
+tools.push(createAskUserQuestionTool({Type,call:android,sessionId:()=>session?.sessionId||''}));
 const reloadSkillsTool={
   name:'reload_skills',label:'重新加载本地 Skills',
   description:'在用 write/edit 创建或修改 workspace/.pi/skills 后，重新加载当前 Pi 资源。全局 Skill 只能由用户在应用内管理。',

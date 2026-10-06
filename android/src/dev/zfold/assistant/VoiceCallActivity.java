@@ -40,6 +40,8 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
   private TextView cameraStatus,videoStatus,videoText,lastFrameLabel;private CallOrb videoOrb;private View cameraAction;
   private boolean video;private Runnable adaptLayout;private String lastFrameImage;private boolean frameDialogOpen;
   private TextView audioOutput;private android.app.AlertDialog audioDialog;private final Runnable audioChanged=this::updateAudioOutput;
+  private TextView questionAction;private final Runnable questionChanged=this::updateQuestionAction;
+  static VoiceCallActivity foregroundActivity(){return foreground?active:null;}
 
   static void onFrameSubmitted(JSONObject metadata,org.json.JSONArray images){VoiceCallActivity target=active;if(target==null||metadata==null)return;target.main.post(()->{
     if(images!=null)for(int i=0;i<images.length();i++){JSONObject item=images.optJSONObject(i);if(item!=null&&metadata.optString("frameId").equals(item.optString("frameId")))target.lastFrameImage=item.optString("data");}
@@ -99,6 +101,7 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     stateText=Ui.text(this,"正在准备实时通话…",14,0xff9db0c7);stateText.setGravity(Gravity.CENTER);LinearLayout.LayoutParams stateParams=new LinearLayout.LayoutParams(-1,-2);stateParams.topMargin=Ui.dp(this,7);top.addView(stateText,stateParams);
     ScrollView callScroll=new ScrollView(this);callScroll.setFillViewport(true);callScroll.addView(top);root.addView(callScroll,new LinearLayout.LayoutParams(-1,0,1));
 
+    questionAction=Ui.text(this,"有问题需要回答",13,0xffffc98d);questionAction.setGravity(Gravity.CENTER);questionAction.setBackground(Ui.ripple(this,0xff2c231b,14,0xffffc98d));questionAction.setOnClickListener(v->UserQuestions.show(this));questionAction.setContentDescription("回答助手的问题");questionAction.setVisibility(View.GONE);root.addView(questionAction,new LinearLayout.LayoutParams(-1,Ui.dp(this,48)));
     audioOutput=Ui.text(this,"声音 · 自动",12,0xffc5d3e5);audioOutput.setGravity(Gravity.CENTER);audioOutput.setSingleLine(true);audioOutput.setEllipsize(android.text.TextUtils.TruncateAt.END);
     audioOutput.setPadding(Ui.dp(this,12),0,Ui.dp(this,12),0);audioOutput.setBackground(Ui.ripple(this,0xff172235,22,0xffc5d3e5));audioOutput.setOnClickListener(v->showAudioOutputs());
     LinearLayout.LayoutParams audioParams=new LinearLayout.LayoutParams(-2,Ui.dp(this,44));audioParams.gravity=Gravity.CENTER_HORIZONTAL;root.addView(audioOutput,audioParams);
@@ -148,6 +151,7 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
   private void setOrbState(String state){if(orb!=null)orb.setState(state);if(videoOrb!=null)videoOrb.setState(state);}
   private void setLiveText(String text){if(liveText!=null)liveText.setText(text);if(videoText!=null)videoText.setText(text);}
   private void updateAudioOutput(){if(audioOutput==null)return;String label=AudioModeOwner.outputLabel();audioOutput.setText("声音 · "+label+" ▾");audioOutput.setContentDescription("切换声音输出，当前"+label);}
+  private void updateQuestionAction(){if(questionAction!=null)questionAction.setVisibility(UserQuestions.current()==null?View.GONE:View.VISIBLE);}
   private void showAudioOutputs(){
     if(!AudioModeOwner.active()){android.widget.Toast.makeText(this,"开始语音后可切换扬声器、听筒或耳机",android.widget.Toast.LENGTH_SHORT).show();return;}
     if(audioDialog!=null&&audioDialog.isShowing())return;
@@ -191,8 +195,8 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
   }
 
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);}
-  @Override protected void onResume(){super.onResume();active=this;foreground=true;AudioModeOwner.listen(audioChanged);VoiceMiniOverlay.hide();getWindow().getDecorView().post(()->{if(active==this&&foreground)VoiceCoordinator.get(this).voiceViewReady(true);});if(video&&(!camera.owns(this)||!camera.ready())){cameraStatus.setText("摄像头已暂停，点击相机恢复");cameraAction.setContentDescription("恢复摄像头");}}
-  @Override protected void onPause(){AudioModeOwner.unlisten(audioChanged);SystemWindowNavigation.remember(this);super.onPause();if(active==this){foreground=false;VoiceCoordinator.get(this).voiceViewReady(false);}if(!isFinishing())VoiceMiniOverlay.showIfCallActive(this);}
+  @Override protected void onResume(){super.onResume();active=this;foreground=true;UserQuestions.listen(questionChanged);AudioModeOwner.listen(audioChanged);VoiceMiniOverlay.hide();getWindow().getDecorView().post(()->{if(active==this&&foreground)VoiceCoordinator.get(this).voiceViewReady(true);});if(video&&(!camera.owns(this)||!camera.ready())){cameraStatus.setText("摄像头已暂停，点击相机恢复");cameraAction.setContentDescription("恢复摄像头");}}
+  @Override protected void onPause(){UserQuestions.unlisten(questionChanged);AudioModeOwner.unlisten(audioChanged);SystemWindowNavigation.remember(this);super.onPause();if(active==this){foreground=false;VoiceCoordinator.get(this).voiceViewReady(false);}if(!isFinishing())VoiceMiniOverlay.showIfCallActive(this);}
   @Override protected void onStop(){camera.pause(this);super.onStop();}
   @Override protected void onDestroy(){if(audioDialog!=null)audioDialog.dismiss();if(isFinishing())camera.endVideo(this);camera.detach(this);if(active==this)active=null;runtime.unlisten(this);super.onDestroy();}
   @Override public void onBackPressed(){startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}

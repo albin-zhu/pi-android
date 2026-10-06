@@ -36,6 +36,7 @@ public final class AndroidTools {
     String name=request.optString("name");
     JSONObject args=request.optJSONObject("args");if(args==null)args=new JSONObject();
     try {
+      if(name.equals("ask_user_question")){UserQuestions.ask(context,request,args,result);return;}
       if(name.equals("phone_capabilities")||name.equals("phone_call")||name.equals("phone_sms")||name.equals("camera_capture")||name.equals("contact_search")){
         PhoneActions.execute(context,name,args,request.optString("id"),result);return;
       }

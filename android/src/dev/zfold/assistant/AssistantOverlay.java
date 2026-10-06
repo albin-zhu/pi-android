@@ -23,32 +23,10 @@ public final class AssistantOverlay {
     SystemWindowNavigation.showChat(context,true);
   }
   static void show(Context context,String image){
-    AssistantSessionService.yieldToOverlay();UnifiedOverlay.forceHide();
-    if(panel!=null){if(savedDraft!=null){panel.restore(savedDraft);savedDraft=null;}if(image!=null)panel.attachImage(image,"已附上圈选内容");return;}
-    Context app=context.getApplicationContext();
-    PhoneAccessibility service=PhoneAccessibility.instance;
-    if(service==null&&!Settings.canDrawOverlays(app)){Toast.makeText(app,"请先允许 Zfold 显示悬浮窗",Toast.LENGTH_LONG).show();app.startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,android.net.Uri.parse("package:"+app.getPackageName())).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));return;}
-    Context windowContext=service!=null?service:app;
-    CircleOverlay.hideBubble();manager=(WindowManager)windowContext.getSystemService(Context.WINDOW_SERVICE);
-    panel=new AssistantPanel(new android.view.ContextThemeWrapper(windowContext,R.style.AppTheme),new AssistantPanel.Host(){
-      public void close(){ScreenContext.setEnabled(false);savedDraft=panel.draft();hide();CircleOverlay.hideBubble();}
-      public void minimize(){savedDraft=panel.draft();hide();CircleOverlay.ensureBubble(app);}
-      public void select(){savedDraft=panel.draft();hide();CircleOverlay.begin(app,(data)->show(app,data));}
-      public void toggleExpansion(){setExpanded(!expanded);}
-    });
-    int type=service!=null?WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY:WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-    params=new WindowManager.LayoutParams(type,WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
-    params.gravity=Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL;params.setFitInsetsTypes(WindowInsets.Type.statusBars()|WindowInsets.Type.displayCutout()|WindowInsets.Type.ime());params.softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING|WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN;keyboardInset=0;expanded=false;
-    applySurfaceMode(app,false);
-    panel.setOnApplyWindowInsetsListener((view,insets)->{
-      if(view!=panel||manager==null||params==null)return insets;
-      int nav=insets.getInsets(WindowInsets.Type.navigationBars()).bottom;
-      WindowInsets global=manager.getMaximumWindowMetrics().getWindowInsets();
-      if(!insets.isVisible(WindowInsets.Type.ime())&&!global.isVisible(WindowInsets.Type.ime()))keyboardInset=0;
-      else{int measured=Math.max(insets.getInsets(WindowInsets.Type.ime()).bottom,global.getInsets(WindowInsets.Type.ime()).bottom);if(measured>0)keyboardInset=measured;}
-      ((AssistantPanel)view).setBottomInset(0);applySurfaceMode(app,expanded);return insets;
-    });
-    try{manager.addView(panel,params);accessibilityPanel=service!=null;panel.restore(savedDraft);savedDraft=null;panel.setExpanded(false);expanded=false;if(image!=null)panel.attachImage(image,"已附上圈选内容");Ui.arrive(panel);}catch(RuntimeException error){panel.dispose();panel=null;accessibilityPanel=false;Toast.makeText(app,"悬浮窗未能显示，请检查权限",Toast.LENGTH_LONG).show();}
+    AssistantSessionService.yieldToOverlay();hide();UnifiedOverlay.forceHide();CircleOverlay.hideBubble();
+    if(image!=null)CircleOverlay.selectedImage=image;
+    SystemWindowNavigation.showChat(context,false);
+    MainActivity main=MainActivity.current();if(main!=null)main.root.post(()->{main.acceptLegacyDraft();main.acceptImage();});
   }
   static void setExpanded(boolean value){
     if(panel==null||manager==null)return;
