@@ -45,13 +45,44 @@ jobs:
       - name: Install pinned Android toolchain
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;28.0.13004108'
       - run: npm ci
+      - name: Restore the installed app signing key
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo 'Missing ANDROID_DEBUG_KEYSTORE_BASE64; refusing to publish an APK with a new signing key.' >&2
+            exit 1
+          fi
+          umask 077
+          mkdir -p .build
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > .build/debug.keystore
+          test -s .build/debug.keystore
       - name: Build and verify debug APK
         env:
           ZFOLD_TARGET_SDK: ${{ matrix.target }}
         run: python3 scripts/build.py
+      - name: Verify the installed app certificate
+        if: github.event_name != 'pull_request'
+        env:
+          EXPECTED_CERT_SHA256: ${{ vars.ANDROID_DEBUG_CERT_SHA256 }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re, subprocess
+          expected = os.environ['EXPECTED_CERT_SHA256'].lower()
+          if not re.fullmatch(r'[0-9a-f]{64}', expected):
+              raise SystemExit('Missing or invalid ANDROID_DEBUG_CERT_SHA256')
+          signer = pathlib.Path(os.environ['ANDROID_HOME']) / 'build-tools/35.0.0/apksigner'
+          for apk in pathlib.Path('artifacts').glob('*.apk'):
+              report = subprocess.check_output([str(signer), 'verify', '--print-certs', str(apk)], text=True)
+              digests = re.findall(r'Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)', report)
+              if digests != [expected]:
+                  raise SystemExit(f'{apk.name}: signing certificate does not match the installed app')
+              print(f'{apk.name}: installed app signing certificate verified')
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: debug-apk-target-${{ matrix.target }}
+          name: debug-apk-target-${{ matrix.target }}${{ github.event_name == 'pull_request' && '-pr-test' || '' }}
           path: artifacts/*.apk
           if-no-files-found: error
           retention-days: 7
