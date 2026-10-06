@@ -65,6 +65,7 @@
  <service android:name=".QuestionSessionService" android:exported="false" android:foregroundServiceType="specialUse">
    <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Keep the user-started agent task alive while waiting for a requested user answer and delivering its result" />
  </service>
+  <provider android:name=".ArtifactProvider" android:authorities="dev.zfold.assistant.artifacts" android:exported="false" android:grantUriPermissions="true" />
  </application>
  <instrumentation android:name=".PackageCliInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold package CLI check (emulator only)" />
  <instrumentation android:name=".WindowEntryInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold direct system window entry (emulator only)" />
