@@ -8,20 +8,21 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import org.json.JSONObject;
 
-/** Shared, expandable tool record for the main chat and both assistant panels. */
+/** Expandable record; details are formatted only when the user opens them. */
 final class ToolCallView extends LinearLayout {
   final Ui.Theme theme;
   final TextView title, status, details;
   final Ui.Action toggle;
   JSONObject record;
   boolean expanded;
+  Runnable beforeDisclosure=()->{};
 
   ToolCallView(Context context, JSONObject data) {
     super(context);theme=new Ui.Theme(context);setOrientation(VERTICAL);
     setBackground(Ui.shape(context,theme.field,12,theme.line));
     LinearLayout header=new LinearLayout(context);header.setGravity(Gravity.CENTER_VERTICAL);
     header.setPadding(Ui.dp(context,12),0,0,0);header.setMinimumHeight(Ui.dp(context,48));
-    title=Ui.text(context,"",13,theme.ink);header.addView(title,new LayoutParams(0,-2,1));
+    title=Ui.text(context,"",13,theme.ink);title.setMaxLines(2);title.setEllipsize(android.text.TextUtils.TruncateAt.END);header.addView(title,new LayoutParams(0,-2,1));
     status=Ui.text(context,"",11,theme.muted);header.addView(status);
     toggle=new Ui.Action(context,R.drawable.ic_caret_down,"","展开工具详情",theme.muted,Color.TRANSPARENT,this::toggle);
     header.addView(toggle,new LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
@@ -30,7 +31,9 @@ final class ToolCallView extends LinearLayout {
     details.setPadding(Ui.dp(context,12),0,Ui.dp(context,12),Ui.dp(context,12));
     details.setVisibility(GONE);addView(details,new LayoutParams(-1,-2));update(data);
   }
-  void toggle(){if(record!=null&&UserQuestions.matchesTool(record.optString("id"))){UserQuestions.show(getContext());return;}expanded=!expanded;details.setVisibility(expanded?VISIBLE:GONE);toggle.setRotation(expanded?180:0);toggle.setContentDescription((expanded?"收起":"展开")+title.getText()+"详情");}
+  void toggle(){if(record!=null&&UserQuestions.matchesTool(record.optString("id"))){UserQuestions.show(getContext());return;}beforeDisclosure.run();setExpanded(!expanded);}
+  void setExpanded(boolean value){expanded=value;if(value)renderDetails();details.setVisibility(expanded?VISIBLE:GONE);toggle.setRotation(expanded?180:0);toggle.setContentDescription((expanded?"收起":"展开")+title.getText()+"详情");}
+  void finishPending(boolean cancelled){if("running".equals(record.optString("status")))update(PiRuntime.json("status",cancelled?"cancelled":"interrupted"));}
   static String label(String name){
     switch(name){
       case "ask_user_question":return "向用户提问";
@@ -47,12 +50,14 @@ final class ToolCallView extends LinearLayout {
   }
   static String pretty(String value){try{return new JSONObject(value).toString(2);}catch(Exception ignored){return value;}}
   void update(JSONObject data){
-    record=data;String state=data.optString("status"),name=data.optString("name");
+    if(record!=null&&!"running".equals(record.optString("status"))&&"running".equals(data.optString("status")))return;
+    JSONObject merged=new JSONObject();try{if(record!=null)for(java.util.Iterator<String> keys=record.keys();keys.hasNext();){String key=keys.next();merged.put(key,record.get(key));}for(java.util.Iterator<String> keys=data.keys();keys.hasNext();){String key=keys.next();merged.put(key,data.get(key));}}catch(Exception ignored){}
+    record=merged;String state=record.optString("status"),name=record.optString("name");
     String stateLabel=state.equals("running")?"执行中":state.equals("error")?"失败":state.equals("blocked")?"需重新判断":state.equals("unverified")?"待验证":state.equals("cancelled")?"已停止":state.equals("interrupted")?"已中断":state.equals("not_performed")?"未执行":"已返回";
     if(name.equals("ask_user_question")&&state.equals("running"))stateLabel="等你回答";
     title.setText(label(name));status.setText(stateLabel);status.setTextColor(state.equals("error")?theme.error:state.equals("running")?theme.accent:theme.muted);
-    String output=data.optString("output");
-    details.setText(name+"\n\n参数\n"+pretty(data.optString("args","{}"))+"\n\n结果\n"+(output.isEmpty()?(state.equals("running")?"等待工具返回…":"没有返回内容"):pretty(output)));
+    if(expanded)renderDetails();
     setContentDescription(label(name)+" · "+stateLabel);
   }
+  private void renderDetails(){String name=record.optString("name"),output=record.optString("output");details.setText(name+"\n\n参数\n"+pretty(record.optString("args","{}"))+"\n\n结果\n"+(output.isEmpty()?(record.optString("status").equals("running")?"等待工具返回…":"没有返回内容"):pretty(output)));}
 }

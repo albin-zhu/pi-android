@@ -39,6 +39,8 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   String pendingTaskPrompt;
   private Ui.Action questionAction;private final Runnable questionChanged=this::updateQuestionAction;
   final Map<String,ToolCallView> toolViews=new LinkedHashMap<>();
+  final Map<String,ToolGroupView> toolGroups=new LinkedHashMap<>();
+  private String displayedSessionId="";private int followVersion;
   @Override public void onCreate(Bundle state){
     super.onCreate(state);returnWorkbench=getIntent().getBooleanExtra("return_workbench",false);temporarySettingsHost=returnWorkbench;theme=new Ui.Theme(this);getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);
     getWindow().getDecorView().setSystemUiVisibility(theme.dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
@@ -290,24 +292,43 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     });
   }
   boolean followsBottom(){return !scroll.touching()&&!minimap.interacting()&&conversation.getHeight()-scroll.getHeight()-scroll.getScrollY()<dp(48);}
-  void followBottom(boolean follow){if(follow)scroll.post(scroll::followLatest);}
+  void followBottom(boolean follow){int version=followVersion;if(follow)scroll.post(()->{if(version==followVersion)scroll.followLatest();});}
+  void toolDisclosureChanged(){
+    int position=scroll.getScrollY(),version=++followVersion;scroll.haltFling();minimap.changed();
+    scroll.post(()->{if(version==followVersion)scroll.scrollTo(0,position);});
+  }
   void showTool(JSONObject item){
     String id=item.optString("id");ToolCallView card=toolViews.get(id);
-    if(card==null){card=new ToolCallView(this,item);toolViews.put(id,card);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(8);lp.leftMargin=dp(38);conversation.addView(card,lp);}else card.update(item);minimap.changed();
+    if(card==null){
+      View last=conversation.getChildCount()==0?null:conversation.getChildAt(conversation.getChildCount()-1);
+      ToolGroupView group=last instanceof ToolGroupView?(ToolGroupView)last:new ToolGroupView(this,id,this::toolDisclosureChanged);
+      if(group.getParent()==null){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(8);conversation.addView(group,lp);}
+      card=new ToolCallView(this,item);toolViews.put(id,card);toolGroups.put(id,group);group.add(card);
+    }else{card.update(item);ToolGroupView group=toolGroups.get(id);if(group!=null)group.refresh();}minimap.changed();
   }
+  void finishToolGroups(boolean cancelled){for(ToolGroupView group:new LinkedHashSet<>(toolGroups.values()))group.finish(cancelled);minimap.changed();}
   void showHistory(JSONObject event){
+    String session=event.optString("sessionId",runtime.sessionId);boolean same=displayedSessionId.equals(session);
+    boolean follow=!same||conversation.getChildCount()==0||conversation.getChildAt(0)==intro||followsBottom();int position=scroll.getScrollY(),version=++followVersion;
+    Set<String> openGroups=new HashSet<>(),openCalls=new HashSet<>();
+    if(same){for(ToolGroupView group:toolGroups.values())if(group.expanded)openGroups.add(group.key);for(Map.Entry<String,ToolCallView> call:toolViews.entrySet())if(call.getValue().expanded)openCalls.add(call.getKey());}
+    displayedSessionId=session;
     minimap.reset();
-    JSONArray items=event.optJSONArray("items");conversation.removeAllViews();toolViews.clear();answer=null;response.setLength(0);response.append(runtime.lastResponse);
+    JSONArray items=event.optJSONArray("items");conversation.removeAllViews();toolViews.clear();toolGroups.clear();answer=null;response.setLength(0);
     if(items==null||items.length()==0){conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);return;}
     conversation.setGravity(Gravity.TOP);
     for(int i=0;i<items.length();i++){
       JSONObject item=items.optJSONObject(i);if(item==null)continue;
-      if("tool".equals(item.optString("role"))){showTool(item);answer=null;continue;}
+      if("tool".equals(item.optString("role"))){showTool(item);answer=null;response.setLength(0);continue;}
       boolean user="user".equals(item.optString("role"));String picture=item.optString("image");
+      if(!user&&item.optString("text").trim().isEmpty())continue;
       if(picture.isEmpty()&&user&&item.optString("text").equals(runtime.lastPromptText)&&runtime.lastPromptImage!=null)picture=runtime.lastPromptImage;
-      bubble(item.optString("text"),user,picture,item.optBoolean("hasImage")||!picture.isEmpty());if(user)answer=null;
+      bubble(item.optString("text"),user,picture,item.optBoolean("hasImage")||!picture.isEmpty());response.setLength(0);if(user)answer=null;else response.append(item.optString("text"));
     }
-    followBottom(true);
+    for(ToolGroupView group:new LinkedHashSet<>(toolGroups.values()))group.setExpanded(openGroups.contains(group.key));
+    for(String id:openCalls){ToolCallView call=toolViews.get(id);if(call!=null)call.setExpanded(true);}
+    if(!event.optBoolean("busy",runtime.busy))finishToolGroups(false);
+    if(follow)followBottom(true);else scroll.post(()->{if(version==followVersion)scroll.scrollTo(0,position);});
   }
   @Override public void event(JSONObject event){
     switch(event.optString("type")){
@@ -316,24 +337,26 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       case "agent_identity":runtime.send(PiRuntime.json("type","history"));break;
       case "jev_status":break;
       case "jev_error":notice(event.optString("message"));break;
-      case "session_changed":minimap.reset();conversation.removeAllViews();toolViews.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
+      case "session_changed":followVersion++;displayedSessionId=event.optString("sessionId",runtime.sessionId);minimap.reset();conversation.removeAllViews();toolViews.clear();toolGroups.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
       case "history":showHistory(event);showStatus(runtime.busy?"正在处理…":idleStatus());break;
       case "turn_start":{
+        displayedSessionId=runtime.sessionId;
         if(intro.getParent()==conversation)conversation.removeView(intro);conversation.setGravity(Gravity.TOP);
         JSONArray files=event.optJSONArray("files");StringBuilder summary=new StringBuilder(runtime.lastPromptText);
         if(files!=null&&files.length()>0){if(summary.length()>0)summary.append('\n');summary.append("[本地文件：");for(int i=0;i<files.length();i++){if(i>0)summary.append('，');summary.append(files.optJSONObject(i)==null?"文件":files.optJSONObject(i).optString("name","文件"));}summary.append(']');}
         bubble(summary.toString(),true,runtime.lastPromptImage,runtime.lastPromptHasImage);answer=null;response.setLength(0);followBottom(true);break;
       }
-      case "assistant_start":answer=null;break;
-      case "delta":boolean follow=followsBottom();String delta=event.optString("text");response.append(delta);if(answer==null)bubble("",false);answer.setText(response.toString());followBottom(follow);break;
-      case "tool_execution":boolean followTool=followsBottom();showTool(event);answer=null;showStatus("running".equals(event.optString("status"))?PhoneHud.action(event):"正在处理…");if("running".equals(event.optString("status"))&&!voice.listeningForInput())VoiceCallActivity.onControllerStatus(PhoneHud.action(event));followBottom(followTool);break;
+      case "assistant_start":answer=null;response.setLength(0);break;
+      case "delta":boolean follow=followsBottom();String delta=event.optString("text");response.append(delta);if(answer==null){if(response.toString().trim().isEmpty())break;bubble("",false);}answer.setText(response.toString());followBottom(follow);break;
+      case "tool_execution":boolean followTool=followsBottom(),newTool=!toolViews.containsKey(event.optString("id"));showTool(event);if(newTool)answer=null;showStatus("running".equals(event.optString("status"))?PhoneHud.action(event):"正在处理…");if("running".equals(event.optString("status"))&&!voice.listeningForInput())VoiceCallActivity.onControllerStatus(PhoneHud.action(event));followBottom(followTool);break;
       case "turn_end":{
+        finishToolGroups(event.optBoolean("aborted"));
         if(event.optBoolean("aborted"))showStatus(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");
         String queued=pendingTaskPrompt;pendingTaskPrompt=null;
         if(queued!=null&&!isFinishing())handler.postDelayed(()->{if(!isFinishing()){toggleVoice();sendText(queued);}},380);
         break;
       }
-      case "error":showStatus("需要处理，排队的新指令已取消");pendingTaskPrompt=null;notice(Ui.errorMessage(event.optString("message")));break;
+      case "error":finishToolGroups(false);showStatus("需要处理，排队的新指令已取消");pendingTaskPrompt=null;notice(Ui.errorMessage(event.optString("message")));break;
       case "probe":JSONObject d=event.optJSONObject("device");new AlertDialog.Builder(this).setTitle("本地运行正常").setMessage("Pi "+event.optString("pi")+"\nNode "+event.optString("node")+"\n架构 "+event.optString("arch")+"\n\n原生工具返回：\n"+(d==null?"":d.toString())).setPositiveButton("完成",null).show();break;
     }
     updateSend();updateModelChip();
