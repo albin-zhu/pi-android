@@ -18,6 +18,7 @@ test('runtime preserves multiple custom providers and switches without recreatin
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const url=`http://127.0.0.1:${server.address().port}/v1`;
   const child=spawn(process.execPath,['android/assets/runtime/agent.cjs','0','1',root],{stdio:['pipe','pipe','pipe']});
+  const closed=new Promise(resolve=>child.once('close',resolve));
   const send=value=>child.stdin.write(JSON.stringify(value)+'\n');
   let stderr='',configured=0,catalog=null;
   child.stderr.on('data',part=>stderr+=part);
@@ -51,5 +52,10 @@ test('runtime preserves multiple custom providers and switches without recreatin
     const stored=JSON.parse(await readFile(path.join(root,'.pi','agent','models.json'),'utf8'));
     assert.equal(stored.providers.custom.models[0].id,'first-test');
     assert.equal(stored.providers.gateway.models[0].id,'second-test');
-  }finally{child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{
+    child.kill();server.closeAllConnections();server.close();
+    // Wait for pending model/session writes before deleting the fixture directory.
+    await closed;
+    await rm(root,{recursive:true,force:true});
+  }
 });
