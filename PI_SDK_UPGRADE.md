@@ -26,3 +26,6 @@ Skill saved to workspace/.pi/skills/pi-sdk-upgrade/SKILL.md and mirrored under d
 - User installs signed APK; check embedded Node boot, existing session resume, provider login/refresh, screenshot/circle prompt and streaming reply, /goal and skill reload.
 - Old-session format compatibility and rollback must be exercised using copies; do not assume 1.x-written history is backward compatible.
 - Existing multi-session abort behavior and stale extension-context reload are known host concerns, not resolved by a dependency bump alone.
+
+## Final CI verification
+Commit fd37340: https://github.com/albin-zhu/pi-android/actions/runs/37643844018 completed successfully. Node24 Linux full suite: **105 tests, 105 pass, 0 fail**. Both target28/35 build and installed-certificate verification jobs passed. Earlier CI teardown ENOTEMPTY races were repaired by awaiting child exit before deleting fixture data, without weakening functionality assertions. Installed-device verification remains pending.

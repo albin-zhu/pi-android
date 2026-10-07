@@ -28,3 +28,4 @@ description: 升级橙橙 Android 项目的上游 Pi SDK，检查破坏性变更
 - cacheWarming 显式 off，避免升级默默增加后台请求费用。
 - Android 本机部分桌面夹具会等待 runtime_environment 原生回执，stdio MCP 子进程环境也与 Linux 不同；不能把此类超时直接算 SDK 回归或宣称全部通过。
 - 新建会话自动 abort 旧任务是当前宿主实现，不是 SDK 的单会话上限。升级不自动实现多会话并行。
+- SDK 后台模型目录写入使测试清理更容易竞态：child.kill() 只是发信号，必须等待 close/exit 后才能删除临时目录。1.0.4 最终 CI fd37340 / run 37643844018：Node24 全量 105/105，target28/35 构建及签名检查通过；设备安装后行为仍待验证。
