@@ -22,6 +22,17 @@ jobs:
       - run: npm ci
       - run: npm run bundle
       - run: npm test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Check spring dynamics and slash commands
+        run: |
+          mkdir -p .build/design-check
+          javac -d .build/design-check android/src/dev/zfold/assistant/SpringMath.java tests/SpringMathCheck.java
+          java -cp .build/design-check dev.zfold.assistant.SpringMathCheck
+          javac -d .build/design-check android/src/dev/zfold/assistant/SlashCommands.java tests/SlashCommandsCheck.java
+          java -cp .build/design-check dev.zfold.assistant.SlashCommandsCheck
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 35

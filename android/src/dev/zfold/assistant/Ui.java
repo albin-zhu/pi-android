@@ -148,11 +148,11 @@ final class Ui {
   private static void appendMarkdown(LinearLayout parent,String raw,int tableSize,int color){
     String value=raw==null?"":raw;int at=tableStart(value);
     if(at<0){
-      if(!value.trim().isEmpty())parent.addView(richText(parent.getContext(),value));
+      if(!value.trim().isEmpty())parent.addView(richText(parent.getContext(),value,color));
       return;
     }
     String prefix=at==0?"":value.substring(0,at);
-    if(!prefix.trim().isEmpty())parent.addView(richText(parent.getContext(),prefix));
+    if(!prefix.trim().isEmpty())parent.addView(richText(parent.getContext(),prefix,color));
     String remainder=value.substring(at),tableText=remainder;
     int end=tableEnd(remainder);String table=remainder;
     if(end>=0&&end<remainder.length()){table=remainder.substring(0,end);tableText=table;}
@@ -161,8 +161,8 @@ final class Ui {
     appendMarkdown(parent,rest,tableSize,color);
   }
 
-  private static TextView richText(Context c,String value){
-    TextView view=text(c,"",16,0xff101418);view.setTextIsSelectable(true);bindLinks(view,markdown(value));
+  private static TextView richText(Context c,String value,int color){
+    TextView view=text(c,"",16,color);view.setTextColor(color);view.setLinkTextColor(new Theme(c).accent);view.setTextIsSelectable(true);bindLinks(view,markdown(value));
     view.setLineSpacing(dp(c,5),1f);view.setHighlightColor(0x22000000);
     return view;
   }

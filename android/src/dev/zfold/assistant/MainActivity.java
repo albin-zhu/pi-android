@@ -475,10 +475,10 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     screenShareButton.setCompact(false);
     sendButton.setCompact(false);overflowButton.setCompact(true);
 
-    sessionButton.setVisibility(View.GONE);
+    sessionButton.setVisibility(widthDp>=350?View.VISIBLE:View.GONE);
     circleButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
     attachButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
-    screenShareButton.setVisibility(View.VISIBLE);
+    screenShareButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
     overflowButton.setVisibility(View.VISIBLE);
     overflowButton.setContentDescription("更多工具：会话、工作台"+(mode>=2?"、圈选、文件":""));
     updateModelChip();updateScreenShareControl();

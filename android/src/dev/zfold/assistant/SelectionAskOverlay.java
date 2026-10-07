@@ -24,6 +24,7 @@ import org.json.JSONObject;
 final class SelectionAskOverlay {
   private static LinearLayout card;
   private static WindowManager manager;
+  private static android.view.View windowRoot;
   private static TextView status;
   private static TextView reply;
   private static final StringBuilder stream=new StringBuilder();
@@ -100,10 +101,10 @@ final class SelectionAskOverlay {
     LinearLayout actions=new LinearLayout(app);actions.setGravity(Gravity.CENTER_VERTICAL);
     actions.setPadding(0,Ui.dp(app,4),0,0);
     boolean[] fresh={false};
-    TextView neu=Ui.text(app,"新会话",12,theme.muted);
+    android.widget.CheckBox neu=new android.widget.CheckBox(app);neu.setText("新会话");neu.setTextSize(12);neu.setTextColor(theme.muted);neu.setButtonTintList(android.content.res.ColorStateList.valueOf(theme.accent));neu.setMinHeight(Ui.dp(app,48));
     neu.setPadding(Ui.dp(app,4),Ui.dp(app,8),Ui.dp(app,8),Ui.dp(app,8));
     neu.setContentDescription("发送到新会话");
-    neu.setOnClickListener(v->{fresh[0]=!fresh[0];neu.setText(fresh[0]?"新会话 · 开":"新会话");neu.setTextColor(fresh[0]?theme.accent:theme.muted);});
+    neu.setOnCheckedChangeListener((button,checked)->{fresh[0]=checked;neu.setStateDescription(checked?"新会话，发送会停止原会话当前任务":"当前会话");});
     actions.addView(neu,new LinearLayout.LayoutParams(0,-2,1f));
     Ui.Action send=new Ui.Action(app,R.drawable.ic_arrow_up,"发送","发送提问",theme.onAccent,theme.accent,()->{if(pending){PiRuntime.get(app).send(PiRuntime.json("type","stop"));return;}submit(app,input.getText().toString(),image,selectedText,fresh[0]);});
     sendAction=send;actions.addView(send,new LinearLayout.LayoutParams(Ui.dp(app,88),Ui.dp(app,48)));
@@ -115,7 +116,17 @@ final class SelectionAskOverlay {
     params.gravity=Gravity.BOTTOM|Gravity.END;
     params.x=Ui.dp(app,16);params.y=Ui.dp(app,88);
     params.setFitInsetsTypes(WindowInsets.Type.ime()|WindowInsets.Type.navigationBars()|WindowInsets.Type.displayCutout());
-    try{wm.addView(body,params);manager=wm;card=body;Ui.arrive(body);input.requestFocus();}
+    final int[] usable={wm.getMaximumWindowMetrics().getBounds().height()-Ui.dp(app,120)};
+    ScrollView surface=new ScrollView(host){
+      @Override protected void onMeasure(int width,int height){super.onMeasure(width,android.view.View.MeasureSpec.makeMeasureSpec(Math.max(Ui.dp(app,96),usable[0]),android.view.View.MeasureSpec.AT_MOST));}
+    };
+    surface.setFillViewport(false);surface.setBackground(Ui.shape(app,theme.surface,22,theme.line));surface.setClipToOutline(true);
+    surface.addView(body,new android.widget.FrameLayout.LayoutParams(-1,-2));
+    surface.setOnApplyWindowInsetsListener((v,insets)->{
+      android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.ime()|WindowInsets.Type.displayCutout());
+      usable[0]=wm.getMaximumWindowMetrics().getBounds().height()-bars.top-bars.bottom-Ui.dp(app,32);surface.requestLayout();return insets;
+    });
+    try{wm.addView(surface,params);windowRoot=surface;manager=wm;card=body;Ui.arrive(body);input.requestFocus();}
     catch(RuntimeException error){Toast.makeText(app,"未能在当前屏幕打开提问窗",Toast.LENGTH_LONG).show();}
   }
 
@@ -158,7 +169,7 @@ final class SelectionAskOverlay {
     if(boundRuntime!=null&&listener!=null)boundRuntime.unlisten(listener);
     boundRuntime=null;listener=null;requestId=null;pending=false;
     if(card==null)return;
-    try{manager.removeView(card);}catch(Exception ignored){}
-    card=null;manager=null;status=null;reply=null;sendAction=null;questionInput=null;
+    try{manager.removeView(windowRoot==null?card:windowRoot);}catch(Exception ignored){}
+    card=null;windowRoot=null;manager=null;status=null;reply=null;sendAction=null;questionInput=null;
   }
 }

@@ -41,7 +41,7 @@ final class ModelPicker {
         for(int m=0;models!=null&&m<models.length();m++){
           JSONObject model=models.optJSONObject(m);if(model==null)continue;
           String modelId=model.optString("id");boolean selected=providerId.equals(currentProvider)&&modelId.equals(currentModel);
-          LinearLayout row=new LinearLayout(context);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(Ui.dp(context,14),0,Ui.dp(context,10),0);row.setMinimumHeight(Ui.dp(context,44));
+          LinearLayout row=new LinearLayout(context);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(Ui.dp(context,14),0,Ui.dp(context,10),0);row.setMinimumHeight(Ui.dp(context,48));
           row.setBackground(Ui.ripple(context,selected?theme.accentSoft:Color.TRANSPARENT,0,theme.ink));
           TextView label=Ui.text(context,modelId,13,selected?theme.accent:theme.ink);label.setSingleLine(true);label.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);row.addView(label,new LinearLayout.LayoutParams(0,-2,1));
           row.setContentDescription((selected?"当前模型 ":"切换到 ")+providerId+"/"+modelId);row.setClickable(true);row.setFocusable(true);
@@ -63,9 +63,9 @@ final class ModelPicker {
       }
     }else{
       String current=runtime.currentModel.isEmpty()?"未连接模型":runtime.currentModel;
-      TextView empty=Ui.text(context,current,13,theme.muted);empty.setPadding(Ui.dp(context,14),0,Ui.dp(context,10),0);empty.setMinimumHeight(Ui.dp(context,46));list.addView(empty);
+      TextView empty=Ui.text(context,current,13,theme.muted);empty.setPadding(Ui.dp(context,14),0,Ui.dp(context,10),0);empty.setMinimumHeight(Ui.dp(context,48));list.addView(empty);
     }
-    LinearLayout manage=new LinearLayout(context);manage.setGravity(Gravity.CENTER_VERTICAL);manage.setPadding(Ui.dp(context,14),0,Ui.dp(context,10),0);manage.setMinimumHeight(Ui.dp(context,46));
+    LinearLayout manage=new LinearLayout(context);manage.setGravity(Gravity.CENTER_VERTICAL);manage.setPadding(Ui.dp(context,14),0,Ui.dp(context,10),0);manage.setMinimumHeight(Ui.dp(context,48));
     manage.setBackground(Ui.ripple(context,Color.TRANSPARENT,0,theme.ink));manage.setClickable(true);manage.setFocusable(true);
     manage.addView(Ui.text(context,"供应商与模型设置…",13,theme.muted),new LinearLayout.LayoutParams(0,-2,1));
     manage.setOnClickListener(v->{handle[0].dismiss();context.startActivity(new Intent(context,MainActivity.class).putExtra("open_models",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));});

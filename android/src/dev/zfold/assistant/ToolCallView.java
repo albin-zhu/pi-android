@@ -29,7 +29,8 @@ final class ToolCallView extends LinearLayout {
     status=Ui.text(context,"",11,theme.muted);header.addView(status);
     toggle=new Ui.Action(context,R.drawable.ic_caret_down,"","展开工具详情",theme.muted,Color.TRANSPARENT,this::toggle);
     header.addView(toggle,new LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
-    header.setOnClickListener(v->toggle());addView(header);
+    toggle.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);toggle.setFocusable(false);
+    header.setFocusable(true);header.setContentDescription("展开工具详情");header.setOnClickListener(v->toggle());addView(header);
     preview=new LinearLayout(context);preview.setOrientation(VERTICAL);preview.setPadding(Ui.dp(context,12),0,Ui.dp(context,12),Ui.dp(context,8));preview.setVisibility(GONE);addView(preview,new LayoutParams(-1,-2));
     rawToggle=Ui.text(context,"原始参数 / 结果 ▾",12,theme.accent);rawToggle.setMinHeight(Ui.dp(context,48));rawToggle.setGravity(Gravity.CENTER_VERTICAL);rawToggle.setPadding(Ui.dp(context,12),0,0,0);rawToggle.setVisibility(GONE);
     rawToggle.setOnClickListener(v->toggleRaw());
@@ -67,7 +68,7 @@ final class ToolCallView extends LinearLayout {
     JSONObject args=arguments();String path=args.optString("path");
     title.setText(label(name)+(path.isEmpty()?"":" · "+new java.io.File(path).getName()));
     if("running".equals(previousState)&&!"running".equals(state))MicroMotion.reveal(status);
-    status.setText(stateLabel);status.setTextColor(state.equals("error")?theme.error:state.equals("running")?theme.accent:theme.muted);
+    status.setText(stateLabel);status.setTextColor(state.equals("error")?theme.error:state.equals("running")||state.equals("blocked")||state.equals("unverified")?theme.accent:theme.muted);
     if(expanded)renderDetails();
     setContentDescription(label(name)+" · "+stateLabel);
   }
@@ -75,7 +76,7 @@ final class ToolCallView extends LinearLayout {
   private void block(String heading,String content,int color){
     TextView label=Ui.text(getContext(),heading,11,theme.muted);label.setPadding(0,Ui.dp(getContext(),8),0,Ui.dp(getContext(),4));preview.addView(label);
     android.widget.HorizontalScrollView scroll=new android.widget.HorizontalScrollView(getContext());
-    TextView code=Ui.text(getContext(),content.length()>6000?content.substring(0,6000)+"\n…预览截断，完整内容见原始日志":content,12,color);code.setTypeface(android.graphics.Typeface.MONOSPACE);code.setTextIsSelectable(true);code.setPadding(Ui.dp(getContext(),8),Ui.dp(getContext(),8),Ui.dp(getContext(),8),Ui.dp(getContext(),8));
+    TextView code=Ui.text(getContext(),content.length()>6000?content.substring(0,6000)+"\n…预览截断，完整内容见原始日志":content,12,color);code.setTypeface(android.graphics.Typeface.MONOSPACE);code.setTextIsSelectable(true);code.setMaxLines(12);code.setEllipsize(android.text.TextUtils.TruncateAt.END);code.setPadding(Ui.dp(getContext(),8),Ui.dp(getContext(),8),Ui.dp(getContext(),8),Ui.dp(getContext(),8));
     scroll.setBackground(Ui.shape(getContext(),theme.field,8,0));scroll.addView(code);preview.addView(scroll,new LayoutParams(-1,-2));
   }
   private String numbered(String text,String prefix){String[] lines=text.split("\n",-1);StringBuilder out=new StringBuilder();for(int i=0;i<Math.min(lines.length,60);i++)out.append(prefix).append(i+1).append("  ").append(lines[i]).append('\n');if(lines.length>60)out.append("…更多内容见原始日志");return out.toString();}

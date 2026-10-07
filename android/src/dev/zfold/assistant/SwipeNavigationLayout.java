@@ -103,12 +103,14 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
       case MotionEvent.ACTION_UP:
         drag(event.getX());
         tracker.computeCurrentVelocity(1000,Ui.dp(getContext(),3000));float speed=tracker.getXVelocity();
-        float destination=Math.abs(speed)>Ui.dp(getContext(),500)?(speed>0?1:0):(position+speed*.12f/picker.drawerWidth>.5f?1:0);
+        float projection=SpringMath.project(speed);
+        float destination=(position+projection/picker.drawerWidth)>.5f?1:0;
         settle(destination,speed/picker.drawerWidth);return true;
       case MotionEvent.ACTION_CANCEL:settle(initiallyOpen?1:0,0);return true;
       default:return true;
     }
   }
+  @Override protected void onDetachedFromWindow(){cancelSpring();if(tracker!=null){tracker.recycle();tracker=null;}super.onDetachedFromWindow();}
   private void drag(float x){float dx=x-downX,travel=dx-Math.signum(dx)*Math.min(slop,Math.abs(dx));position=Math.max(0,Math.min(1,startPosition+travel/picker.drawerWidth));paint();}
   private boolean inside(View view,float x,float y){if(view==null)return false;Rect rect=new Rect(0,0,view.getWidth(),view.getHeight());offsetDescendantRectToMyCoords(view,rect);return rect.contains((int)x,(int)y)||(x>=0&&x<Ui.dp(getContext(),24)&&y>=rect.top&&y<rect.bottom);}
   private boolean ownsHorizontal(View view,float x,float y){

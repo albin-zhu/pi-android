@@ -34,8 +34,7 @@ final class MicroMotion {
       double dt=last==0?1.0/60:Math.min(.032,(now-last)/1e9);last=now;
       double x=rotation?v.getRotation():v.getTranslationY();
       // Critically damped analytical integration, stable across display refresh rates.
-      double omega=22,offset=x-target,b=velocity+omega*offset,e=Math.exp(-omega*dt);
-      x=target+(offset+b*dt)*e;velocity=(velocity-omega*b*dt)*e;
+      double[] state=SpringMath.step(x,velocity,target,dt);x=state[0];velocity=state[1];
       if(Math.abs(x-target)<.02&&Math.abs(velocity)<.2){x=target;if(rotation)v.setRotation((float)x);else v.setTranslationY((float)x);cancel();return;}
       if(rotation)v.setRotation((float)x);else v.setTranslationY((float)x);
       Choreographer.getInstance().postFrameCallback(this);
