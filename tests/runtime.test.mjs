@@ -1,3 +1,4 @@
+import {stopRuntimeChild} from './runtime-cleanup.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -29,7 +30,7 @@ test('bundled Pi boots and completes an Android bridge round trip', {timeout:200
       },reject));
     });
     assert.equal(result.pi,'1.0.4');assert.equal(result.device.batteryPercent,72);
-  }finally{child.kill();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(child);await rm(root,{recursive:true,force:true});}
 });
 
 test('Pi loads the bundled phone skill before calling a native tool', {timeout:30000},async()=>{
@@ -68,7 +69,7 @@ test('Pi loads the bundled phone skill before calling a native tool', {timeout:3
       },reject));
     });
     assert.equal(requests,3);assert.ok(skillLoaded);assert.ok(toolCalled);assert.match(text,/72%/);
-  }finally{child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });
 
 test('ui_select reads, taps a unique target, and returns the new screen in one model tool call', {timeout:30000},async()=>{
@@ -109,7 +110,7 @@ test('ui_select reads, taps a unique target, and returns the new screen in one m
       },reject));
     });
     assert.equal(requests,2);assert.deepEqual(nativeCalls,['screen_read','ui_tap','screen_read']);assert.match(answer,/蓝牙设置/);
-  }finally{child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });
 
 test('stop cancels an in-flight native tool and prevents a follow-up model request', {timeout:20000},async()=>{
@@ -135,7 +136,7 @@ test('stop cancels an in-flight native tool and prevents a follow-up model reque
         if(event.type==='error')reject(new Error(event.message));
       },reject));
     });assert.ok(cancelled);assert.equal(requests,1);assert.deepEqual(toolStates,['running','cancelled']);
-  }finally{child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });
 
 test('Pi keeps a sent image in conversation history for the Android chat', {timeout:20000},async()=>{
@@ -162,7 +163,7 @@ test('Pi keeps a sent image in conversation history for the Android chat', {time
     });
     assert.equal(sawImage,true);assert.equal(history.findLast(item=>item.role==='user').hasImage,true);
     assert.equal(history.findLast(item=>item.role==='user').image,image);
-  }finally{child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });
 
 test('Pi creates, switches, and resumes separate local conversations', {timeout:30000},async()=>{
@@ -204,5 +205,5 @@ test('Pi creates, switches, and resumes separate local conversations', {timeout:
     const stopped=new Promise(resolve=>second.child.once('exit',resolve));second.child.kill();await stopped;
     third=boot();await third.next('ready');third.send({type:'configure',config});assert.equal((await third.next('configured')).sessionId,blankId);
     third.send({type:'history'});assert.deepEqual((await third.next('history')).items,[]);
-  }finally{first.child.kill();second?.child.kill();third?.child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(first.child);await stopRuntimeChild(second?.child);await stopRuntimeChild(third?.child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });

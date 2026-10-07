@@ -1,3 +1,4 @@
+import {stopRuntimeChild} from './runtime-cleanup.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -49,5 +50,5 @@ for(const detour of [false,true])test(detour?'real Pi aborts an unrelated-app de
     });
     assert.equal(requests,detour?2:3);assert.equal(halted,detour);
     assert.deepEqual(calls,detour?['screen_read','screen_capture']:['screen_read','screen_capture','ui_input','screen_capture']);
-  }finally{child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });

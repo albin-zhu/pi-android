@@ -1,3 +1,4 @@
+import {stopRuntimeChild} from './runtime-cleanup.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -67,7 +68,7 @@ test('local .pi skills persist, enter configured Pi resources, and delete safely
     await next('skills','reload');
     assert.equal(configured,3);
   }finally{
-    child.kill();server.closeAllConnections();server.close();
+    await stopRuntimeChild(child);server.closeAllConnections();server.close();
     // SIGTERM dispatch is not process exit: wait before removing writable state.
     await closed;
     await rm(root,{recursive:true,force:true});

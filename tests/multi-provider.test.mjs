@@ -1,3 +1,4 @@
+import {stopRuntimeChild} from './runtime-cleanup.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -53,7 +54,7 @@ test('runtime preserves multiple custom providers and switches without recreatin
     assert.equal(stored.providers.custom.models[0].id,'first-test');
     assert.equal(stored.providers.gateway.models[0].id,'second-test');
   }finally{
-    child.kill();server.closeAllConnections();server.close();
+    await stopRuntimeChild(child);server.closeAllConnections();server.close();
     // Wait for pending model/session writes before deleting the fixture directory.
     await closed;
     await rm(root,{recursive:true,force:true});

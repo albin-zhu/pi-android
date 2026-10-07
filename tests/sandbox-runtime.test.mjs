@@ -1,3 +1,4 @@
+import {stopRuntimeChild} from './runtime-cleanup.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -55,5 +56,5 @@ test('in-process runtime exposes Pi engine, tool directory, and package manager'
     assert.equal(status.binaryExecution.downloadedBinaries,false,status && JSON.stringify(status));
     assert.match(status.binaryExecution.dataRoot.classification,/data only|W\^X/);
     assert.match(answer,/sandbox ready/);
-  }finally{child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });

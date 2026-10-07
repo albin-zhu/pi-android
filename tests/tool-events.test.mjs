@@ -1,3 +1,4 @@
+import {stopRuntimeChild} from './runtime-cleanup.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -49,5 +50,5 @@ test('real Pi tool events and restart history retain success, failure, and argum
     runtime.send({type:'history'});const restored=(await runtime.next('history')).items;
     assert.deepEqual(restored,live);
     runtime.send({type:'new_session'});await runtime.next('session_changed');assert.deepEqual((await runtime.next('history')).items,[]);
-  }finally{runtime.child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(runtime.child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });
