@@ -46,12 +46,13 @@ final class SlashSuggest {
       row.setContentDescription("执行命令 "+item.invocation());
       row.setClickable(true);row.setFocusable(true);
       row.setOnClickListener(v->{
-        String[] parsed=new String[2];if(!SlashCommands.parse(input.getText().toString(),parsed))return;
-        SlashCommands.Command selected=command(parsed[0]);
-        if(selected!=null&&selected.wantsArgument&&parsed[1].isEmpty()){
-          input.setText(selected.invocation()+" ");input.setSelection(input.getText().length());return;
+        String[] parsed=new String[2];boolean exact=SlashCommands.parse(input.getText().toString(),parsed)&&item.name.equals(parsed[0]);
+        String argument=exact?parsed[1]:"";
+        if(item.wantsArgument&&argument.isEmpty()){
+          input.setText("/"+item.name+" ");input.setSelection(input.getText().length());return;
         }
-        if(target.run(parsed[0],parsed[1])){input.setText("");wrapper.setVisibility(LinearLayout.GONE);}
+        if(target.run(item.name,argument)){input.setText("");wrapper.setVisibility(LinearLayout.GONE);}
+
       });
       list.addView(row,new LinearLayout.LayoutParams(-1,-2));
     }

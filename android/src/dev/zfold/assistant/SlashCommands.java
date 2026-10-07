@@ -21,6 +21,7 @@ final class SlashCommands {
 
   static List<Command> catalog(){
     List<Command> items=new ArrayList<>();
+    items.add(new Command("goal","","目标面板","查看目标、步骤、证据与验收","会话",false));
     items.add(new Command("tools","","工具中心","查看 Skills、Agent 工具、MCP 和命令","界面",false));
     items.add(new Command("skills","","Skills","查看和管理工作区/全局 Skill","能力",false));
     items.add(new Command("mcp","","连接","添加、连接和管理 MCP 外部工具","能力",false));

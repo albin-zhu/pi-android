@@ -87,7 +87,6 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     boolean chrome=label.equals("会话")||label.equals("模型")||label.equals("手机能力");
     return new Ui.Action(this,icon,visible,label.equals("↑")?"发送":label,filled?theme.onAccent:chrome?theme.muted:theme.ink,filled?theme.accent:chrome?Color.TRANSPARENT:theme.surface,action);
   }
-  private Ui.Action goalAction;
   private LinearLayout pendingRows;
   private Ui.Action steerAction,stopAction;
   private String pendingSignature="";
@@ -128,7 +127,6 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   void buildUI(){
     root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(theme.page);root.setPadding(dp(12),0,dp(12),dp(10));
     root.setOnApplyWindowInsetsListener((view,insets)->{windowBars=insets.getInsets(WindowInsets.Type.systemBars());windowIme=insets.getInsets(WindowInsets.Type.ime());applyWindowPadding();return insets;});
-    goalAction=new Ui.Action(this,R.drawable.ic_file,GoalPanel.summary(runtime.goalState),"目标与任务面板",theme.accent,Color.TRANSPARENT,()->GoalPanel.show(this,runtime));goalAction.label.setMaxLines(1);goalAction.label.setEllipsize(android.text.TextUtils.TruncateAt.END);root.addView(goalAction,new LinearLayout.LayoutParams(-1,dp(44)));
     scroll=new ConversationMinimap.Scroll(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.setClipToPadding(false);
     conversation=new LinearLayout(this);conversation.setOrientation(LinearLayout.VERTICAL);conversation.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(conversation);FrameLayout viewport=new FrameLayout(this);viewport.setMotionEventSplittingEnabled(false);viewport.addView(scroll,new FrameLayout.LayoutParams(-1,-1));minimap=new ConversationMinimap(this,scroll,conversation);viewport.addView(minimap,new FrameLayout.LayoutParams(dp(48),-1,Gravity.RIGHT));root.addView(viewport,new LinearLayout.LayoutParams(-1,0,1));
     intro=new LinearLayout(this);intro.setOrientation(LinearLayout.VERTICAL);intro.setGravity(Gravity.CENTER);intro.setPadding(dp(12),dp(34),dp(12),dp(30));
@@ -223,6 +221,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   void syncMinimapSuppression(){if(minimap!=null)minimap.suppress(textSelection!=null||swipeNavigation!=null&&swipeNavigation.hasDrawer());}
   boolean runSlashCommand(String name,String argument){
     switch(name){
+      case "goal":GoalPanel.show(this,runtime);return true;
       case "tools":showToolCenter(sessionButton);return true;
       case "skills":showToolCenter(sessionButton,1);return true;
       case "mcp":ConnectorActivity.open(this);return true;
@@ -333,7 +332,9 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     }).setNegativeButton("关闭",null).show();
   }
   void sendText(String value){
-    String text=value.trim();if(text.isEmpty()&&pendingImage==null&&localFiles.isEmpty())return;
+    String text=value.trim();
+    if(text.equalsIgnoreCase("/goal")){runSlashCommand("goal","");input.setText("");return;}
+    if(text.isEmpty()&&pendingImage==null&&localFiles.isEmpty())return;
     SystemAssistEntry.cancel();
     if(!runtime.configured){settings();return;}
     if(PromptDispatcher.isStop(text)){stop();return;}
@@ -407,7 +408,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       case "ready":showStatus(idleStatus());updateModelChip();break;
       case "configured":showStatus(idleStatus());updateModelChip();break;
       case "agent_identity":runtime.send(PiRuntime.json("type","history"));break;
-      case "goal_state":goalAction.setText(GoalPanel.summary(runtime.goalState));break;
+      case "goal_state":break;
       case "goal_error":notice(event.optString("message"));break;
       case "steer_result":
         if(event.optBoolean("accepted")){
@@ -418,7 +419,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
         break;
       case "jev_status":break;
       case "jev_error":notice(event.optString("message"));break;
-      case "session_changed":goalAction.setText(GoalPanel.summary(null));followVersion++;displayedSessionId=event.optString("sessionId",runtime.sessionId);minimap.reset();conversation.removeAllViews();toolViews.clear();toolGroups.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
+      case "session_changed":followVersion++;displayedSessionId=event.optString("sessionId",runtime.sessionId);minimap.reset();conversation.removeAllViews();toolViews.clear();toolGroups.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
       case "history":showHistory(event);showStatus(runtime.busy?"正在处理…":idleStatus());break;
       case "turn_start":{
         displayedSessionId=runtime.sessionId;
@@ -754,8 +755,9 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){VoiceWakeService.discard(id);showStatus("麦克风权限不可用，语音尚未接通");return;}
     VoiceCallActivity.show(this);VoiceCoordinator.get(this).requestWake(id);
   }
-  @Override protected void onResume(){super.onResume();acceptLegacyDraft();acceptImage();acceptWakeEntry();if(getIntent().getBooleanExtra("open_voice",false)){getIntent().removeExtra("open_voice");root.post(this::toggleVoice);}}
-  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);root.post(this::acceptWakeEntry);returnWorkbench=intent.getBooleanExtra("return_workbench",false);acceptImage();if(intent.getBooleanExtra("open_tools",false)){intent.removeExtra("open_tools");sessionButton.post(()->showToolCenter(sessionButton));}if(intent.getBooleanExtra("open_models",false)){intent.removeExtra("open_models");settings();}if(intent.getBooleanExtra("open_capabilities",false)){intent.removeExtra("open_capabilities");permissions();}if(intent.getBooleanExtra("open_speech",false)){intent.removeExtra("open_speech");speechCapabilities();}if(intent.getBooleanExtra("open_sessions",false)){intent.removeExtra("open_sessions");sessionButton.post(this::openSidebar);}if(intent.getBooleanExtra("open_provider_auth",false)){intent.removeExtra("open_provider_auth");sessionButton.post(()->ProviderAuthDialog.show(sessionButton,runtime));}if(intent.getBooleanExtra("open_runtime_packs",false)){intent.removeExtra("open_runtime_packs");runtimePacksSettings();}}
+  private void acceptGoalEntry(){if(getIntent().getBooleanExtra("open_goal",false)){getIntent().removeExtra("open_goal");root.post(()->GoalPanel.show(this,runtime));}}
+  @Override protected void onResume(){super.onResume();acceptGoalEntry();acceptLegacyDraft();acceptImage();acceptWakeEntry();if(getIntent().getBooleanExtra("open_voice",false)){getIntent().removeExtra("open_voice");root.post(this::toggleVoice);}}
+  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);acceptGoalEntry();root.post(this::acceptWakeEntry);returnWorkbench=intent.getBooleanExtra("return_workbench",false);acceptImage();if(intent.getBooleanExtra("open_tools",false)){intent.removeExtra("open_tools");sessionButton.post(()->showToolCenter(sessionButton));}if(intent.getBooleanExtra("open_models",false)){intent.removeExtra("open_models");settings();}if(intent.getBooleanExtra("open_capabilities",false)){intent.removeExtra("open_capabilities");permissions();}if(intent.getBooleanExtra("open_speech",false)){intent.removeExtra("open_speech");speechCapabilities();}if(intent.getBooleanExtra("open_sessions",false)){intent.removeExtra("open_sessions");sessionButton.post(this::openSidebar);}if(intent.getBooleanExtra("open_provider_auth",false)){intent.removeExtra("open_provider_auth");sessionButton.post(()->ProviderAuthDialog.show(sessionButton,runtime));}if(intent.getBooleanExtra("open_runtime_packs",false)){intent.removeExtra("open_runtime_packs");runtimePacksSettings();}}
   @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==21&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)toggleVoice();if(request==22)toggleWake();}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);super.onPause();if(voice.sessionActive()&&!VoiceCallActivity.isActive()){VoiceWakeService.resume(this);}}
   @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);if(new Ui.Theme(this).dark!=theme.dark){recreate();return;}root.post(this::adjustColumn);SystemWindowNavigation.remember(this);}
