@@ -171,7 +171,7 @@ async function selectedSessionManager(){
 async function activateSession(manager){
   sessionCatalog.persist(manager);
   const result=await createAgentSession({cwd:workspace,agentDir,resourceLoader,modelRuntime,model:activeModel,
-    sessionManager:manager,settingsManager:SettingsManager.inMemory({}),customTools:tools.map(tool=>questionGate.wrap(tool)),
+    sessionManager:manager,settingsManager:SettingsManager.inMemory({images:{autoResize:false},cacheWarming:"off"}),customTools:tools.map(tool=>questionGate.wrap(tool)),
     tools:['read','edit','write','ls','bash','goal_plan',...tools.map(t=>t.name)]});
   try{saveActiveSession(result.session.sessionId);}catch(error){result.session.dispose();throw error;}
   const previous=session;session=result.session;
@@ -841,7 +841,7 @@ async function receive(command) {
   }
   if(command.type==='probe') {
     const info=await android('device_info',{},undefined);
-    emit({type:'probe',node:process.version,pi:'0.85.1',platform:process.platform,arch:process.arch,device:info}); return;
+    emit({type:'probe',node:process.version,pi:'1.0.4',platform:process.platform,arch:process.arch,device:info}); return;
   }
   if(command.type==='prompt') {
     if(command.newSession)await switchSession({type:'new_session'});
@@ -872,7 +872,7 @@ const input=fs.createReadStream(null,{fd:inputFd,autoClose:false});
 input.on('data',chunk=>consume(decode.write(chunk)));
 input.on('error',error=>emit({type:'error',message:error.message}));
 process.on('unhandledRejection',error=>emit({type:'error',message:String(error)}));
-emit({type:'ready',node:process.version,pi:'0.85.1',platform:process.platform,arch:process.arch,execPath:process.execPath,argv:process.argv});
+emit({type:'ready',node:process.version,pi:'1.0.4',platform:process.platform,arch:process.arch,execPath:process.execPath,argv:process.argv});
 emit({type:'default_config',config:defaultModelConfig,models:defaultModelOptions});
 emit({type:'agent_identity',name:agentIdentity.name,avatar:agentAvatar(),prompt:agentIdentity.prompt,customPrompt:agentIdentity.customPrompt,defaultPrompt:defaultAgentPrompt('{{AGENT_NAME}}')});
 emitJevStatus();

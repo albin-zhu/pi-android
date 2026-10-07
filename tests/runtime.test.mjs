@@ -28,7 +28,7 @@ test('bundled Pi boots and completes an Android bridge round trip', {timeout:200
         if(event.type==='error')reject(new Error(event.message));
       },reject));
     });
-    assert.equal(result.pi,'0.85.1');assert.equal(result.device.batteryPercent,72);
+    assert.equal(result.pi,'1.0.4');assert.equal(result.device.batteryPercent,72);
   }finally{child.kill();await rm(root,{recursive:true,force:true});}
 });
 
