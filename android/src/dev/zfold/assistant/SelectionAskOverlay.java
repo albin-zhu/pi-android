@@ -43,23 +43,24 @@ final class SelectionAskOverlay {
       Toast.makeText(app,"需要悬浮窗或读屏服务才能在当前屏幕提问",Toast.LENGTH_LONG).show();
       return;
     }
+    Ui.Theme theme=new Ui.Theme(app);
     Context host=service!=null?service:app;
     WindowManager wm=(WindowManager)host.getSystemService(Context.WINDOW_SERVICE);
     LinearLayout body=new LinearLayout(new android.view.ContextThemeWrapper(host,R.style.AppTheme));
     body.setOrientation(LinearLayout.VERTICAL);
-    body.setBackground(Ui.shape(app,0xf2141820,18,Ui.dp(app,1),0xff2a3544));
+    body.setBackground(Ui.shape(app,theme.surface,22,theme.line));
     body.setPadding(Ui.dp(app,10),Ui.dp(app,10),Ui.dp(app,10),Ui.dp(app,8));
-    body.setElevation(Ui.dp(app,12));
+    body.setElevation(Ui.dp(app,6));
 
     LinearLayout head=new LinearLayout(app);head.setOrientation(LinearLayout.HORIZONTAL);head.setGravity(Gravity.CENTER_VERTICAL);
     head.addView(Ui.agentMark(app,PiRuntime.get(app).agentAvatar,22),new LinearLayout.LayoutParams(Ui.dp(app,22),Ui.dp(app,22)));
-    TextView title=Ui.text(app,"问橙橙",13,0xffedf4ff);title.setPadding(Ui.dp(app,8),0,0,0);
+    TextView title=Ui.text(app,"问橙橙",13,theme.ink);title.setPadding(Ui.dp(app,8),0,0,0);
     head.addView(title,new LinearLayout.LayoutParams(0,-2,1f));
     head.addView(new Ui.Action(app,R.drawable.ic_x,"","关闭",0xffe8eff8,Color.TRANSPARENT,SelectionAskOverlay::hide),new LinearLayout.LayoutParams(Ui.dp(app,40),Ui.dp(app,40)));
     body.addView(head);
 
     if(selectedText!=null&&!selectedText.isBlank()){
-      TextView snippet=Ui.text(app,selectedText.length()>180?selectedText.substring(0,180)+"…":selectedText,12,0xffc5d4e4);
+      TextView snippet=Ui.text(app,selectedText.length()>180?selectedText.substring(0,180)+"…":selectedText,12,theme.muted);
       snippet.setPadding(0,Ui.dp(app,4),0,Ui.dp(app,6));
       body.addView(snippet);
     }
@@ -68,7 +69,7 @@ final class SelectionAskOverlay {
       Bitmap preview=BitmapFactory.decodeByteArray(raw,0,raw.length);
       if(preview!=null){
         ImageView thumb=new ImageView(app);thumb.setImageBitmap(preview);thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        thumb.setBackground(Ui.shape(app,0xff0b1016,10,0,0));
+        thumb.setBackground(Ui.shape(app,theme.field,10,0));
         LinearLayout.LayoutParams imageParams=new LinearLayout.LayoutParams(-1,Ui.dp(app,72));imageParams.bottomMargin=Ui.dp(app,6);
         body.addView(thumb,imageParams);
       }
@@ -76,27 +77,27 @@ final class SelectionAskOverlay {
 
     EditText input=new EditText(app);
     input.setHint(image!=null?"想问圈选内容什么？":"想问这段文字什么？");
-    input.setTextSize(14);input.setTextColor(0xffedf4ff);input.setHintTextColor(0xff7d8ea3);
-    input.setBackground(Ui.shape(app,0xff0b1016,12,Ui.dp(app,1),0xff2a3544));
+    input.setTextSize(14);input.setTextColor(theme.ink);input.setHintTextColor(theme.muted);
+    input.setBackground(Ui.shape(app,theme.field,12,0));
     input.setPadding(Ui.dp(app,10),Ui.dp(app,8),Ui.dp(app,10),Ui.dp(app,8));
     input.setMinHeight(Ui.dp(app,40));
     input.setImeOptions(EditorInfo.IME_ACTION_SEND);input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);
     body.addView(input,new LinearLayout.LayoutParams(-1,-2));
-    status=Ui.text(app,"",11,0xffa8bed4);status.setPadding(0,Ui.dp(app,4),0,0);status.setVisibility(android.view.View.GONE);body.addView(status);
+    status=Ui.text(app,"",11,theme.muted);status.setPadding(0,Ui.dp(app,4),0,0);status.setVisibility(android.view.View.GONE);body.addView(status);
     ScrollView scroller=new ScrollView(app);scroller.setFillViewport(false);
-    reply=Ui.text(app,"",13,0xffedf4ff);reply.setPadding(0,Ui.dp(app,4),0,0);
+    reply=Ui.text(app,"",13,theme.ink);reply.setPadding(0,Ui.dp(app,4),0,0);
     scroller.addView(reply,new android.widget.FrameLayout.LayoutParams(-1,-2));
     LinearLayout.LayoutParams scrollParams=new LinearLayout.LayoutParams(-1,Ui.dp(app,180));scrollParams.topMargin=Ui.dp(app,4);scroller.setVisibility(android.view.View.GONE);body.addView(scroller,scrollParams);
 
     LinearLayout actions=new LinearLayout(app);actions.setGravity(Gravity.CENTER_VERTICAL);
     actions.setPadding(0,Ui.dp(app,4),0,0);
     boolean[] fresh={false};
-    TextView neu=Ui.text(app,"新会话",12,0xff8aa0b5);
+    TextView neu=Ui.text(app,"新会话",12,theme.muted);
     neu.setPadding(Ui.dp(app,4),Ui.dp(app,8),Ui.dp(app,8),Ui.dp(app,8));
     neu.setContentDescription("发送到新会话");
-    neu.setOnClickListener(v->{fresh[0]=!fresh[0];neu.setText(fresh[0]?"新会话 · 开":"新会话");neu.setTextColor(fresh[0]?0xff93c5fd:0xff8aa0b5);});
+    neu.setOnClickListener(v->{fresh[0]=!fresh[0];neu.setText(fresh[0]?"新会话 · 开":"新会话");neu.setTextColor(fresh[0]?theme.accent:theme.muted);});
     actions.addView(neu,new LinearLayout.LayoutParams(0,-2,1f));
-    Ui.Action send=new Ui.Action(app,R.drawable.ic_arrow_up,"发送","发送提问",0xffedf4ff,0xff2563eb,()->submit(app,input.getText().toString(),image,selectedText,fresh[0]));
+    Ui.Action send=new Ui.Action(app,R.drawable.ic_arrow_up,"发送","发送提问",theme.onAccent,theme.accent,()->submit(app,input.getText().toString(),image,selectedText,fresh[0]));
     actions.addView(send,new LinearLayout.LayoutParams(Ui.dp(app,88),Ui.dp(app,40)));
     body.addView(actions);
     input.setOnEditorActionListener((v,actionId,event)->{if(actionId==EditorInfo.IME_ACTION_SEND){submit(app,input.getText().toString(),image,selectedText,fresh[0]);return true;}return false;});

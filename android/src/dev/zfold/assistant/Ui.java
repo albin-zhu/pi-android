@@ -17,9 +17,9 @@ final class Ui {
     final boolean dark;
     final int page,surface,card,field,ink,muted,line,accent,accentSoft,onAccent,error,success;
     Theme(Context c){dark=(c.getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
-      page=dark?0xff0b0f14:0xfff5f6f7;surface=dark?0xff121821:0xffffffff;card=dark?0xff161d26:0xffffffff;field=dark?0xff1d2530:0xffeef1f4;
-      ink=dark?0xffe8edf4:0xff101418;muted=dark?0xff93a0af:0xff5f6b78;line=dark?0xff2a333f:0xffe2e6ea;
-      accent=dark?0xff65a2ff:0xff2f6fed;accentSoft=dark?0xff1b2a40:0xffe8f0ff;onAccent=dark?0xfff2f7ff:0xffffffff;
+      page=dark?0xff101012:0xfff6f5f3;surface=dark?0xff1c1c1e:0xffffffff;card=dark?0xff242426:0xffffffff;field=dark?0xff2c2c2e:0xffeeedeb;
+      ink=dark?0xfff2f2f7:0xff1c1c1e;muted=dark?0xffaeaeb2:0xff636366;line=dark?0xff38383a:0xffdeddda;
+      accent=dark?0xffffa45c:0xffac4c12;accentSoft=dark?0xff38271d:0xffffeee2;onAccent=dark?0xff1c1c1e:0xffffffff;
       error=dark?0xffff9696:0xffd0342c;success=dark?0xff77c79a:0xff1e7c4f;
     }
   }

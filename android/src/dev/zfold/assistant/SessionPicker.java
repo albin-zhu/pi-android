@@ -142,7 +142,7 @@ final class SessionPicker implements PiRuntime.Listener {
       if(!section.equals(lastSection)){TextView heading=Ui.text(context,section,12,theme.muted);heading.setTypeface(Typeface.create("sans-serif-medium",0));heading.setPadding(Ui.dp(context,10),Ui.dp(context,16),0,Ui.dp(context,6));list.addView(heading);lastSection=section;}
       String id=item.optString("id"),name=item.optString("title","新对话");boolean current=item.optBoolean("current");
       LinearLayout row=new LinearLayout(context);row.setGravity(Gravity.CENTER_VERTICAL);row.setPadding(Ui.dp(context,12),Ui.dp(context,8),0,Ui.dp(context,8));row.setMinimumHeight(Ui.dp(context,66));
-      row.setBackground(Ui.ripple(context,selected.contains(id)||current?theme.accentSoft:theme.surface,10,theme.ink));
+      row.setBackground(Ui.ripple(context,selected.contains(id)||current?theme.accentSoft:Color.TRANSPARENT,14,theme.ink));
       LinearLayout labels=new LinearLayout(context);labels.setOrientation(LinearLayout.VERTICAL);row.addView(labels,new LinearLayout.LayoutParams(0,-2,1));
       TextView title=Ui.text(context,(selecting?(selected.contains(id)?"✓ ":"○ "):current&&runtime.busy?"● ":"")+name,15,current?theme.accent:theme.ink);title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);title.setTypeface(Typeface.create("sans-serif-medium",0));labels.addView(title);
       String preview=item.optString("preview");
@@ -153,7 +153,7 @@ final class SessionPicker implements PiRuntime.Listener {
       row.setOnClickListener(v->{if(waiting)return;if(selecting){if(selected.contains(id))selected.remove(id);else selected.add(id);int y=sessionScroll.getScrollY();render(records);sessionScroll.post(()->sessionScroll.scrollTo(0,y));return;}if(filter!=0){manage(item);return;}if(current){dismiss();return;}waiting=true;runtime.send(PiRuntime.json("type","open_session","id",id));});
       row.setOnLongClickListener(v->{manage(item);return true;});
       row.addView(new Ui.Action(context,R.drawable.ic_dots_three,"","管理会话："+name,theme.muted,Color.TRANSPARENT,()->manage(item)),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
-      LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2);rowParams.bottomMargin=Ui.dp(context,3);list.addView(row,rowParams);
+      LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2);rowParams.bottomMargin=Ui.dp(context,6);list.addView(row,rowParams);
     }
     if(list.getChildCount()==0)message(!query.isEmpty()?"没有匹配的会话":filter==0?"还没有保存的对话":filter==1?"没有已归档的会话":"最近删除为空");
   }
