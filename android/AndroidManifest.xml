@@ -26,13 +26,18 @@
    <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
   </activity>
   <activity android:name=".CircleEntryActivity" android:exported="true" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" android:taskAffinity="" android:noHistory="true" />
-  <activity android:name=".ProcessTextActivity" android:exported="true" android:label="@string/ask_chengcheng" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" android:taskAffinity="" android:noHistory="true">
-   <intent-filter>
+  <activity android:name=".ProcessTextActivity" android:exported="true" android:label="@string/ask_chengcheng" android:icon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:excludeFromRecents="true" android:taskAffinity="" android:documentLaunchMode="always" android:finishOnTaskLaunch="true">
+   <intent-filter android:label="@string/ask_chengcheng">
     <action android:name="android.intent.action.PROCESS_TEXT"/>
     <category android:name="android.intent.category.DEFAULT"/>
     <data android:mimeType="text/plain"/>
    </intent-filter>
-   <intent-filter>
+   <intent-filter android:label="@string/ask_chengcheng">
+    <action android:name="android.intent.action.PROCESS_TEXT"/>
+    <category android:name="android.intent.category.DEFAULT"/>
+    <data android:mimeType="text/*"/>
+   </intent-filter>
+   <intent-filter android:label="@string/ask_chengcheng">
     <action android:name="android.intent.action.SEND"/>
     <category android:name="android.intent.category.DEFAULT"/>
     <data android:mimeType="image/*"/>

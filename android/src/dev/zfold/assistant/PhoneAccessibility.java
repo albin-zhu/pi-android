@@ -25,9 +25,27 @@ public final class PhoneAccessibility extends AccessibilityService {
   };}
   @Override public void onDestroy(){instance=null;WorkbenchActivity.capabilitiesChanged();if(focusedInput!=null)focusedInput.close();AssistantOverlay.accessibilityDisconnected(getApplicationContext());CircleOverlay.accessibilityDisconnected(getApplicationContext());clearNodes();super.onDestroy();}
   @Override public void onInterrupt(){}
+  public void onAccessibilityShortcut(){CircleOverlay.beginOnCurrentScreen(this);}
+  public void onAccessibilityButtonClicked(){CircleOverlay.beginOnCurrentScreen(this);}
+  public void onAccessibilityButtonClicked(android.view.Display display){CircleOverlay.beginOnCurrentScreen(this);}
   @Override public void onAccessibilityEvent(AccessibilityEvent event){
     if(event.getEventType()==AccessibilityEvent.TYPE_TOUCH_INTERACTION_START&&SystemClock.elapsedRealtime()>=injectedUntil&&PiRuntime.phoneBusy())
       PiRuntime.takeoverPhone(this);
+    if(event.getEventType()==AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED)offerSelection(event);
+  }
+  private void offerSelection(AccessibilityEvent event){
+    CharSequence pkg=event.getPackageName();
+    if(pkg!=null&&getPackageName().equals(pkg.toString()))return;
+    AccessibilityNodeInfo source=event.getSource();
+    String text="";
+    if(event.getText()!=null)for(CharSequence part:event.getText())if(part!=null)text+=part;
+    if(text.isBlank()&&source!=null){CharSequence node=source.getText();if(node!=null)text=node.toString();}
+    android.graphics.Rect bounds=new android.graphics.Rect();
+    if(source!=null)source.getBoundsInScreen(bounds);
+    if(source!=null)source.recycle();
+    int start=event.getFromIndex(),end=event.getToIndex();
+    if(end>start&&start>=0&&end<=text.length())text=text.substring(start,end);
+    SelectionHintOverlay.offer(this,text,bounds);
   }
   private void clearNodes(){for(AccessibilityNodeInfo node:nodes.values())node.recycle();nodes.clear();identities.clear();observedWindow=-1;observedPackage="";observedAt=0;generation++;}
   void execute(String name,JSONObject args,AndroidTools.Result result)throws Exception {
