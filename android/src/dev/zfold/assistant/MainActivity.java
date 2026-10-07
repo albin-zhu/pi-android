@@ -566,18 +566,16 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     }));dialog.show();
   }
   void circleAskSettings(){
-    boolean assist=CircleAskPrefs.assistInvokesCircle(this),hint=CircleAskPrefs.selectionHint(this);
+    boolean assist=CircleAskPrefs.assistInvokesCircle(this);
     String[] items={
       (assist?"已开":"已关")+" · 默认助手唤起时圈选",
-      (hint?"已开":"已关")+" · 选中文字旁显示「问」",
       "设置无障碍快捷键（音量键）",
       "设置默认数字助手"
     };
     new AlertDialog.Builder(this).setTitle("圈选提问").setItems(items,(d,i)->{
       if(i==0){CircleAskPrefs.setAssistInvokesCircle(this,!assist);notice(assist?"助手唤起改回打开聊天":"助手唤起将直接圈选");return;}
-      if(i==1){CircleAskPrefs.setSelectionHint(this,!hint);notice(hint?"已关闭选字提示":"选中文字时会在旁边显示问");return;}
-      if(i==2)try{startActivity(new Intent("android.settings.ACCESSIBILITY_SHORTCUT_SETTINGS"));}catch(Exception e){startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));}
-      if(i==3)startActivity(new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS));
+      if(i==1)try{startActivity(new Intent("android.settings.ACCESSIBILITY_SHORTCUT_SETTINGS"));}catch(Exception e){startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));}
+      if(i==2)startActivity(new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS));
     }).setNegativeButton("关闭",null).show();
   }
   void permissions(){

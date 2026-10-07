@@ -9,6 +9,6 @@ final class CircleAskPrefs {
   }
   static boolean assistInvokesCircle(Context context){return prefs(context).getBoolean("assist_circle",true);}
   static void setAssistInvokesCircle(Context context,boolean value){prefs(context).edit().putBoolean("assist_circle",value).apply();}
-  static boolean selectionHint(Context context){return prefs(context).getBoolean("selection_hint",true);}
-  static void setSelectionHint(Context context,boolean value){prefs(context).edit().putBoolean("selection_hint",value).apply();}
+  static boolean selectionHint(Context context){return false;}
+  static void setSelectionHint(Context context,boolean value){prefs(context).edit().putBoolean("selection_hint",false).apply();}
 }
