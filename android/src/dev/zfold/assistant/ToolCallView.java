@@ -13,13 +13,16 @@ final class ToolCallView extends LinearLayout {
   final Ui.Theme theme;
   final TextView title, status, details;
   final Ui.Action toggle;
+  final LinearLayout preview;
+  final TextView rawToggle;
+  boolean rawExpanded;
   JSONObject record;
   boolean expanded;
   Runnable beforeDisclosure=()->{};
 
   ToolCallView(Context context, JSONObject data) {
     super(context);theme=new Ui.Theme(context);setOrientation(VERTICAL);
-    setBackground(Ui.shape(context,theme.field,12,theme.line));
+    setBackground(Ui.shape(context,theme.surface,12,theme.line));
     LinearLayout header=new LinearLayout(context);header.setGravity(Gravity.CENTER_VERTICAL);
     header.setPadding(Ui.dp(context,12),0,0,0);header.setMinimumHeight(Ui.dp(context,48));
     title=Ui.text(context,"",13,theme.ink);title.setMaxLines(2);title.setEllipsize(android.text.TextUtils.TruncateAt.END);header.addView(title,new LayoutParams(0,-2,1));
@@ -27,12 +30,17 @@ final class ToolCallView extends LinearLayout {
     toggle=new Ui.Action(context,R.drawable.ic_caret_down,"","展开工具详情",theme.muted,Color.TRANSPARENT,this::toggle);
     header.addView(toggle,new LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     header.setOnClickListener(v->toggle());addView(header);
+    preview=new LinearLayout(context);preview.setOrientation(VERTICAL);preview.setPadding(Ui.dp(context,12),0,Ui.dp(context,12),Ui.dp(context,8));preview.setVisibility(GONE);addView(preview,new LayoutParams(-1,-2));
+    rawToggle=Ui.text(context,"原始参数 / 结果 ▾",12,theme.accent);rawToggle.setMinHeight(Ui.dp(context,48));rawToggle.setGravity(Gravity.CENTER_VERTICAL);rawToggle.setPadding(Ui.dp(context,12),0,0,0);rawToggle.setVisibility(GONE);
+    rawToggle.setOnClickListener(v->toggleRaw());
+    addView(rawToggle,new LayoutParams(-1,-2));
     details=Ui.text(context,"",12,theme.muted);details.setTextIsSelectable(true);
     details.setPadding(Ui.dp(context,12),0,Ui.dp(context,12),Ui.dp(context,12));
     details.setVisibility(GONE);addView(details,new LayoutParams(-1,-2));update(data);
   }
   void toggle(){if(record!=null&&UserQuestions.matchesTool(record.optString("id"))){UserQuestions.show(getContext());return;}beforeDisclosure.run();setExpanded(!expanded);}
-  void setExpanded(boolean value){expanded=value;if(value)renderDetails();details.setVisibility(expanded?VISIBLE:GONE);toggle.setRotation(expanded?180:0);toggle.setContentDescription((expanded?"收起":"展开")+title.getText()+"详情");}
+  void toggleRaw(){beforeDisclosure.run();rawExpanded=!rawExpanded;details.setVisibility(rawExpanded?VISIBLE:GONE);rawToggle.setText(rawExpanded?"收起原始日志 ▴":"原始参数 / 结果 ▾");}
+  void setExpanded(boolean value){expanded=value;if(value)renderDetails();preview.setVisibility(value?VISIBLE:GONE);rawToggle.setVisibility(value?VISIBLE:GONE);details.setVisibility(value&&rawExpanded?VISIBLE:GONE);MicroMotion.rotate(toggle,value?180:0);if(value)MicroMotion.reveal(preview);toggle.setContentDescription((expanded?"收起":"展开")+title.getText()+"详情");}
   void finishPending(boolean cancelled){if("running".equals(record.optString("status")))update(PiRuntime.json("status",cancelled?"cancelled":"interrupted"));}
   static String label(String name){
     switch(name){
@@ -52,12 +60,48 @@ final class ToolCallView extends LinearLayout {
   void update(JSONObject data){
     if(record!=null&&!"running".equals(record.optString("status"))&&"running".equals(data.optString("status")))return;
     JSONObject merged=new JSONObject();try{if(record!=null)for(java.util.Iterator<String> keys=record.keys();keys.hasNext();){String key=keys.next();merged.put(key,record.get(key));}for(java.util.Iterator<String> keys=data.keys();keys.hasNext();){String key=keys.next();merged.put(key,data.get(key));}}catch(Exception ignored){}
+    String previousState=record==null?"":record.optString("status");
     record=merged;String state=record.optString("status"),name=record.optString("name");
     String stateLabel=state.equals("running")?"执行中":state.equals("error")?"失败":state.equals("blocked")?"需重新判断":state.equals("unverified")?"待验证":state.equals("cancelled")?"已停止":state.equals("interrupted")?"已中断":state.equals("not_performed")?"未执行":"已返回";
     if(name.equals("ask_user_question")&&state.equals("running"))stateLabel="等你回答";
-    title.setText(label(name));status.setText(stateLabel);status.setTextColor(state.equals("error")?theme.error:state.equals("running")?theme.accent:theme.muted);
+    JSONObject args=arguments();String path=args.optString("path");
+    title.setText(label(name)+(path.isEmpty()?"":" · "+new java.io.File(path).getName()));
+    if("running".equals(previousState)&&!"running".equals(state))MicroMotion.reveal(status);
+    status.setText(stateLabel);status.setTextColor(state.equals("error")?theme.error:state.equals("running")?theme.accent:theme.muted);
     if(expanded)renderDetails();
     setContentDescription(label(name)+" · "+stateLabel);
   }
-  private void renderDetails(){String name=record.optString("name"),output=record.optString("output");details.setText(name+"\n\n参数\n"+pretty(record.optString("args","{}"))+"\n\n结果\n"+(output.isEmpty()?(record.optString("status").equals("running")?"等待工具返回…":"没有返回内容"):pretty(output)));}
+  private JSONObject arguments(){try{return new JSONObject(record.optString("args","{}"));}catch(Exception ignored){return new JSONObject();}}
+  private void block(String heading,String content,int color){
+    TextView label=Ui.text(getContext(),heading,11,theme.muted);label.setPadding(0,Ui.dp(getContext(),8),0,Ui.dp(getContext(),4));preview.addView(label);
+    android.widget.HorizontalScrollView scroll=new android.widget.HorizontalScrollView(getContext());
+    TextView code=Ui.text(getContext(),content.length()>6000?content.substring(0,6000)+"\n…预览截断，完整内容见原始日志":content,12,color);code.setTypeface(android.graphics.Typeface.MONOSPACE);code.setTextIsSelectable(true);code.setPadding(Ui.dp(getContext(),8),Ui.dp(getContext(),8),Ui.dp(getContext(),8),Ui.dp(getContext(),8));
+    scroll.setBackground(Ui.shape(getContext(),theme.field,8,0));scroll.addView(code);preview.addView(scroll,new LayoutParams(-1,-2));
+  }
+  private String numbered(String text,String prefix){String[] lines=text.split("\n",-1);StringBuilder out=new StringBuilder();for(int i=0;i<Math.min(lines.length,60);i++)out.append(prefix).append(i+1).append("  ").append(lines[i]).append('\n');if(lines.length>60)out.append("…更多内容见原始日志");return out.toString();}
+  private void renderDetails(){
+    String name=record.optString("name"),output=record.optString("output"),state=record.optString("status");JSONObject args=arguments();preview.removeAllViews();
+    String path=args.optString("path");
+    if(!path.isEmpty()){
+      TextView file=Ui.text(getContext(),path+"  ↗",12,theme.accent);file.setMinHeight(Ui.dp(getContext(),48));file.setGravity(Gravity.CENTER_VERTICAL);preview.addView(file);
+      file.setOnClickListener(v->{try{
+        java.io.File target=new java.io.File(path);if(!target.isAbsolute())target=new java.io.File(RuntimeEnvironment.workingDirectory(getContext(),null),path);
+        ArtifactProvider.open(getContext(),android.net.Uri.fromFile(target).toString());
+      }catch(Exception e){android.widget.Toast.makeText(getContext(),"无法打开："+e.getMessage(),android.widget.Toast.LENGTH_LONG).show();}});
+    }
+    if(name.equals("edit")){
+      org.json.JSONArray edits=args.optJSONArray("edits");
+      if(edits==null){edits=new org.json.JSONArray();edits.put(args);}
+      block("修改预览 · "+edits.length()+" 处 · 以下为片段行号，不代表已应用","状态："+status.getText(),theme.muted);
+      for(int i=0;i<Math.min(edits.length(),8);i++){
+        JSONObject edit=edits.optJSONObject(i);if(edit==null)continue;
+        block("− 原文 · 第 "+(i+1)+" 处",numbered(edit.optString("oldText"),"− "),theme.error);
+        block("+ 替换为",numbered(edit.optString("newText"),"+ "),theme.success);
+      }
+    }else if(name.equals("bash"))block("$ 命令",args.optString("command"),theme.ink);
+    else if(name.equals("write"))block("写入内容预览 · 不代表已写入",args.optString("content"),theme.ink);
+    else if(name.equals("read"))block("读取范围","起始行 "+args.optInt("offset",1)+(args.has("limit")?" · 最多 "+args.optInt("limit")+" 行":""),theme.muted);
+    block(state.equals("error")?"失败原因 / 返回结果":"返回结果",output.isEmpty()?(state.equals("running")?"等待工具返回…":"没有返回内容"):output,state.equals("error")?theme.error:theme.ink);
+    details.setText(name+"\n\n参数\n"+pretty(record.optString("args","{}"))+"\n\n结果\n"+pretty(output));
+  }
 }
