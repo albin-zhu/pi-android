@@ -56,6 +56,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     });
     foregroundVoice=voice;
     getWindow().setDecorFitsSystemWindows(false);
+    AppShortcuts.publish(this);
     buildUI();UserQuestions.listen(questionChanged);backCallback=ChatBackNavigation.register(this);ScreenContext.listen(screenListener);screenListener.run();
     if(runtime.ready&&!runtime.configured)runtime.restoreConfiguration();
     else if(runtime.configured)runtime.send(PiRuntime.json("type","history"));
@@ -168,7 +169,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     modelButton=new Ui.Action(this,R.drawable.ic_chat_circle_text,"模型","快速切换模型",theme.muted,Color.TRANSPARENT,()->ModelPicker.show(modelButton,runtime));modelButton.label.setMaxWidth(dp(84));modelButton.label.setTextSize(12);toolbar.addView(modelButton);
     voiceButton=new Ui.Action(this,R.drawable.ic_microphone,"说话","开始语音对话",theme.muted,Color.TRANSPARENT,this::toggleVoice);toolbar.addView(voiceButton);
     sessionButton=new Ui.Action(this,R.drawable.ic_sidebar,"","会话侧边栏",theme.muted,Color.TRANSPARENT,this::openSidebar);LinearLayout.LayoutParams sessionParams=new LinearLayout.LayoutParams(-2,-2);sessionParams.leftMargin=dp(2);toolbar.addView(sessionButton,sessionParams);
-    circleButton=new Ui.Action(this,R.drawable.ic_corners_out,"圈选","圈选屏幕内容",theme.muted,Color.TRANSPARENT,()->CircleOverlay.begin(this));LinearLayout.LayoutParams circleParams=new LinearLayout.LayoutParams(-2,-2);circleParams.leftMargin=dp(2);toolbar.addView(circleButton,circleParams);
+    circleButton=new Ui.Action(this,R.drawable.ic_corners_out,"圈选","圈选屏幕内容",theme.muted,Color.TRANSPARENT,()->startActivity(CircleEntryActivity.intent(this)));LinearLayout.LayoutParams circleParams=new LinearLayout.LayoutParams(-2,-2);circleParams.leftMargin=dp(2);toolbar.addView(circleButton,circleParams);
     attachButton=new Ui.Action(this,R.drawable.ic_file,"文件","选择本地文件、图片、表格或媒体",theme.muted,Color.TRANSPARENT,this::pickFiles);LinearLayout.LayoutParams fileParams=new LinearLayout.LayoutParams(-2,-2);fileParams.leftMargin=dp(2);toolbar.addView(attachButton,fileParams);
     screenShareButton=new Ui.Action(this,R.drawable.ic_screen_share,"",screenSharing?"关闭共享屏幕":"开启共享屏幕聊天",theme.muted,Color.TRANSPARENT,this::toggleScreenShare);LinearLayout.LayoutParams shareParams=new LinearLayout.LayoutParams(-2,-2);shareParams.leftMargin=dp(2);toolbar.addView(screenShareButton,shareParams);
     overflowButton=new Ui.Action(this,R.drawable.ic_dots_three,"","更多工具",theme.muted,Color.TRANSPARENT,()->showToolbarOverflow());LinearLayout.LayoutParams overflowParams=new LinearLayout.LayoutParams(-2,-2);overflowParams.leftMargin=dp(2);toolbar.addView(overflowButton,overflowParams);

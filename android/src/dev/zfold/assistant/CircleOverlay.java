@@ -45,7 +45,7 @@ public final class CircleOverlay {
     PopupMenu menu=new PopupMenu(new ContextThemeWrapper(context,R.style.AppTheme),anchor);
     menu.getMenu().add("展开助手").setOnMenuItemClickListener(item->{AssistantOverlay.show(context);return true;});
     menu.getMenu().add("看屏幕").setOnMenuItemClickListener(item->{AssistantOverlay.show(context);AssistantPanel panel=AssistantOverlay.currentPanel();if(panel!=null&&!ScreenContext.enabled())panel.toggleScreenShare();return true;});
-    menu.getMenu().add("圈选屏幕").setOnMenuItemClickListener(item->{hideBubble();begin(context,data->AssistantOverlay.show(context,data));return true;});
+    menu.getMenu().add("圈选屏幕").setOnMenuItemClickListener(item->{hideBubble();beginOnCurrentScreen(context);return true;});
     menu.getMenu().add("工作台").setOnMenuItemClickListener(item->{WorkbenchActivity.open(context);return true;});
     if(PiRuntime.get(context).busy)menu.getMenu().add("停止当前任务").setOnMenuItemClickListener(item->{PiRuntime.get(context).send(PiRuntime.json("type","stop"));return true;});
     menu.getMenu().add("关闭悬浮入口").setOnMenuItemClickListener(item->{ScreenContext.setEnabled(false);hideBubble();return true;});menu.show();
@@ -53,17 +53,19 @@ public final class CircleOverlay {
   static void setBusy(boolean busy){if(bubble instanceof Ui.Bubble)((Ui.Bubble)bubble).setBusy(busy);}
   static void accessibilityConnected(Context context){if(bubble!=null&&!accessibilityBubble){hideBubble();ensureBubble(context);}}
   static void accessibilityDisconnected(Context context){if(accessibilityBubble){hideBubble();if(Settings.canDrawOverlays(context))ensureBubble(context);}}
-  static void begin(Context context){
-    begin(context,data->{selectedImage=data;context.startActivity(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));});
+  static void begin(Context context){beginOnCurrentScreen(context);}
+  static void beginOnCurrentScreen(Context context){
+    begin(context,data->SelectionAskOverlay.showImage(context,data),false);
   }
-  static void begin(Context context,Selected selected){
+  static void begin(Context context,Selected selected){begin(context,selected,true);}
+  static void begin(Context context,Selected selected,boolean hideCaller){
     PhoneAccessibility service=PhoneAccessibility.instance;if(service==null){Toast.makeText(context,"圈选需要先开启读屏与操作服务",Toast.LENGTH_LONG).show();context.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));return;}
     hideBubble();
-    if(context instanceof Activity)((Activity)context).moveTaskToBack(true);
+    if(hideCaller&&context instanceof Activity)((Activity)context).moveTaskToBack(true);
     new Handler(Looper.getMainLooper()).postDelayed(()->service.capture((bitmap,error)->{
       if(error!=null){Toast.makeText(context,error,Toast.LENGTH_LONG).show();return;}
       showSelection(context,bitmap,selected);
-    }),350);
+    }),hideCaller?350:20);
   }
   static void showSelection(Context context,Bitmap bitmap,Selected selected){
     Context app=context.getApplicationContext();PhoneAccessibility service=PhoneAccessibility.instance;
