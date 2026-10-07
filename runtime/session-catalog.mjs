@@ -18,7 +18,7 @@ export class SessionCatalog {
       if(data.version!==1||!data.items||typeof data.items!=='object'||Array.isArray(data.items))throw new Error();
       for(const value of Object.values(data.items)){
         if(!value||typeof value!=='object'||Array.isArray(value))throw new Error();
-        for(const key of ['archivedAt','deletedAt','purgedAt'])if(Object.hasOwn(value,key)&&(!Number.isFinite(value[key])||value[key]<=0))throw new Error();
+        for(const key of ['archivedAt','deletedAt','purgedAt','pinnedAt'])if(Object.hasOwn(value,key)&&(!Number.isFinite(value[key])||value[key]<=0))throw new Error();
       }
       return Object.assign(Object.create(null),data.items);
     }catch(error){if(error.code==='ENOENT')return Object.create(null);throw new Error('会话管理记录无法读取，原记录未改动');}
@@ -39,7 +39,7 @@ export class SessionCatalog {
   async list(){
     const flags=this.read(),items=await SessionManager.list(this.workspace,this.directory);
     return items.filter(item=>{try{this.safeFile(item.path);return !flags[item.id]?.purgedAt;}catch{return false;}})
-      .map(item=>({...item,archived:Boolean(flags[item.id]?.archivedAt),deleted:Boolean(flags[item.id]?.deletedAt)}));
+      .map(item=>({...item,pinned:Boolean(flags[item.id]?.pinnedAt),archived:Boolean(flags[item.id]?.archivedAt),deleted:Boolean(flags[item.id]?.deletedAt)}));
   }
   async find(id){const item=(await this.list()).find(item=>item.id===id);if(!item)throw new Error('这个会话不存在或已被彻底删除');return item;}
   open(item){return SessionManager.open(this.safeFile(item.path),this.directory,this.workspace);}
@@ -52,7 +52,9 @@ export class SessionCatalog {
   status(id,value){const items=this.read();if(value&&Object.keys(value).length)items[id]=value;else delete items[id];atomicJson(this.file,{version:1,items});}
   change(item,action){
     const old=this.read()[item.id]||{},next={...old};
-    if(action==='archive'){if(item.deleted)throw new Error('请先从最近删除中恢复');next.archivedAt=Date.now();}
+    if(action==='pin'){if(item.deleted)throw new Error('请先恢复会话');next.pinnedAt=Date.now();}
+    else if(action==='unpin')delete next.pinnedAt;
+    else if(action==='archive'){if(item.deleted)throw new Error('请先从最近删除中恢复');next.archivedAt=Date.now();}
     else if(action==='delete')next.deletedAt=Date.now();
     else if(action==='restore'){delete next.archivedAt;delete next.deletedAt;}
     else throw new Error('不支持的会话操作');

@@ -1,3 +1,4 @@
+import { writeJsonLine } from './protocol-output.mjs';
 import { anthropicOAuth, openaiCodexOAuth, githubCopilotOAuth, openRouterOAuth, kimiCodingOAuth, xaiOAuth, createRadiusOAuth } from './oauth-bundle.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -39,7 +40,7 @@ catch(error){
   if(!fs.statSync(rawRoot,{throwIfNoEntry:false})?.isDirectory())throw error;
   root=path.resolve(rawRoot);
 }
-const emit = data => fs.writeSync(outputFd, JSON.stringify(data) + '\n');
+const emit = data => writeJsonLine(outputFd,data);
 const agentDir = path.join(root, '.pi'), sessions = path.join(root, 'sessions');
 const credentialsDir = process.env.ZFOLD_CREDENTIALS_DIR || path.join(root, '.pi', 'agent');
 const speechBridge=new SpeechBridge({emit,readConfig:()=>JSON.parse(fs.readFileSync(path.join(credentialsDir,'speech.json'),'utf8'))});
@@ -208,7 +209,7 @@ async function emitSessions(){
   const items=info.map(item=>{
     const first=item.firstMessage==='(no messages)'?'':item.firstMessage.replace(/\s+/g,' ').trim();
     const title=item.name?.trim()||Array.from(first||'新对话').slice(0,36).join('');
-    return {id:item.id,title,modified:item.modified.getTime(),messageCount:item.messageCount,current:item.id===currentId,archived:item.archived,deleted:item.deleted};
+    return {id:item.id,title,preview:first,pinned:item.pinned,modified:item.modified.getTime(),messageCount:item.messageCount,current:item.id===currentId,archived:item.archived,deleted:item.deleted};
   });
   if(currentId&&!items.some(item=>item.id===currentId))items.unshift({id:currentId,title:'新对话',modified:Date.now(),messageCount:0,current:true});
   items.sort((a,b)=>Number(b.current)-Number(a.current)||b.modified-a.modified);
@@ -220,7 +221,7 @@ async function manageSession(command){
   try{
     if(busy)throw new Error('任务执行中，完成或停止后才能管理会话');
     if(changingSession)throw new Error('会话正在变更，请稍后再试');
-    if(!['rename','archive','restore','delete','purge'].includes(command.action))throw new Error('不支持的会话操作');
+    if(!['rename','archive','restore','delete','purge','pin','unpin'].includes(command.action))throw new Error('不支持的会话操作');
     if(['delete','purge'].includes(command.action)&&command.confirm!==true)throw new Error('请先确认删除操作');
     changingSession=true;locked=true;
     const item=await sessionCatalog.find(command.id),current=item.id===session?.sessionId;
