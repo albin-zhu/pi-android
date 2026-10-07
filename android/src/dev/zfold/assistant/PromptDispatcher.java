@@ -10,7 +10,7 @@ final class PromptDispatcher implements PiRuntime.Listener {
   interface Result {void done(boolean accepted,boolean queued,String error);}
   private static PromptDispatcher instance;
   static synchronized PromptDispatcher get(Context context){if(instance==null)instance=new PromptDispatcher(context.getApplicationContext());return instance;}
-  static void cancelPending(){if(instance!=null){instance.epoch++;instance.queue.clear();}}
+  static void cancelPending(){if(instance!=null){instance.epoch++;instance.queue.clear();instance.changed();}}
   private final Context context;private final PiRuntime runtime;private final Handler main=new Handler(Looper.getMainLooper());
   private final ArrayDeque<JSONObject> queue=new ArrayDeque<>();private int epoch;
   private PromptDispatcher(Context context){this.context=context;runtime=PiRuntime.get(context);runtime.listen(this);}
@@ -31,10 +31,26 @@ final class PromptDispatcher implements PiRuntime.Listener {
       });
     }else enqueue(command,token,callback);
   }
+  java.util.List<JSONObject> pending(){
+    java.util.List<JSONObject> result=new ArrayList<>();
+    for(JSONObject item:queue)try{result.add(new JSONObject(item.toString()));}catch(JSONException ignored){}
+    return result;
+  }
+  boolean cancel(String id){boolean removed=queue.removeIf(item->id.equals(item.optString("id")));if(removed)changed();return removed;}
+  boolean edit(String id,String text){
+    if(text==null||text.trim().isEmpty()||text.length()>32000)return false;
+    for(JSONObject item:queue)if(id.equals(item.optString("id"))){try{item.put("text",text.trim());changed();return true;}catch(JSONException ignored){return false;}}
+    return false;
+  }
+  private final java.util.Set<Runnable> observers=new java.util.HashSet<>();
+  void listenQueue(Runnable listener){observers.add(listener);}
+  void unlistenQueue(Runnable listener){observers.remove(listener);}
+  private void changed(){for(Runnable listener:new ArrayList<>(observers))listener.run();}
   private void enqueue(JSONObject command,int token,Result callback){
     if(token!=epoch||!runtime.sessionId.equals(command.optString("sessionId"))){callback.done(false,false,"会话已切换或请求已取消");return;}
+    if(queue.size()>=8){callback.done(false,false,"待处理请求已满");return;}
     boolean queued=runtime.busy;
-    if(queued)queue.add(command);else send(command);
+    if(queued){queue.add(command);changed();}else send(command);
     callback.done(true,queued,null);
   }
   private void send(JSONObject command){
@@ -46,7 +62,7 @@ final class PromptDispatcher implements PiRuntime.Listener {
     String type=event.optString("type");
     if(type.equals("session_changed")){cancelPending();CameraCoordinator.get(context).disable();return;}
     // A failed active request must not discard separately accepted user requests.
-    if(type.equals("turn_end")||type.equals("error"))main.post(()->{if(!runtime.busy&&!queue.isEmpty())send(queue.remove());});
+    if(type.equals("turn_end")||type.equals("error"))main.post(()->{if(!runtime.busy&&!queue.isEmpty()){JSONObject next=queue.remove();changed();send(next);}});
   }
   static boolean isStop(String value){String text=value.toLowerCase(Locale.ROOT).replaceAll("[\\s，,。：:！!？?]+","");return Arrays.asList("停","停止","停下","取消","别做了","请停止","停止任务","停止当前任务").contains(text);}
 }

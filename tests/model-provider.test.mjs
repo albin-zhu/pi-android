@@ -36,6 +36,8 @@ test('legacy empty built-in provider config is repaired and configures xai',{tim
     const stored=JSON.parse(await readFile(path.join(root,'.pi','agent','models.json'),'utf8'));
     assert.equal(stored.providers.xai.name,'xAI');
   }finally{
-    child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});
+    const exited=new Promise(resolve=>child.once('close',resolve));
+    if(child.exitCode===null&&child.signalCode===null){child.kill();await exited;}
+    server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:40});
   }
 });

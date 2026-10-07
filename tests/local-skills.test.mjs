@@ -1,3 +1,4 @@
+import {stopRuntimeChild} from './runtime-cleanup.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -18,6 +19,7 @@ test('local .pi skills persist, enter configured Pi resources, and delete safely
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const child=spawn(process.execPath,['android/assets/runtime/agent.cjs','0','1',root],{stdio:['pipe','pipe','pipe']});
+  const closed=new Promise(resolve=>child.once('close',resolve));
   const send=value=>child.stdin.write(JSON.stringify(value)+'\n');
   let stderr='',configured=0;
   const waiters=[];const events=[];
@@ -66,7 +68,9 @@ test('local .pi skills persist, enter configured Pi resources, and delete safely
     await next('skills','reload');
     assert.equal(configured,3);
   }finally{
-    child.kill();server.closeAllConnections();server.close();
+    await stopRuntimeChild(child);server.closeAllConnections();server.close();
+    // SIGTERM dispatch is not process exit: wait before removing writable state.
+    await closed;
     await rm(root,{recursive:true,force:true});
   }
 });

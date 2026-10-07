@@ -178,7 +178,9 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
   void hideKeyboard(){input.clearFocus();requestFocus();((InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(getWindowToken(),0);}
   void setup(){voice.stopSession(false);host.close();getContext().startActivity(new Intent(getContext(),MainActivity.class).putExtra("open_models",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));}
   void send(String raw){
-    String text=raw.trim();if(text.isEmpty()&&localFiles.isEmpty())return;
+    String text=raw.trim();
+    if(text.equalsIgnoreCase("/goal")){runSlashCommand("goal","");input.setText("");return;}
+    if(text.isEmpty()&&localFiles.isEmpty())return;
     if(!runtime.ready){state.setText("正在准备助手…");return;}
     if(!runtime.configured){state.setText("需要连接模型");showReply("连接你自己的模型后，就能在这里开始对话。");errorLabel.setVisibility(GONE);errorActions.setVisibility(VISIBLE);retry.setVisibility(GONE);return;}
     if(runtime.busy){
@@ -308,6 +310,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
   }
   boolean runSlashCommand(String name,String argument){
     switch(name){
+      case "goal":getContext().startActivity(new Intent(getContext(),MainActivity.class).putExtra("open_goal",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));return true;
       case "tools":showToolCenter();return true;
       case "skills":showToolCenter(1);return true;
       case "mcp":ConnectorActivity.open(getContext());return true;

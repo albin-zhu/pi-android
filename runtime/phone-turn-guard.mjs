@@ -1,5 +1,5 @@
 /** Bound recovery after a target app exposes no accessibility controls. */
-const phoneTools=new Set(['screen_read','screen_capture','ui_act','ui_tap','ui_input','ui_input_focused','ui_swipe','ui_back','app_open','split_screen']);
+const phoneTools=new Set(['screen_read','screen_windows','ui_system','screen_capture','ui_act','ui_tap','ui_input','ui_input_focused','ui_swipe','ui_back','app_open','split_screen']);
 export class PhoneTurnGuard {
   constructor(){this.packageName=null;this.emptyReads=0;this.calls=0;this.unverifiedInputs=new Set();this.splitActive=false;}
   before(name,args={}){

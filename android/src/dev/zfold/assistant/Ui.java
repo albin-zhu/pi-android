@@ -124,7 +124,7 @@ final class Ui {
     line=line.replaceAll("`([^`]+)`","<tt>$1</tt>");
     line=line.replaceAll("\\*\\*([^*\\n]+)\\*\\*","<b>$1</b>");
     line=line.replaceAll("(?<!\\*)\\*([^*\\n]+)\\*(?!\\*)","<i>$1</i>");
-    line=line.replaceAll("\\[([^\\]]+)\\]\\((https?://[^\\s)]+)\\)","<a href=\"$2\">$1</a>");
+    line=line.replaceAll("\\[([^\\]]+)\\]\\(((?:https?://|file:///)[^\\s)]+)\\)","<a href=\"$2\">$1</a>");
     line=line.replaceAll("!\\[([^\\]]*)\\]\\((https?://[^\\s)]+)\\)","[图片 $1] $2");
     return line;
   }
@@ -159,9 +159,26 @@ final class Ui {
   }
 
   private static TextView richText(Context c,String value){
-    TextView view=text(c,"",16,0xff101418);view.setText(markdown(value));view.setTextIsSelectable(true);
+    TextView view=text(c,"",16,0xff101418);view.setTextIsSelectable(true);bindLinks(view,markdown(value));
     view.setLineSpacing(dp(c,5),1f);view.setHighlightColor(0x22000000);
     return view;
+  }
+
+  private static void bindLinks(TextView view,CharSequence content){
+    android.text.SpannableString text=new android.text.SpannableString(content);
+    for(android.text.style.URLSpan span:text.getSpans(0,text.length(),android.text.style.URLSpan.class)){
+      int start=text.getSpanStart(span),end=text.getSpanEnd(span);String target=span.getURL();text.removeSpan(span);
+      text.setSpan(new android.text.style.ClickableSpan(){
+        @Override public void onClick(View widget){
+          try{
+            if(target.startsWith("file:///"))ArtifactProvider.open(widget.getContext(),target);
+            else if(target.startsWith("https://")||target.startsWith("http://"))widget.getContext().startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(target)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+            else throw new IllegalArgumentException("不支持的链接");
+          }catch(Exception error){Toast.makeText(widget.getContext(),"无法打开："+error.getMessage(),Toast.LENGTH_LONG).show();}
+        }
+      },start,end,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+    view.setText(text);view.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
   }
 
   private static int tableStart(String raw){

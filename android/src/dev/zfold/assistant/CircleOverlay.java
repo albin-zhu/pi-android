@@ -45,7 +45,7 @@ public final class CircleOverlay {
     PopupMenu menu=new PopupMenu(new ContextThemeWrapper(context,R.style.AppTheme),anchor);
     menu.getMenu().add("展开助手").setOnMenuItemClickListener(item->{AssistantOverlay.show(context);return true;});
     menu.getMenu().add("看屏幕").setOnMenuItemClickListener(item->{AssistantOverlay.show(context);AssistantPanel panel=AssistantOverlay.currentPanel();if(panel!=null&&!ScreenContext.enabled())panel.toggleScreenShare();return true;});
-    menu.getMenu().add("圈选屏幕").setOnMenuItemClickListener(item->{hideBubble();begin(context,data->AssistantOverlay.show(context,data));return true;});
+    menu.getMenu().add("圈选屏幕").setOnMenuItemClickListener(item->{hideBubble();beginOnCurrentScreen(context);return true;});
     menu.getMenu().add("工作台").setOnMenuItemClickListener(item->{WorkbenchActivity.open(context);return true;});
     if(PiRuntime.get(context).busy)menu.getMenu().add("停止当前任务").setOnMenuItemClickListener(item->{PiRuntime.get(context).send(PiRuntime.json("type","stop"));return true;});
     menu.getMenu().add("关闭悬浮入口").setOnMenuItemClickListener(item->{ScreenContext.setEnabled(false);hideBubble();return true;});menu.show();
@@ -53,17 +53,19 @@ public final class CircleOverlay {
   static void setBusy(boolean busy){if(bubble instanceof Ui.Bubble)((Ui.Bubble)bubble).setBusy(busy);}
   static void accessibilityConnected(Context context){if(bubble!=null&&!accessibilityBubble){hideBubble();ensureBubble(context);}}
   static void accessibilityDisconnected(Context context){if(accessibilityBubble){hideBubble();if(Settings.canDrawOverlays(context))ensureBubble(context);}}
-  static void begin(Context context){
-    begin(context,data->{selectedImage=data;context.startActivity(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));});
+  static void begin(Context context){beginOnCurrentScreen(context);}
+  static void beginOnCurrentScreen(Context context){
+    begin(context,data->SelectionAskOverlay.showImage(context,data),false);
   }
-  static void begin(Context context,Selected selected){
+  static void begin(Context context,Selected selected){begin(context,selected,true);}
+  static void begin(Context context,Selected selected,boolean hideCaller){
     PhoneAccessibility service=PhoneAccessibility.instance;if(service==null){Toast.makeText(context,"圈选需要先开启读屏与操作服务",Toast.LENGTH_LONG).show();context.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));return;}
     hideBubble();
-    if(context instanceof Activity)((Activity)context).moveTaskToBack(true);
+    if(hideCaller&&context instanceof Activity)((Activity)context).moveTaskToBack(true);
     new Handler(Looper.getMainLooper()).postDelayed(()->service.capture((bitmap,error)->{
       if(error!=null){Toast.makeText(context,error,Toast.LENGTH_LONG).show();return;}
       showSelection(context,bitmap,selected);
-    }),350);
+    }),hideCaller?350:20);
   }
   static void showSelection(Context context,Bitmap bitmap,Selected selected){
     Context app=context.getApplicationContext();PhoneAccessibility service=PhoneAccessibility.instance;
@@ -85,20 +87,19 @@ public final class CircleOverlay {
         @Override public boolean onTouchEvent(MotionEvent event){return selectTouch(event);}
         @Override protected void onSizeChanged(int w,int h,int oldw,int oldh){float scale=Math.min(w/(float)screenshot.getWidth(),h/(float)screenshot.getHeight());float bw=screenshot.getWidth()*scale,bh=screenshot.getHeight()*scale;imageRect.set((w-bw)/2,(h-bh)/2,(w+bw)/2,(h+bh)/2);if(oldw!=0&&(w!=oldw||h!=oldh)){valid=false;bounds.setEmpty();trace.reset();points.clear();accept.setEnabled(false);}}
       };addView(canvasView,new FrameLayout.LayoutParams(-1,-1));
-      LinearLayout head=new LinearLayout(context);head.setGravity(Gravity.CENTER_VERTICAL);head.setPadding(dp(14),dp(8),dp(8),dp(8));head.setBackground(Ui.shape(context,0xee202820,22,0));
-      LinearLayout labels=new LinearLayout(context);labels.setOrientation(LinearLayout.VERTICAL);instruction=Ui.text(context,"沿着内容画一圈",15,Color.WHITE);instruction.setTypeface(Typeface.create("sans-serif-medium",0));labels.addView(instruction);TextView help=Ui.text(context,"画好后检查边界，再交给助手",12,0xffc7cfc1);help.setPadding(0,dp(5),0,0);labels.addView(help);head.addView(labels,new LinearLayout.LayoutParams(0,-2,1));
-      head.addView(new Ui.Action(context,R.drawable.ic_x,"","取消圈选",Color.WHITE,Color.TRANSPARENT,this::cancel),new LinearLayout.LayoutParams(dp(48),dp(48)));
-      FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(-1,-2,Gravity.TOP);hp.leftMargin=hp.rightMargin=dp(16);hp.topMargin=dp(48);addView(head,hp);
-      LinearLayout toolbar=new LinearLayout(context);toolbar.setPadding(dp(6),dp(6),dp(6),dp(6));toolbar.setGravity(Gravity.CENTER);toolbar.setBackground(Ui.shape(context,0xee202820,22,0));
-      reset=new Ui.Action(context,R.drawable.ic_arrow_clockwise,"重选","重新圈选",Color.WHITE,Color.TRANSPARENT,()->{valid=false;bounds.setEmpty();trace.reset();points.clear();accept.setEnabled(false);instruction.setText("沿着内容画一圈");canvasView.invalidate();});
-      toolbar.addView(reset,new LinearLayout.LayoutParams(0,-2,1));Ui.Theme theme=new Ui.Theme(context);
-      accept=new Ui.Action(context,R.drawable.ic_check,"使用选区","使用当前选区",theme.onAccent,theme.accent,this::commit);accept.setEnabled(false);toolbar.addView(accept,new LinearLayout.LayoutParams(0,-2,1));
-      FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);tp.leftMargin=tp.rightMargin=dp(20);tp.bottomMargin=dp(32);addView(toolbar,tp);
-      setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars());int statusId=getResources().getIdentifier("status_bar_height","dimen","android");int topInset=Math.max(bars.top,statusId>0?getResources().getDimensionPixelSize(statusId):dp(24));hp.topMargin=topInset+dp(12);tp.bottomMargin=bars.bottom+dp(16);head.setLayoutParams(hp);toolbar.setLayoutParams(tp);return insets;});
+      instruction=Ui.text(context,"",1,Color.TRANSPARENT);instruction.setVisibility(GONE);
+      Ui.Action close=new Ui.Action(context,R.drawable.ic_x,"","取消圈选",Color.WHITE,0x66000000,this::cancel);
+      FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(dp(40),dp(40),Gravity.TOP|Gravity.END);hp.topMargin=dp(12);hp.rightMargin=dp(12);addView(close,hp);
+      LinearLayout toolbar=new LinearLayout(context);toolbar.setPadding(dp(4),dp(4),dp(4),dp(4));toolbar.setGravity(Gravity.CENTER);toolbar.setBackground(Ui.shape(context,0xcc202820,20,0));toolbar.setVisibility(GONE);
+      reset=new Ui.Action(context,R.drawable.ic_arrow_clockwise,"","重新圈选",Color.WHITE,Color.TRANSPARENT,()->{valid=false;bounds.setEmpty();trace.reset();points.clear();accept.setEnabled(false);toolbar.setVisibility(GONE);canvasView.invalidate();});
+      toolbar.addView(reset,new LinearLayout.LayoutParams(dp(44),dp(44)));Ui.Theme theme=new Ui.Theme(context);
+      accept=new Ui.Action(context,R.drawable.ic_check,"","使用当前选区",theme.onAccent,theme.accent,this::commit);accept.setEnabled(false);toolbar.addView(accept,new LinearLayout.LayoutParams(dp(44),dp(44)));
+      FrameLayout.LayoutParams tp=new FrameLayout.LayoutParams(-2,-2,Gravity.BOTTOM|Gravity.END);tp.rightMargin=dp(16);tp.bottomMargin=dp(24);addView(toolbar,tp);
+      setOnApplyWindowInsetsListener((v,insets)->{android.graphics.Insets bars=insets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars());int statusId=getResources().getIdentifier("status_bar_height","dimen","android");int topInset=Math.max(bars.top,statusId>0?getResources().getDimensionPixelSize(statusId):dp(24));hp.topMargin=topInset+dp(6);tp.bottomMargin=bars.bottom+dp(12);close.setLayoutParams(hp);toolbar.setLayoutParams(tp);return insets;});
     }
     void drawSelection(Canvas c){
-      c.drawColor(0xff171c18);paint.setStyle(Paint.Style.FILL);paint.setAlpha(255);c.drawBitmap(screenshot,null,imageRect,paint);
-      Path mask=new Path();mask.setFillType(Path.FillType.EVEN_ODD);mask.addRect(0,0,getWidth(),getHeight(),Path.Direction.CW);if(valid||drawing)mask.addPath(trace);paint.setColor(0x99000000);c.drawPath(mask,paint);
+      c.drawColor(Color.BLACK);paint.setStyle(Paint.Style.FILL);paint.setAlpha(255);c.drawBitmap(screenshot,null,imageRect,paint);
+      Path mask=new Path();mask.setFillType(Path.FillType.EVEN_ODD);mask.addRect(0,0,getWidth(),getHeight(),Path.Direction.CW);if(valid||drawing)mask.addPath(trace);paint.setColor((valid||drawing)?0x55000000:0x22000000);c.drawPath(mask,paint);
       if(valid||drawing){paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(2));paint.setStrokeJoin(Paint.Join.ROUND);paint.setStrokeCap(Paint.Cap.ROUND);paint.setColor(0xffffbb93);c.drawPath(trace,paint);paint.setStyle(Paint.Style.FILL);}
     }
     void point(float x,float y){
@@ -111,7 +112,7 @@ public final class CircleOverlay {
       switch(event.getActionMasked()){
         case MotionEvent.ACTION_DOWN:drawing=true;valid=false;trace.reset();points.clear();point(x,y);accept.setEnabled(false);break;
         case MotionEvent.ACTION_MOVE:if(drawing){for(int i=0;i<event.getHistorySize();i++)point(Math.max(imageRect.left,Math.min(imageRect.right,event.getHistoricalX(i))),Math.max(imageRect.top,Math.min(imageRect.bottom,event.getHistoricalY(i))));point(x,y);}break;
-        case MotionEvent.ACTION_UP:if(drawing){point(x,y);drawing=false;valid=points.size()>=3&&bounds.width()>=dp(12)&&bounds.height()>=dp(12)&&area()>=dp(18)*dp(18);if(valid)trace.close();accept.setEnabled(valid);instruction.setText(valid?"这个形状，交给助手？":"范围太小，请重新圈选");if(valid)performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);}break;
+        case MotionEvent.ACTION_UP:if(drawing){point(x,y);drawing=false;valid=points.size()>=3&&bounds.width()>=dp(12)&&bounds.height()>=dp(12)&&area()>=dp(18)*dp(18);if(valid)trace.close();accept.setEnabled(valid);View bar=(View)accept.getParent();if(bar!=null)bar.setVisibility(valid?VISIBLE:GONE);if(valid)performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);}break;
         case MotionEvent.ACTION_CANCEL:drawing=false;valid=false;points.clear();trace.reset();accept.setEnabled(false);break;
       }canvasView.invalidate();return true;
     }

@@ -141,10 +141,13 @@ public final class PiRuntime {
       }
     } catch(Exception e){dispatch(json("type","error","message",e.getMessage()));}
   }
+  JSONObject goalState;
   private void dispatch(JSONObject event) {
     if(event.optString("type").equals("tool_cancel")){NativeToolExecution.cancel(event.optString("id"));return;}
     main.post(() -> {
       String type=event.optString("type");
+      if(type.equals("goal_state"))goalState=event.optJSONObject("goal");
+      if(type.equals("session_changed"))goalState=null;
       if(type.equals("auth_state"))AuthSessionService.update(context,event);
       boolean callVisible=VoiceCallActivity.isForeground()||VoiceMiniOverlay.showing();
       if(type.equals("phone_halt"))stopped=true;
@@ -181,7 +184,7 @@ public final class PiRuntime {
         String name=event.optString("name");
         if(name.equals("ask_user_question")){phoneActive=false;PhoneHud.hide();}
         if(name.equals("phone_call")||name.equals("phone_sms")||name.equals("camera_capture")||name.equals("contact_search"))phoneActive=false;
-        boolean phoneAction=name.equals("screen_read")||name.equals("screen_capture")||name.equals("ui_act")||name.equals("ui_tap")||name.equals("ui_input")||name.equals("ui_input_focused")||name.equals("ui_swipe")||name.equals("ui_back")||name.equals("app_open")||name.equals("split_screen")||name.equals("open");
+        boolean phoneAction=name.equals("screen_windows")||name.equals("ui_system")||name.equals("screen_read")||name.equals("screen_capture")||name.equals("ui_act")||name.equals("ui_tap")||name.equals("ui_input")||name.equals("ui_input_focused")||name.equals("ui_swipe")||name.equals("ui_back")||name.equals("app_open")||name.equals("split_screen")||name.equals("open");
         boolean phoneTask=name.equals("phone_task");
         if((phoneAction||phoneTask)&&!callVisible)PhoneHud.show(context,PhoneHud.action(event));
         if(phoneAction||phoneTask)phoneActive=true;

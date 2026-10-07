@@ -527,7 +527,7 @@ Pi 现在启用标准 `read/write/edit/ls/bash`。`bash` 使用 Android 自带 t
 
 ## 构建
 
-当前脚本面向 macOS + arm64 Android 真机，使用本机 Android Studio 的 JDK、SDK 35、Build Tools 35.0.0 和 NDK 28.0.13004108，不需要 Gradle。
+当前脚本支持 macOS / Linux 主机，产物面向 arm64 Android，使用 JDK、SDK 35、Build Tools 35.0.0 和 NDK 28.0.13004108，不需要 Gradle。Linux 或自定义 JDK 通过 `JAVA_HOME` 指定；Android SDK 通过 `ANDROID_SDK_ROOT` 或 `ANDROID_HOME` 指定。
 
 ```sh
 npm ci --ignore-scripts
@@ -539,6 +539,8 @@ adb shell am start -n dev.zfold.assistant/.MainActivity
 ```
 
 构建下载固定版本的 Node Android 运行时，并校验 SHA-256；来源与许可见 `THIRD_PARTY_NOTICES.md`。开发签名保存在 `.build/debug.keystore`，保留它才能无损更新已有安装。
+
+GitHub Actions 与 Fold7 本机编译已接入同一份主应用签名；Secret 配置、证书校验及手机构建命令见 [SIGNING.md](SIGNING.md)。
 
 构建默认使用不含凭据的 `runtime/defaults.example.mjs`，模型在 App 中配置。`runtime/defaults.local.mjs` 不进入 Git，也不再自动参与构建；仅显式设置 `ZFOLD_DEFAULTS_FILE` 才使用个人调试默认配置，该配置会随 APK 打包。省略 `ZFOLD_TARGET_SDK` 构建 modern 通道，工具目录会标明不支持的执行能力。
 

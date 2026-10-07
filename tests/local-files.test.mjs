@@ -1,3 +1,4 @@
+import {stopRuntimeChild} from './runtime-cleanup.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -35,5 +36,5 @@ test('local files and multiple images reach the model as bounded context', {time
     });
     assert.equal(sawFile,true);assert.equal(sawImage,true);assert.match(answer,/表格/);
     assert.equal(turnStart.files.length,1);assert.equal(turnStart.files[0].name,'quarterly.xlsx');
-  }finally{child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });

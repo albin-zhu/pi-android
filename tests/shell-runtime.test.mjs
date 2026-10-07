@@ -1,3 +1,4 @@
+import {stopRuntimeChild} from './runtime-cleanup.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -55,5 +56,5 @@ test('bash executes through POSIX shell and can access the storage root',{timeou
     });
     assert.equal(bash?.status,'success','bash=' + JSON.stringify(bash));assert.match(answer,/shell ready/);
     await assert.doesNotReject(()=>access(path.join(root,'workspace','shell-marker.txt')));
-  }finally{child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });

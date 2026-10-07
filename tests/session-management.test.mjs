@@ -25,7 +25,7 @@ async function setup(t){
   const config={provider:'custom',baseUrl:`http://127.0.0.1:${server.address().port}/v1`,model:'session-test',api:'openai-completions',apiKey:'fixture-only'};
   const unblock=()=>{const pending=release;release=undefined;pending?.();};
   const instances=[];t.after(async()=>{unblock();for(const r of instances)await r.close();server.closeAllConnections();server.close();fs.rmSync(root,{recursive:true,force:true});});
-  return {root,config,release:unblock,async start(){const r=boot(root);instances.push(r);await r.next('ready');r.send({type:'configure',config});const event=await r.next('configured');return {r,id:event.sessionId};}};
+  return {root,config,release:unblock,async start(){const r=boot(root);instances.push(r);await r.next('ready');r.send({type:'configure',config});const event=await r.next('configured');return {r,id:event.sessionId,configured:event};}};
 }
 async function mutate(r,id,action,extra={}){const requestId=action+'-'+Math.random();r.send({type:'session_manage',requestId,id,action,...extra});return r.next('session_managed',e=>e.requestId===requestId);}
 async function list(r){r.events.splice(0,r.events.length,...r.events.filter(e=>e.type!=='sessions'));r.send({type:'sessions'});return (await r.next('sessions')).items;}
@@ -65,4 +65,21 @@ test('management errors are scoped and busy/concurrent/invalid requests do not c
   assert.equal((await list(r)).find(e=>e.id===id).archived,false);
   for(let i=0;i<100;i++){fixture.release();if(r.events.some(e=>e.type==='turn_end'))break;await new Promise(resolve=>setTimeout(resolve,20));}
   await r.next('turn_end');await mutate(r,id,'archive');assert.equal((await list(r)).find(e=>e.id===id).archived,true);
+});
+
+test('SDK goal extension registers and persists per session with user-only acceptance', {timeout:30000},async t=>{
+  const fixture=await setup(t);let {r,id,configured}=await fixture.start();
+  assert.ok(configured.tools.includes('goal_plan'),'SDK goal tool must be active');
+  // Exercise the native adapter against the real SDK appendEntry implementation.
+  const goal=async command=>{r.events.splice(0,r.events.length,...r.events.filter(e=>e.type!=='goal_state'));r.send({type:'goal_manage',sessionId:id,...command});return (await r.next('goal_state',e=>e.sessionId===id)).goal;};
+  let state=await goal({action:'create',title:'真机验证',criteria:'用户确认截图保存',steps:['编译','验证']});
+  assert.equal(state.revision,1);
+  await r.close();({r}=await fixture.start());state=await goal({action:'get'});assert.equal(state.title,'真机验证');
+  state=await goal({action:'update',revision:state.revision,stepId:'1',status:'done',evidence:'编译成功'});
+  r.send({type:'goal_manage',sessionId:id,action:'accept',revision:state.revision});assert.match((await r.next('goal_error')).message,/尚未/);
+  state=await goal({action:'update',revision:state.revision,stepId:'2',status:'done',evidence:'用户确认保存图片'});
+  state=await goal({action:'accept',revision:state.revision});assert.equal(state.status,'accepted');
+  r.send({type:'new_session'});const changed=await r.next('session_changed');
+  r.send({type:'goal_manage',sessionId:changed.sessionId,action:'get'});assert.equal((await r.next('goal_state',e=>e.sessionId===changed.sessionId)).goal,null);
+  r.send({type:'goal_manage',sessionId:id,action:'cancel',revision:state.revision});assert.match((await r.next('goal_error')).message,/会话/);
 });

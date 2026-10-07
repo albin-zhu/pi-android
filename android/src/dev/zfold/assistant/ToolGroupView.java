@@ -20,8 +20,8 @@ final class ToolGroupView extends LinearLayout {
 
   ToolGroupView(Context context,String key,Runnable beforeDisclosure){
     super(context);this.key=key;this.beforeDisclosure=beforeDisclosure;theme=new Ui.Theme(context);
-    setOrientation(VERTICAL);setBackground(Ui.shape(context,theme.field,14,theme.line));
-    header=new LinearLayout(context);header.setGravity(Gravity.CENTER_VERTICAL);header.setMinimumHeight(Ui.dp(context,64));header.setPadding(Ui.dp(context,12),Ui.dp(context,6),0,Ui.dp(context,6));
+    setOrientation(VERTICAL);setBackground(Ui.shape(context,theme.surface,14,theme.line));
+    header=new LinearLayout(context);header.setGravity(Gravity.CENTER_VERTICAL);header.setMinimumHeight(Ui.dp(context,52));header.setPadding(Ui.dp(context,12),Ui.dp(context,6),0,Ui.dp(context,6));
     LinearLayout copy=new LinearLayout(context);copy.setOrientation(VERTICAL);
     title=Ui.text(context,"",13,theme.ink);copy.addView(title);
     summary=Ui.text(context,"",12,theme.muted);summary.setPadding(0,Ui.dp(context,3),0,0);copy.addView(summary);
@@ -38,7 +38,7 @@ final class ToolGroupView extends LinearLayout {
     LayoutParams params=new LayoutParams(-1,-2);params.topMargin=Ui.dp(getContext(),6);steps.addView(call,params);refresh();
   }
   void toggle(){beforeDisclosure.run();setExpanded(!expanded);}
-  void setExpanded(boolean value){expanded=value;steps.setVisibility(value?VISIBLE:GONE);toggle.setRotation(value?180:0);refreshAccessibility();}
+  void setExpanded(boolean value){expanded=value;steps.setVisibility(value?VISIBLE:GONE);MicroMotion.rotate(toggle,value?180:0);if(value)MicroMotion.reveal(steps);refreshAccessibility();}
   void finish(boolean cancelled){for(ToolCallView call:calls)call.finishPending(cancelled);refresh();}
   void refresh(){
     int running=0,failed=0,blocked=0,unverified=0,stopped=0,interrupted=0,skipped=0;String current="";boolean waiting=false;
@@ -55,7 +55,10 @@ final class ToolGroupView extends LinearLayout {
     if(failed>0)states.add(failed+" 项失败");if(blocked>0)states.add(blocked+" 项需重新判断");if(unverified>0)states.add(unverified+" 项待验证");
     if(stopped>0)states.add(stopped+" 项已停止");if(interrupted>0)states.add(interrupted+" 项中断");if(skipped>0)states.add(skipped+" 项未执行");
     if(current.length()>48)current=current.substring(0,48)+"…";
-    title.setText(calls.size()+" 次工具调用");summary.setText(String.join(" · ",states)+(running>0&&!waiting?"\n正在："+current:""));
+    java.util.Set<String> files=new java.util.HashSet<>();int edits=0,shell=0;
+    for(ToolCallView call:calls){String name=call.record.optString("name");if(name.equals("edit")||name.equals("write")){edits++;try{files.add(new org.json.JSONObject(call.record.optString("args","{}")).optString("path"));}catch(Exception ignored){}}if(name.equals("bash"))shell++;}
+    files.remove("");
+    title.setText(!files.isEmpty()?"文件变更 · "+files.size()+" 个文件 / "+calls.size()+" 步":shell>0?"终端与工具 · "+calls.size()+" 步":"执行过程 · "+calls.size()+" 步");summary.setText(String.join(" · ",states)+(running>0&&!waiting?"\n正在："+current:""));
     summary.setTextColor(failed>0?theme.error:running>0||blocked>0||unverified>0?theme.accent:theme.muted);
     ConversationMinimap.mark(this,failed>0?ConversationMinimap.ERROR:ConversationMinimap.TOOL);refreshAccessibility();
   }

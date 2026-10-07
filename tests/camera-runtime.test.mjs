@@ -1,3 +1,4 @@
+import {stopRuntimeChild} from './runtime-cleanup.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -45,5 +46,5 @@ test('real Pi sends one current camera image per user round and keeps originals 
     const sessionFiles=await readdir(path.join(root,'sessions'),{recursive:true});let history='';
     for(const file of sessionFiles.filter(name=>name.endsWith('.jsonl')))history+=await readFile(path.join(root,'sessions',file),'utf8');
     assert.ok(history.includes(pictures[0])&&history.includes(pictures[1]),'Persisted history lost a frame');
-  }finally{child.kill();server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });

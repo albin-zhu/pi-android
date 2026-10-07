@@ -1,3 +1,4 @@
+import {stopRuntimeChild} from './runtime-cleanup.mjs';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -50,5 +51,5 @@ test('real bundled Pi discovers and calls a saved MCP connector without exposing
     if(serverFailure)throw serverFailure;
     assert.equal(requests,3);assert.equal(fixture.state.calls.length,1);assert.match(answer,/完成工具调用/);
     assert.ok(timeline.some(event=>event.name==='connector_call'&&event.status==='success'));
-  }finally{child.kill();model.closeAllConnections();await new Promise(resolve=>model.close(resolve));await fixture.close();await rm(root,{recursive:true,force:true});}
+  }finally{await stopRuntimeChild(child);model.closeAllConnections();await new Promise(resolve=>model.close(resolve));await fixture.close();await rm(root,{recursive:true,force:true});}
 });

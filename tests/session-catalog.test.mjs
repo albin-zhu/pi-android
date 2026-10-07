@@ -47,3 +47,12 @@ test('catalog rejects traversal and symlinks and does not erase corrupted metada
   const other=path.join(root,'other');fs.mkdirSync(other);const otherManager=SessionManager.create(other,directory);new SessionCatalog(directory,other).persist(otherManager);
   assert.equal((await catalog.list()).length,0,'Other workspace sessions must not be managed here');
 });
+
+test('pin persists independently of archive, trash and restore',async t=>{
+  const {catalog,manager}=setup(t);let item=await catalog.find(manager.getSessionId());
+  catalog.change(item,'pin');item=await catalog.find(item.id);assert.equal(item.pinned,true);
+  catalog.change(item,'archive');item=await catalog.find(item.id);assert.equal(item.archived,true);assert.equal(item.pinned,true);
+  catalog.change(item,'restore');item=await catalog.find(item.id);assert.equal(item.archived,false);assert.equal(item.pinned,true);
+  catalog.change(item,'unpin');item=await catalog.find(item.id);assert.equal(item.pinned,false);
+  catalog.change(item,'delete');item=await catalog.find(item.id);assert.throws(()=>catalog.change(item,'pin'),/恢复/);
+});

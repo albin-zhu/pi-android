@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.zfold.assistant">
  <uses-sdk android:minSdkVersion="30" android:targetSdkVersion="35" />
  <uses-permission android:name="android.permission.INTERNET" />
+ <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
  <uses-permission android:name="android.permission.RECORD_AUDIO" />
  <uses-permission android:name="android.permission.CAMERA" />
  <uses-permission android:name="android.permission.CALL_PHONE" />
@@ -22,6 +23,25 @@
   android:resizeableActivity="true" android:debuggable="true" android:allowBackup="false" android:extractNativeLibs="true" android:usesCleartextTraffic="true">
   <activity android:name=".MainActivity" android:enableOnBackInvokedCallback="true" android:exported="true" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden">
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+   <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+  </activity>
+  <activity android:name=".CircleEntryActivity" android:exported="true" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" android:taskAffinity="" android:noHistory="true" />
+  <activity android:name=".ProcessTextActivity" android:exported="true" android:label="@string/ask_chengcheng" android:icon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:excludeFromRecents="true" android:taskAffinity="" android:documentLaunchMode="always" android:finishOnTaskLaunch="true">
+   <intent-filter android:label="@string/ask_chengcheng">
+    <action android:name="android.intent.action.PROCESS_TEXT"/>
+    <category android:name="android.intent.category.DEFAULT"/>
+    <data android:mimeType="text/plain"/>
+   </intent-filter>
+   <intent-filter android:label="@string/ask_chengcheng">
+    <action android:name="android.intent.action.PROCESS_TEXT"/>
+    <category android:name="android.intent.category.DEFAULT"/>
+    <data android:mimeType="text/*"/>
+   </intent-filter>
+   <intent-filter android:label="@string/ask_chengcheng">
+    <action android:name="android.intent.action.SEND"/>
+    <category android:name="android.intent.category.DEFAULT"/>
+    <data android:mimeType="image/*"/>
+   </intent-filter>
   </activity>
   <activity android:name=".OverlayEntryActivity" android:taskAffinity="" android:exported="true" android:theme="@style/TransparentTheme" android:excludeFromRecents="true">
    <intent-filter><action android:name="android.intent.action.ASSIST"/><category android:name="android.intent.category.DEFAULT"/></intent-filter>
@@ -65,6 +85,10 @@
  <service android:name=".QuestionSessionService" android:exported="false" android:foregroundServiceType="specialUse">
    <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Keep the user-started agent task alive while waiting for a requested user answer and delivering its result" />
  </service>
+  <service android:name=".CircleTileService" android:label="@string/circle_ask_short" android:icon="@drawable/ic_corners_out" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+   <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE"/></intent-filter>
+  </service>
+  <provider android:name=".ArtifactProvider" android:authorities="dev.zfold.assistant.artifacts" android:exported="false" android:grantUriPermissions="true" />
  </application>
  <instrumentation android:name=".PackageCliInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold package CLI check (emulator only)" />
  <instrumentation android:name=".WindowEntryInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold direct system window entry (emulator only)" />
