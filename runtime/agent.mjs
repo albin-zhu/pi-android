@@ -775,6 +775,17 @@ async function receive(command) {
   }
   if(command.type==='jev_status'){emitJevStatus();return;}
   if(nativeTools.receive(command))return;
+  if(command.type==='steer') {
+    try {
+      const text=String(command.text||'').trim();
+      if(!session||!busy||stopRequested||changingSession)throw new Error('当前任务已结束或正在停止，请作为新消息发送');
+      if(command.sessionId!==session.sessionId)throw new Error('会话已切换');
+      if(!text||text.length>32000)throw new Error('引导消息需要 1–32000 个字符');
+      await session.steer(text);
+      emit({type:'steer_result',accepted:true,text,id:command.id});
+    }catch(error){emit({type:'steer_result',accepted:false,message:error.message,id:command.id});}
+    return;
+  }
   if(command.type==='stop') { stopRequested=true; await session?.abort(); return; }
   if(command.type==='configure'||command.type==='configure_default') {
     if(changingSession)throw new Error('会话正在切换，请稍后再试');

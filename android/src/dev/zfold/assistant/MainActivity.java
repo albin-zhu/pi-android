@@ -130,7 +130,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     overflowButton=new Ui.Action(this,R.drawable.ic_dots_three,"","更多工具",theme.muted,Color.TRANSPARENT,()->showToolbarOverflow());LinearLayout.LayoutParams overflowParams=new LinearLayout.LayoutParams(-2,-2);overflowParams.leftMargin=dp(2);toolbar.addView(overflowButton,overflowParams);
     workbenchButton=new Ui.Action(this,R.drawable.ic_workbench,"工作台","打开工作台",theme.ink,Color.TRANSPARENT,()->WorkbenchActivity.open(this));
     View spacer=new View(this);toolbar.addView(spacer,new LinearLayout.LayoutParams(0,1,1));
-    sendButton=button("↑",true,()->{if(runtime.busy)stop();else sendText(input.getText().toString());});sendButton.setBackground(Ui.ripple(this,theme.accent,26,theme.onAccent));sendButton.setElevation(0);toolbar.addView(sendButton,new LinearLayout.LayoutParams(dp(48),dp(48)));composerSurface.addView(toolbar);
+    sendButton=button("↑",true,()->{if(runtime.busy)busyMessageMenu();else sendText(input.getText().toString());});sendButton.setBackground(Ui.ripple(this,theme.accent,26,theme.onAccent));sendButton.setElevation(0);sendButton.setOnLongClickListener(v->{showPendingMessages();return true;});toolbar.addView(sendButton,new LinearLayout.LayoutParams(dp(48),dp(48)));composerSurface.addView(toolbar);
     input.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence t,int a,int b,int c){}public void afterTextChanged(android.text.Editable e){}public void onTextChanged(CharSequence t,int a,int b,int c){updateSend();}});updateSend();
     composerFrame=new FrameLayout(this);composerFrame.addView(composerSurface,new FrameLayout.LayoutParams(-1,-2,Gravity.CENTER_HORIZONTAL));LinearLayout.LayoutParams footerParams=new LinearLayout.LayoutParams(-1,-2);footerParams.topMargin=dp(8);root.addView(composerFrame,footerParams);
     root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,oright,ob)->adjustColumn());swipeNavigation=new SwipeNavigationLayout(this);swipeNavigation.addView(root,new FrameLayout.LayoutParams(-1,-1));swipeNavigation.conversationRegion(scroll);setContentView(swipeNavigation);root.post(this::adjustColumn);
@@ -260,6 +260,32 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);if(draftBitmap!=null){draftBitmap.recycle();draftBitmap=null;}
     if(pendingImage!=null){draftBitmap=Ui.thumbnail(pendingImage,480);if(draftBitmap!=null){draftThumbnail.setImageBitmap(draftBitmap);draftExpanded.setImageBitmap(draftBitmap);}else draftThumbnail.setImageDrawable(Ui.icon(this,R.drawable.ic_image,theme.muted));}
   }
+  void busyMessageMenu(){
+    new AlertDialog.Builder(this).setTitle("任务执行中")
+      .setItems(new String[]{"排队：当前任务完成后发送","引导当前任务（仅文字，提交后不可撤回）","查看 / 编辑 / 取消待发队列","停止任务并清空队列"},(d,which)->{
+        if(which==0)sendText(input.getText().toString());
+        else if(which==1){
+          String text=input.getText().toString().trim();
+          if(text.isEmpty()){notice("请先输入引导文字");return;}
+          if(pendingImage!=null||!localFiles.isEmpty()){notice("引导暂不支持附件，请选择排队发送");return;}
+          runtime.send(PiRuntime.json("type","steer","id",UUID.randomUUID().toString(),"sessionId",runtime.sessionId,"text",text));
+        }else if(which==2)showPendingMessages();else stop();
+      }).show();
+  }
+  void showPendingMessages(){
+    PromptDispatcher dispatcher=PromptDispatcher.get(this);
+    java.util.List<JSONObject> items=dispatcher.pending();
+    if(items.isEmpty()){notice("没有待发消息；长按发送按钮可查看队列");return;}
+    String[] labels=new String[items.size()];
+    for(int i=0;i<items.size();i++)labels[i]=(i+1)+". "+items.get(i).optString("text");
+    new AlertDialog.Builder(this).setTitle("待发队列（仅本次运行保留）").setItems(labels,(d,index)->{
+      JSONObject item=items.get(index);String id=item.optString("id");
+      EditText editor=new EditText(this);editor.setText(item.optString("text"));editor.setMinLines(3);
+      new AlertDialog.Builder(this).setTitle("编辑待发消息（保留原附件）").setView(editor)
+        .setNegativeButton("返回",null).setNeutralButton("取消这条",(a,b)->{notice(dispatcher.cancel(id)?"已取消":"消息已开始，无法取消");})
+        .setPositiveButton("保存",(a,b)->{notice(dispatcher.edit(id,editor.getText().toString())?"已更新":"未保存：消息已开始或文字无效");}).show();
+    }).setNegativeButton("关闭",null).show();
+  }
   void sendText(String value){
     String text=value.trim();if(text.isEmpty()&&pendingImage==null&&localFiles.isEmpty())return;
     SystemAssistEntry.cancel();
@@ -335,6 +361,13 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       case "ready":showStatus(idleStatus());updateModelChip();break;
       case "configured":showStatus(idleStatus());updateModelChip();break;
       case "agent_identity":runtime.send(PiRuntime.json("type","history"));break;
+      case "steer_result":
+        if(event.optBoolean("accepted")){
+          if(input.getText().toString().trim().equals(event.optString("text")))input.setText("");
+          bubble("[引导已提交] "+event.optString("text"),true,null,false);
+          showStatus("引导已提交，将在安全边界处理");
+        }else notice(event.optString("message"));
+        break;
       case "jev_status":break;
       case "jev_error":notice(event.optString("message"));break;
       case "session_changed":followVersion++;displayedSessionId=event.optString("sessionId",runtime.sessionId);minimap.reset();conversation.removeAllViews();toolViews.clear();toolGroups.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
@@ -356,12 +389,12 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
         if(queued!=null&&!isFinishing())handler.postDelayed(()->{if(!isFinishing()){toggleVoice();sendText(queued);}},380);
         break;
       }
-      case "error":finishToolGroups(false);showStatus("需要处理，排队的新指令已取消");pendingTaskPrompt=null;notice(Ui.errorMessage(event.optString("message")));break;
+      case "error":finishToolGroups(false);showStatus("当前任务出错，请检查待发队列");pendingTaskPrompt=null;notice(Ui.errorMessage(event.optString("message")));break;
       case "probe":JSONObject d=event.optJSONObject("device");new AlertDialog.Builder(this).setTitle("本地运行正常").setMessage("Pi "+event.optString("pi")+"\nNode "+event.optString("node")+"\n架构 "+event.optString("arch")+"\n\n原生工具返回：\n"+(d==null?"":d.toString())).setPositiveButton("完成",null).show();break;
     }
     updateSend();updateModelChip();
   }
-  void updateSend(){if(sendButton==null)return;sendButton.setIcon(runtime.busy?R.drawable.ic_stop:R.drawable.ic_arrow_up);sendButton.setContentDescription(runtime.busy?"停止当前任务":"发送");sendButton.setEnabled(runtime.busy||pendingImage!=null||!localFiles.isEmpty()||input.getText().toString().trim().length()>0);}
+  void updateSend(){if(sendButton==null)return;sendButton.setIcon(runtime.busy?R.drawable.ic_stop:R.drawable.ic_arrow_up);sendButton.setContentDescription(runtime.busy?"任务操作：排队、引导、停止；长按管理队列":"发送；长按管理队列");sendButton.setEnabled(runtime.busy||pendingImage!=null||!localFiles.isEmpty()||input.getText().toString().trim().length()>0);}
   private void updateQuestionAction(){if(questionAction==null)return;UserQuestions.Request question=UserQuestions.current();questionAction.setVisibility(question==null?View.GONE:View.VISIBLE);if(question!=null){questionAction.setText("有 "+question.questions.length()+" 个问题需要回答");questionAction.setContentDescription("回答助手的问题");}}
   void updateComposerToolbar(float width){
     if(actionToolbar==null)return;

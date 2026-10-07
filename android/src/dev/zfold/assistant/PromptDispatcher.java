@@ -31,8 +31,20 @@ final class PromptDispatcher implements PiRuntime.Listener {
       });
     }else enqueue(command,token,callback);
   }
+  java.util.List<JSONObject> pending(){
+    java.util.List<JSONObject> result=new ArrayList<>();
+    for(JSONObject item:queue)try{result.add(new JSONObject(item.toString()));}catch(JSONException ignored){}
+    return result;
+  }
+  boolean cancel(String id){return queue.removeIf(item->id.equals(item.optString("id")));}
+  boolean edit(String id,String text){
+    if(text==null||text.trim().isEmpty()||text.length()>32000)return false;
+    for(JSONObject item:queue)if(id.equals(item.optString("id"))){try{item.put("text",text.trim());return true;}catch(JSONException ignored){return false;}}
+    return false;
+  }
   private void enqueue(JSONObject command,int token,Result callback){
     if(token!=epoch||!runtime.sessionId.equals(command.optString("sessionId"))){callback.done(false,false,"会话已切换或请求已取消");return;}
+    if(queue.size()>=8){callback.done(false,false,"待处理请求已满");return;}
     boolean queued=runtime.busy;
     if(queued)queue.add(command);else send(command);
     callback.done(true,queued,null);
