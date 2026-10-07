@@ -72,3 +72,13 @@ For messaging, split search/contact identification from drafting/sending. A sear
 分屏目标涉及第二个应用时，必须先确认用户已授权该应用和动作。`launch` 不是“发送消息”或“提交内容”的授权。`split:true` 只证明有两个应用窗口，不证明业务结果正确。
 
 Relevant tools: `phone_capabilities`, `phone_call`, `phone_sms`, `contact_search`, `camera_capture`, `ui_select`, `screen_read`, `screen_capture`, `ui_tap`, `ui_input`, `ui_swipe`, `ui_back`, `app_list`, `app_open`, `split_screen`, `device_info`. Android accessibility cannot read another app's private database or bypass protected screens.
+
+## Window-aware control (hardening iteration)
+
+- If a screenshot shows a Samsung menu or side panel but `screen_read` reports the underlying app, use `screen_windows` to discover `windowId`, package, type, layer and bounds. Then `screen_read({windowId,packageName})` reads that exact window. Multiple windows matching a package are an ambiguity, not permission to guess.
+- `ui_select` with a package now scopes its initial read to that package. A fresh screen after clicking is an observation, NOT proof that the intended business result happened; `observationAvailable` is separate from `verified`.
+- `ui_system({action:'list'})` reports available global actions. Use `recents` for recent tasks, `home`, `back`, `notifications`, or `quick_settings` only when needed for the authorized task. The returned screenshot must confirm the requested page; dispatched is not success.
+- `ui_tap({nodeId,longPress:true})` requires the node to advertise long-click. Visual long press uses `{screenshotId,x,y,longPress:true}`. This is not drag-and-drop; do not simulate a two-finger gesture with it.
+- Screenshot checks now report `frame_expired`, `frame_consumed`, `frame_id_mismatch`, `foreground_changed`, `window_changed`, or `display_changed`. Never call all these “30-second timeout”. Refresh and re-observe; do not disable validation or replay an uncertain mutation.
+- Capturing and gesture validation use the same active-window policy, including active system menus and excluding accessibility HUDs/keyboards from the primary root policy. This does not guarantee every OEM overlay exposes nodes.
+- `split_screen launch` is only a multiwindow attempt. It may launch a Samsung floating window. `position` does not guarantee a real stage or left/right orientation; compare both target packages and geometry with the screenshot. Prefer verified Samsung UI routes when available. Rejected toggle must not be repeated in a loop.

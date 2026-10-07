@@ -22,3 +22,10 @@ test('missing, ambiguous, wrong-package, and static labels never select a node',
   assert.equal(choosePhoneTarget(screen([node('one','蓝牙',{clickable:true})]),['蓝牙'],'other.package').reason,'not_found');
   assert.equal(choosePhoneTarget(screen([node('one','蓝牙')]),['蓝牙'],pkg).reason,'not_clickable');
 });
+
+test('disabled or password targets and cross-package ancestors are rejected',()=>{
+  assert.equal(choosePhoneTarget(screen([{...node('off','确认',{clickable:true}),enabled:false}]),['确认'],pkg).reason,'not_found');
+  assert.equal(choosePhoneTarget(screen([{...node('secret','确认',{clickable:true}),password:true}]),['确认'],pkg).reason,'not_found');
+  const value=choosePhoneTarget(screen([node('parent','',{clickable:true,packageName:'other.app'}),node('label','确认',{parentId:'parent'})]),['确认'],pkg);
+  assert.equal(value.reason,'not_clickable');
+});

@@ -400,23 +400,25 @@ const definitions = [
   ['contact_search','查找联系人号码','按姓名或号码搜索系统通讯录，首次按需申请联系人权限。返回候选名称与号码；重名或多个号码不能随意挑选，不包含通话和消息记录。',Type.Object({query:Type.String({minLength:1,maxLength:100})})],
   ['phone_sms','发送短信与查询回执','compose 填好短信草稿，不代表发送；send 仅用于用户已经明确指定收件号码、正文并要求发送的短信。status 用 operationId 查询发送回执；subscriptions 列出可用 SIM。send 必须提供稳定 operationId，重复相同 ID 不会重发；unknown/partial 不要自动重发。sent 只表示系统发送回执成功，不表示对方已收到或已读。微信等消息用其 App 的界面工具。',Type.Object({action:Type.Union([Type.Literal('compose'),Type.Literal('send'),Type.Literal('status'),Type.Literal('subscriptions')]),number:Type.Optional(Type.String({minLength:3,maxLength:40})),text:Type.Optional(Type.String({minLength:1,maxLength:2000})),operationId:Type.Optional(Type.String({minLength:1,maxLength:96})),subscriptionId:Type.Optional(Type.Integer({minimum:0}))})],
   ['device_info','读取手机状态','读取真实手机型号、Android 版本、电量和当前授权能力。',Type.Object({})],
-  ['screen_read','读取当前界面','读取节点；若应用返回空树，会直接附上截图和坐标信息。此时切换到视觉操作，不要重复读空树或让 Jev 猜目标。',Type.Object({})],
+  ['screen_read','读取当前界面','读取活动窗口节点；可指定 packageName 或 screen_windows 返回的 windowId。多窗口歧义时不会猜测。空树附截图。',Type.Object({packageName:Type.Optional(Type.String()),windowId:Type.Optional(Type.Integer())})],
+  ['screen_windows','查看可见窗口','列出无障碍可见窗口的包名、类型、层级、边界与 windowId，用于识别系统浮层、侧边栏及分屏目标。只读。',Type.Object({})],
+  ['ui_system','系统导航','list 查询系统支持动作；back/home/recents/notifications/quick_settings 执行用户授权的导航并返回截图。dispatched 不是界面验证成功。',Type.Object({action:Type.Union(['list','back','home','recents','notifications','quick_settings'].map(v=>Type.Literal(v)))})],
   ['screen_capture','查看屏幕','返回截图、screenshotId、图片尺寸。save:true 可将同一 JPEG 保存到当前工作区 screenshots 并返回 path；默认不保存，不写相册。保存失败时 saved:false 和 saveError 不影响读屏。后续坐标必须使用图片像素；每帧只支持一次动作。',Type.Object({save:Type.Optional(Type.Boolean())})],
-  ['ui_tap','点击界面','点击新节点；或提供最近 screenshotId 和截图像素 x/y（不是手机原始像素）。视觉操作后自动返回新截图。',Type.Object({nodeId:Type.Optional(Type.String()),screenshotId:Type.Optional(Type.String()),packageName:Type.Optional(Type.String()),x:Type.Optional(Type.Number()),y:Type.Optional(Type.Number())})],
+  ['ui_tap','点击界面','点击新节点或截图位置。longPress:true 为长按，不是拖拽。视觉操作返回新截图，失败不自动重试。',Type.Object({longPress:Type.Optional(Type.Boolean()),nodeId:Type.Optional(Type.String()),screenshotId:Type.Optional(Type.String()),packageName:Type.Optional(Type.String()),x:Type.Optional(Type.Number()),y:Type.Optional(Type.Number())})],
   ['ui_input','输入文字','替换节点文本；无节点时提供 packageName，使用 Android 13+ 当前焦点输入连接。可同时给 screenshotId+x+y，一次完成点输入框、中文输入、回读和返回截图。不会切换键盘、使用剪贴板或发送消息。',Type.Object({nodeId:Type.Optional(Type.String()),text:Type.String({maxLength:4000}),packageName:Type.Optional(Type.String()),screenshotId:Type.Optional(Type.String()),x:Type.Optional(Type.Number()),y:Type.Optional(Type.Number())})],
   ['ui_swipe','滑动界面','提供最近 screenshotId，按截图像素坐标滑动；起终点不能相同。执行后自动返回新截图。',Type.Object({screenshotId:Type.String(),x1:Type.Number(),y1:Type.Number(),x2:Type.Number(),y2:Type.Number()})],
   ['ui_back','返回上一页','执行 Android 返回操作。',Type.Object({})],
   ['app_open','打开应用','使用包名打开应用；可通过 app_list 获取包名。',Type.Object({packageName:Type.String()})],
   ['open','打开 URL/文件/目录','Android 原生打开工具：URL 用系统 handler，文件/目录用 DocumentsProvider；文件没有专用 handler 时回退到包含目录。target 可以是 https/mailto 等 URI，或 /storage/pi 下的文件、目录。',Type.Object({target:Type.String({minLength:1,maxLength:4096}),mime:Type.Optional(Type.String({maxLength:160})),chooser:Type.Optional(Type.Boolean())})],
   ['app_list','列出可打开的应用','列出手机具有启动入口的应用名称与包名。',Type.Object({})],
-  ['split_screen','控制折叠屏分屏','state 读取当前多窗口状态；launch 用 multi-window launch bounds 把指定包名放到 left/primary 或 right/secondary（竖屏自动映射 top/bottom），并确认两个应用窗格；toggle 是 OEM 可能拒绝的回退动作。',Type.Object({action:Type.Union([Type.Literal('state'),Type.Literal('toggle'),Type.Literal('launch')]),packageName:Type.Optional(Type.String()),position:Type.Optional(Type.Union([Type.Literal('left'),Type.Literal('right'),Type.Literal('primary'),Type.Literal('secondary')]))})],
+  ['split_screen','控制折叠屏分屏','state 读取窗口几何推断；launch 仅尝试多窗口启动，三星可能打开浮窗，position 不保证真实左右位置。必须复查目标包、边界和截图；toggle 可能被系统拒绝。',Type.Object({action:Type.Union([Type.Literal('state'),Type.Literal('toggle'),Type.Literal('launch')]),packageName:Type.Optional(Type.String()),position:Type.Optional(Type.Union([Type.Literal('left'),Type.Literal('right'),Type.Literal('primary'),Type.Literal('secondary')]))})],
 ];
 const selectTool = {
   name:'ui_select',label:'按名称选择界面目标',
   description:'一次完成读屏、唯一匹配明确的可见标签、点击并复查新界面。没有匹配或存在歧义时不会点击；可给最多 6 个同义标签。只用于用户已经明确授权的操作。',
   parameters:Type.Object({targets:Type.Array(Type.String(),{minItems:1,maxItems:6}),packageName:Type.Optional(Type.String())}),
   async execute(_id,args,signal){
-    const before=await android('screen_read',{},signal);
+    const before=await android('screen_read',args.packageName?{packageName:args.packageName}:{},signal);
     const choice=choosePhoneTarget(before,args.targets,args.packageName);
     if(!choice.match){const result={performed:false,reason:choice.reason,candidates:choice.candidates,screen:before};return {content:[{type:'text',text:JSON.stringify(result)}],details:result};}
     let tap;
@@ -435,7 +437,7 @@ const selectTool = {
       const summary=value=>JSON.stringify((value.nodes||[]).map(node=>[node.package,node.text,node.description,node.bounds]));
       if(summary(screen)===summary(before)){await new Promise(resolve=>setTimeout(resolve,250));screen=await android('screen_read',{},signal);}
     }catch(error){if(signal?.aborted)throw error;verificationError=error.message;}
-    const result={performed:true,selected:{text:choice.match.text,description:choice.match.description,package:choice.match.package},screen:screen||null,verified:Boolean(screen),verificationError};
+    const result={performed:true,selected:{text:choice.match.text,description:choice.match.description,package:choice.match.package},screen:screen||null,verified:false,observationAvailable:Boolean(screen),verificationError};
     return {content:[{type:'text',text:JSON.stringify(result)}],details:result};
   }
 };
@@ -537,7 +539,7 @@ const tools = [...fileTools,selectTool,phoneTaskTool,sandboxStatusTool,toolInsta
   name,label,description,parameters,
   async execute(id, args, signal) {
     let result = await android(name,args,signal);
-    if((name==='screen_read'&&result.readable===false)||(name==='ui_tap'&&!args.nodeId)||(name==='ui_input'&&!args.nodeId)||name==='ui_swipe'||name==='split_screen'&&['toggle','launch'].includes(args.action||'')||(name==='ui_back'&&phoneGuard.packageName))result=await withScreenshot(result,signal);
+    if((name==='screen_read'&&result.readable===false)||(name==='ui_tap'&&!args.nodeId)||(name==='ui_input'&&!args.nodeId)||name==='ui_swipe'||name==='ui_system'&&args.action!=='list'||name==='split_screen'&&['toggle','launch'].includes(args.action||'')||(name==='ui_back'&&phoneGuard.packageName))result=await withScreenshot(result,signal);
     return androidToolResult(result);
   }
 }))];

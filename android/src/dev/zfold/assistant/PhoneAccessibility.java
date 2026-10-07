@@ -33,10 +33,20 @@ public final class PhoneAccessibility extends AccessibilityService {
   void execute(String name,JSONObject args,AndroidTools.Result result)throws Exception {
     if(args.has("expectedPackageName")&&!args.optString("expectedPackageName").equals(foregroundPackage()))throw new Exception("当前应用已离开本轮目标，已停止操作；请回到目标应用");
     if(name.equals("screen_read")) {
-      clearNodes();AccessibilityNodeInfo root=applicationRoot();if(root==null)throw new Exception("当前界面不可读取");
+      clearNodes();AccessibilityNodeInfo root=readRoot(args);if(root==null)throw new Exception("目标窗口不可读取，请使用 screen_windows 检查可见窗口");
       observedWindow=root.getWindowId();observedPackage=String.valueOf(root.getPackageName());observedAt=SystemClock.uptimeMillis();
       JSONArray tree=new JSONArray();walk(root,tree,0,null,"0");
-      result.done(PiRuntime.json("generation",generation,"packageName",observedPackage,"observedAt",System.currentTimeMillis(),"nodes",tree,"readable",tree.length()>0,"reason",tree.length()>0?null:"empty_accessibility_tree","nextTool",tree.length()>0?null:"screen_capture","width",getResources().getDisplayMetrics().widthPixels,"height",getResources().getDisplayMetrics().heightPixels),null);return;
+      result.done(PiRuntime.json("generation",generation,"windowId",observedWindow,"packageName",observedPackage,"observedAt",System.currentTimeMillis(),"nodes",tree,"readable",tree.length()>0,"reason",tree.length()>0?null:"empty_accessibility_tree","nextTool",tree.length()>0?null:"screen_capture","width",getResources().getDisplayMetrics().widthPixels,"height",getResources().getDisplayMetrics().heightPixels),null);return;
+    }
+    if(name.equals("screen_windows")){readWindows(result);return;}
+    if(name.equals("ui_system")){
+      String action=args.optString("action","list");JSONArray supported=new JSONArray();boolean available=false;
+      int code=action.equals("back")?GLOBAL_ACTION_BACK:action.equals("home")?GLOBAL_ACTION_HOME:action.equals("recents")?GLOBAL_ACTION_RECENTS:action.equals("notifications")?GLOBAL_ACTION_NOTIFICATIONS:action.equals("quick_settings")?GLOBAL_ACTION_QUICK_SETTINGS:0;
+      for(AccessibilityNodeInfo.AccessibilityAction entry:getSystemActions()){supported.put(PiRuntime.json("id",entry.getId(),"label",String.valueOf(entry.getLabel())));if(entry.getId()==code)available=true;}
+      if(action.equals("list")){result.done(PiRuntime.json("actions",supported),null);return;}
+      if(code==0)throw new Exception("不支持的系统动作");
+      if(!available){result.done(PiRuntime.json("performed",false,"reason","system_action_unavailable","actions",supported),null);return;}
+      boolean dispatched=performGlobalAction(code);result.done(PiRuntime.json("performed",dispatched,"status",dispatched?"dispatched":"not_dispatched","verified",false),null);return;
     }
     if(name.equals("ui_act")){act(args,result);return;}
     if(name.equals("screen_capture")){captureTool(args,result);return;}
@@ -44,8 +54,9 @@ public final class PhoneAccessibility extends AccessibilityService {
     if(name.equals("ui_tap")) {
       if(args.has("nodeId")){
         AccessibilityNodeInfo n=node(args.getString("nodeId"));
-        requireUsable(n,AccessibilityNodeInfo.ACTION_CLICK);
-        boolean ok=n.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        int action=args.optBoolean("longPress")?AccessibilityNodeInfo.ACTION_LONG_CLICK:AccessibilityNodeInfo.ACTION_CLICK;
+        requireUsable(n,action);
+        boolean ok=n.performAction(action);
         result.done(PiRuntime.json("performed",ok,"status",ok?"dispatched":"not_dispatched","code",ok?null:"dispatch_rejected"),null);return;
       }
       visualGesture(args,false,result);return;
@@ -82,7 +93,14 @@ public final class PhoneAccessibility extends AccessibilityService {
         "left",bounds.left,"top",bounds.top,"right",bounds.right,"bottom",bounds.bottom,
         "width",bounds.width(),"height",bounds.height(),"orientation",(bounds.width()>bounds.height())?"horizontal":"vertical"));
     }
-    boolean sideBySide=left&&right,stacked=top&&bottom;
+    boolean sideBySide=false,stacked=false;
+    for(int i=0;i<windows.length();i++)for(int j=i+1;j<windows.length();j++){
+      JSONObject a=windows.optJSONObject(i),b=windows.optJSONObject(j);
+      if(a.optString("package").equals(b.optString("package"))||a.optString("package").equals("com.android.systemui")||b.optString("package").equals("com.android.systemui"))continue;
+      if(isPanePair(a,b,size.x,size.y)){
+        if(a.optInt("right")<=b.optInt("left")||b.optInt("right")<=a.optInt("left"))sideBySide=true;else stacked=true;
+      }
+    }
     result.done(PiRuntime.json("displayWidth",size.x,"displayHeight",size.y,"applicationWindows",applications,
       "windows",windows,"split",sideBySide||stacked,"mode",sideBySide?"side_by_side":stacked?"stacked":applications>1?"multiple":"single"),null);
   }
@@ -156,15 +174,15 @@ public final class PhoneAccessibility extends AccessibilityService {
   private Display currentDisplay(){return ((android.hardware.display.DisplayManager)getSystemService(DISPLAY_SERVICE)).getDisplay(Display.DEFAULT_DISPLAY);}
   private void visualGesture(JSONObject args,boolean swipe,AndroidTools.Result result)throws Exception{
     VisualFrame frame=visualFrame;if(frame==null)throw new Exception("请先读取截图，使用 screenshotId 和图片像素坐标");
-    AccessibilityNodeInfo root=getRootInActiveWindow();String pkg=root==null?"":String.valueOf(root.getPackageName());int window=root==null?-1:root.getWindowId();if(root!=null)root.recycle();
+    AccessibilityNodeInfo root=applicationRoot();String pkg=root==null?"":String.valueOf(root.getPackageName());int window=root==null?-1:root.getWindowId();if(root!=null)root.recycle();
     Display display=currentDisplay();Point size=new Point();display.getRealSize(size);frame.validate(args,pkg,window,size.x,size.y,display.getRotation());
     float x1=frame.x(args.getDouble(swipe?"x1":"x")),y1=frame.y(args.getDouble(swipe?"y1":"y"));
     float x2=swipe?frame.x(args.getDouble("x2")):x1,y2=swipe?frame.y(args.getDouble("y2")):y1;
     if(swipe&&Math.hypot(x2-x1,y2-y1)<8)throw new Exception("滑动起终点必须不同；点击请使用 ui_tap");
-    frame.consumed=true;injectedUntil=SystemClock.elapsedRealtime()+1200;gesture(x1,y1,x2,y2,swipe?400:80,result);
+    frame.consumed=true;injectedUntil=SystemClock.elapsedRealtime()+1200;gesture(x1,y1,x2,y2,swipe?400:args.optBoolean("longPress")?650:80,result);
   }
   private void captureTool(JSONObject args,AndroidTools.Result result){
-    String pkg=foregroundPackage();AccessibilityNodeInfo root=applicationRoot();int window=root==null?-1:root.getWindowId();if(root!=null)root.recycle();
+    AccessibilityNodeInfo root=applicationRoot();String pkg=root==null?"":String.valueOf(root.getPackageName());int window=root==null?-1:root.getWindowId();if(root!=null)root.recycle();
     int rotation=currentDisplay().getRotation();
     capture((bitmap,error)->{
       if(error!=null){result.done(null,error);return;}
@@ -217,19 +235,37 @@ public final class PhoneAccessibility extends AccessibilityService {
       findUnique(child,identity,count,found,depth+1,visited);if(found[0]!=child)child.recycle();
     }
   }
-  private AccessibilityNodeInfo applicationRoot(){
-    AccessibilityNodeInfo fallback=getRootInActiveWindow();
-    if(fallback!=null&&focusedWindowId()==fallback.getWindowId())return fallback;
-    for(AccessibilityWindowInfo window:getWindows()){
-      if(window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION||!window.isFocused())continue;
-      AccessibilityNodeInfo root=window.getRoot();
-      if(root!=null){if(fallback!=null&&fallback!=root)fallback.recycle();return root;}
+  private void readWindows(AndroidTools.Result result){
+    JSONArray rows=new JSONArray();
+    for(AccessibilityWindowInfo w:getWindows()){
+      AccessibilityNodeInfo root=w.getRoot();String pkg="";if(root!=null){pkg=String.valueOf(root.getPackageName());root.recycle();}
+      Rect bounds=new Rect();w.getBoundsInScreen(bounds);
+      rows.put(PiRuntime.json("windowId",w.getId(),"packageName",pkg,"type",w.getType(),"layer",w.getLayer(),"active",w.isActive(),"focused",w.isFocused(),"title",String.valueOf(w.getTitle()),"bounds",new JSONArray().put(bounds.left).put(bounds.top).put(bounds.right).put(bounds.bottom)));
     }
-    return fallback;
+    result.done(PiRuntime.json("windows",rows),null);
   }
-  private int focusedWindowId(){
-    for(AccessibilityWindowInfo window:getWindows())if(window.isFocused())return window.getId();
-    return -1;
+  private AccessibilityNodeInfo readRoot(JSONObject args)throws Exception {
+    if(!args.has("windowId")&&!args.has("packageName"))return applicationRoot();
+    AccessibilityNodeInfo chosen=null;
+    for(AccessibilityWindowInfo w:getWindows()){
+      if(args.has("windowId")&&w.getId()!=args.optInt("windowId"))continue;
+      if(w.getType()==AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY)continue;
+      AccessibilityNodeInfo root=w.getRoot();if(root==null)continue;
+      if(args.has("packageName")&&!args.optString("packageName").equals(String.valueOf(root.getPackageName()))){root.recycle();continue;}
+      if(chosen!=null){chosen.recycle();root.recycle();throw new Exception("目标应用有多个窗口，请先 screen_windows 再指定 windowId");}chosen=root;
+    }
+    return chosen;
+  }
+  private AccessibilityNodeInfo applicationRoot(){
+    // Use the same active-window policy for observation and gesture validation.
+    // A focused underlying app must not replace an active Samsung system menu.
+    AccessibilityWindowInfo chosen=null;
+    for(AccessibilityWindowInfo w:getWindows()){
+      if(w.getType()==AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY||w.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD)continue;
+      if(w.isActive()&&(chosen==null||w.getLayer()>chosen.getLayer()))chosen=w;
+    }
+    if(chosen!=null){AccessibilityNodeInfo root=chosen.getRoot();if(root!=null)return root;}
+    return getRootInActiveWindow();
   }
   private AccessibilityNodeInfo contextRoot(){
     if(observedAt==0||SystemClock.uptimeMillis()-observedAt>30000)return null;

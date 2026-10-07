@@ -4,6 +4,7 @@ function normalize(value) {
 }
 
 function isUsable(node, screen) {
+  if(node.enabled===false||node.password===true)return false;
   const b=node.bounds;
   return Array.isArray(b)&&b.length===4&&b[2]>b[0]&&b[3]>b[1]&&
     (!Number.isFinite(screen.height)||b[3]-b[1]<screen.height*.45);
@@ -16,6 +17,7 @@ export function choosePhoneTarget(screen, targets, packageName) {
   const wanted=[...new Set((Array.isArray(targets)?targets:[]).map(normalize).filter(Boolean))].slice(0,6);
   const matches=new Map();let visibleMatches=0;
   for(const node of nodes) {
+    if(node.enabled===false||node.password===true)continue;
     if(packageName&&node.package!==packageName)continue;
     const labels=[node.text,node.description].map(normalize).filter(Boolean);
     let score=0;
@@ -27,7 +29,7 @@ export function choosePhoneTarget(screen, targets, packageName) {
     visibleMatches++;
     let action=node;
     for(let depth=0;depth<10&&action&&!action.clickable;depth++)action=byId.get(action.parentId);
-    if(!action||!isUsable(action,screen))continue;
+    if(!action||!isUsable(action,screen)||(packageName&&action.package!==packageName))continue;
     const previous=matches.get(action.nodeId);
     if(!previous||score>previous.score)matches.set(action.nodeId,{nodeId:action.nodeId,text:node.text,description:node.description,package:node.package,bounds:action.bounds,score});
   }
