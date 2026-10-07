@@ -131,12 +131,15 @@ final class Ui {
 
   static final class RichBlock extends LinearLayout {
     private final TextView body;
+    private String rawText="";
+    String getText(){return rawText;}
     RichBlock(Context c,int size,int color,String value){
       super(c);setOrientation(VERTICAL);
       body=text(c,"",size,color);body.setTextIsSelectable(true);body.setLineSpacing(dp(c,5),1f);body.setHighlightColor(0x22000000);
       addView(body,new LayoutParams(-1,-2));setText(value);
     }
     void setText(String raw){
+      rawText=raw==null?"":raw;
       removeAllViews();addView(body,new LayoutParams(-1,-2));
       appendMarkdown(this,raw,13,((body.getTextColors()!=null?body.getTextColors().getDefaultColor():0xff101418)));
     }

@@ -183,7 +183,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   void adjustColumn(){
     if(scroll==null||composerFrame==null)return;int viewport=scroll.getWidth();if(viewport<=0)return;
     updateWindowLayout();
-    int width=Math.min(viewport,dp(720)),side=Math.max(0,(viewport-width)/2);
+    int width=Math.min(viewport,dp(640)),side=Math.max(0,(viewport-width)/2);
     if(conversation.getPaddingLeft()!=side||conversation.getPaddingTop()!=dp(smallWindow?4:14))conversation.setPadding(side,dp(smallWindow?4:14),side,dp(smallWindow?8:22));
     FrameLayout.LayoutParams params=(FrameLayout.LayoutParams)composerSurface.getLayoutParams();
     if(params.width!=width){params.width=width;composerSurface.setLayoutParams(params);}
@@ -275,7 +275,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       TextView name=text(runtime.agentName,12,theme.muted);name.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));LinearLayout.LayoutParams nameParams=new LinearLayout.LayoutParams(-2,-2);nameParams.leftMargin=dp(8);meta.addView(name,nameParams);
       View space=new View(this);meta.addView(space,new LinearLayout.LayoutParams(0,1,1));
       Ui.Action copy=new Ui.Action(this,R.drawable.ic_copy,"","复制回答",theme.muted,Color.TRANSPARENT,()->{
-        ((android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Zfold",value));
+        ((android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("橙橙",view.getText().toString()));
         Toast.makeText(this,"回答已复制",Toast.LENGTH_SHORT).show();
       });meta.addView(copy,new LinearLayout.LayoutParams(dp(38),dp(38)));
       card.addView(meta);LinearLayout.LayoutParams replyParams=new LinearLayout.LayoutParams(-1,-2);replyParams.topMargin=dp(9);card.addView(view,replyParams);
