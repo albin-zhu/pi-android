@@ -233,7 +233,6 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       case "voice":toggleVoice();return true;
       case "share":toggleScreenShare();return true;
       case "new":
-        if(runtime.busy){showStatus("请先停止当前任务");return false;}
         runtime.send(PiRuntime.json("type","new_session"));return true;
       case "stop":stop();return true;
       case "skill":sendText(SlashCommands.skillPrompt(argument));return true;
@@ -254,7 +253,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       public void openProviderAuth(){ProviderAuthDialog.show(anchor,runtime);}
       public void openRuntimePacks(){runtimePacksSettings();}
       public void openTerminal(){TerminalActivity.open(MainActivity.this);}
-      public void newSession(){if(!runtime.busy)runtime.send(PiRuntime.json("type","new_session"));}
+      public void newSession(){runtime.send(PiRuntime.json("type","new_session"));}
       public void stopTask(){stop();}
       public void toggleVoice(){toggleVoice();}
       public void toggleScreenShare(){toggleScreenShare();}

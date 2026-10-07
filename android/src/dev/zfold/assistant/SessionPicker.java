@@ -56,7 +56,7 @@ final class SessionPicker implements PiRuntime.Listener {
     TextView name=Ui.text(context,runtime.agentName,16,theme.ink);name.setSingleLine(true);name.setEllipsize(android.text.TextUtils.TruncateAt.END);name.setTypeface(Typeface.create("sans-serif-medium",0));LinearLayout.LayoutParams nameParams=new LinearLayout.LayoutParams(0,-2,1);nameParams.leftMargin=Ui.dp(context,9);brand.addView(name,nameParams);
     Ui.Action close=new Ui.Action(context,R.drawable.ic_x,"","关闭会话侧边栏",theme.muted,Color.TRANSPARENT,()->dismiss());brand.addView(close,new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));drawer.addView(brand);
     LinearLayout controls=new LinearLayout(context);controls.setGravity(Gravity.CENTER_VERTICAL);drawer.addView(controls,new LinearLayout.LayoutParams(-1,-2));
-    create=new Ui.Action(context,R.drawable.ic_chat_circle_text,"新对话","新建会话",theme.accent,theme.accentSoft,()->{if(waiting||runtime.busy)return;waiting=true;create.setEnabled(false);runtime.send(PiRuntime.json("type","new_session"));});controls.addView(create,new LinearLayout.LayoutParams(0,-2,1));
+    create=new Ui.Action(context,R.drawable.ic_chat_circle_text,"新对话","新建会话",theme.accent,theme.accentSoft,()->{if(waiting)return;waiting=true;create.setEnabled(false);runtime.send(PiRuntime.json("type","new_session"));});controls.addView(create,new LinearLayout.LayoutParams(0,-2,1));
     filterAction=new Ui.Action(context,R.drawable.ic_sidebar,"会话 ▾","会话列表筛选",theme.muted,Color.TRANSPARENT,this::chooseFilter);filterAction.label.setTextSize(12);filterAction.label.setMaxWidth(Ui.dp(context,60));controls.addView(filterAction,new LinearLayout.LayoutParams(-2,-2));
     LinearLayout searchRow=new LinearLayout(context);searchRow.setGravity(Gravity.CENTER_VERTICAL);searchRow.setPadding(0,Ui.dp(context,8),0,Ui.dp(context,6));
     search=new EditText(context);search.setSingleLine(true);search.setTextSize(14);search.setTextColor(theme.ink);search.setHintTextColor(theme.muted);search.setHint("搜索标题或首条消息");search.setPadding(Ui.dp(context,12),0,Ui.dp(context,8),0);search.setBackground(Ui.shape(context,theme.field,12,0));search.setMinimumHeight(Ui.dp(context,44));
@@ -121,14 +121,14 @@ final class SessionPicker implements PiRuntime.Listener {
       case "sessions":render(event.optJSONArray("items"));break;
       case "session_changed":if(!"session_management".equals(event.optString("reason")))dismiss();break;
       case "session_managed":if(event.optString("requestId").equals(pending)){pending=null;if(bulkAction!=null){batchDone++;waiting=false;if(!batch.isEmpty())nextBatch();else{bulkAction=null;selected.clear();selecting=false;render(records);toast("已处理 "+batchDone+" 个会话");}}else{render(records);toast("会话已更新");}}break;
-      case "session_error":if(pending==null||pending.equals(event.optString("requestId"))){pending=null;waiting=false;batch.clear();bulkAction=null;create.setEnabled(!runtime.busy);toast(event.optString("message"));if(records.length()==0)message(event.optString("message"));}break;
-      case "turn_start":case "turn_end":create.setEnabled(!waiting&&!runtime.busy);break;
+      case "session_error":if(pending==null||pending.equals(event.optString("requestId"))){pending=null;waiting=false;batch.clear();bulkAction=null;create.setEnabled(!waiting);toast(event.optString("message"));if(records.length()==0)message(event.optString("message"));}break;
+      case "turn_start":case "turn_end":create.setEnabled(!waiting);break;
       case "error":if(waiting){waiting=false;create.setEnabled(true);message(Ui.errorMessage(event.optString("message")));}break;
     }
   }
 
   void render(JSONArray items){
-    records=items==null?new JSONArray():items;waiting=pending!=null;create.setEnabled(!waiting&&!runtime.busy);footer.setText(runtime.busy?"任务执行中，完成后可管理会话":filter==2?"可恢复，彻底删除后无法找回":"会话仅保存在这台手机");list.removeAllViews();
+    records=items==null?new JSONArray():items;waiting=pending!=null;create.setEnabled(!waiting);footer.setText(filter==2?"可恢复，彻底删除后无法找回":runtime.busy?"可以新建会话；当前这一轮会停在原来的对话":"会话仅保存在这台手机");list.removeAllViews();
     filterAction.setText(FILTERS[filter]+" ▾");filterAction.setContentDescription("会话列表筛选，当前"+FILTERS[filter]);
     Context context=anchor.getContext();
     if(bulkBar!=null){bulkBar.setVisibility(selecting?View.VISIBLE:View.GONE);archiveSelected.setVisibility(filter==0?View.VISIBLE:View.GONE);deleteSelected.setVisibility(filter==2?View.GONE:View.VISIBLE);archiveSelected.setEnabled(!waiting&&!runtime.busy&&!selected.isEmpty());deleteSelected.setEnabled(!waiting&&!runtime.busy&&!selected.isEmpty());}
@@ -150,7 +150,7 @@ final class SessionPicker implements PiRuntime.Listener {
       String time=DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(new Date(item.optLong("modified",System.currentTimeMillis())));
       TextView detail=Ui.text(context,(filter==0?(current?"当前 · ":""):FILTERS[filter]+" · ")+time,11,theme.muted);detail.setSingleLine(true);detail.setEllipsize(android.text.TextUtils.TruncateAt.END);LinearLayout.LayoutParams detailParams=new LinearLayout.LayoutParams(-1,-2);detailParams.topMargin=Ui.dp(context,4);labels.addView(detail,detailParams);
       row.setContentDescription(name+(filter!=0?"，管理会话":current?"，当前会话":"，打开会话"));row.setClickable(true);row.setFocusable(true);
-      row.setOnClickListener(v->{if(waiting)return;if(selecting){if(selected.contains(id))selected.remove(id);else selected.add(id);int y=sessionScroll.getScrollY();render(records);sessionScroll.post(()->sessionScroll.scrollTo(0,y));return;}if(runtime.busy){toast("请先停止当前任务再切换会话");return;}if(filter!=0){manage(item);return;}if(current){dismiss();return;}waiting=true;runtime.send(PiRuntime.json("type","open_session","id",id));});
+      row.setOnClickListener(v->{if(waiting)return;if(selecting){if(selected.contains(id))selected.remove(id);else selected.add(id);int y=sessionScroll.getScrollY();render(records);sessionScroll.post(()->sessionScroll.scrollTo(0,y));return;}if(filter!=0){manage(item);return;}if(current){dismiss();return;}waiting=true;runtime.send(PiRuntime.json("type","open_session","id",id));});
       row.setOnLongClickListener(v->{manage(item);return true;});
       row.addView(new Ui.Action(context,R.drawable.ic_dots_three,"","管理会话："+name,theme.muted,Color.TRANSPARENT,()->manage(item)),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
       LinearLayout.LayoutParams rowParams=new LinearLayout.LayoutParams(-1,-2);rowParams.bottomMargin=Ui.dp(context,3);list.addView(row,rowParams);
@@ -214,6 +214,6 @@ final class SessionPicker implements PiRuntime.Listener {
     if(!canManage(item))return;pending=java.util.UUID.randomUUID().toString();waiting=true;create.setEnabled(false);
     JSONObject command=PiRuntime.json("type","session_manage","id",item.optString("id"),"action",action,"requestId",pending,"confirm",action.equals("delete")||action.equals("purge"));
     try{if(name!=null)command.put("name",name);}catch(JSONException ignored){}runtime.send(command);
-    String request=pending;anchor.postDelayed(()->{if(request.equals(pending)){pending=null;waiting=false;create.setEnabled(!runtime.busy);batch.clear();bulkAction=null;toast("操作结果尚未确认，批量操作已暂停，请重新打开列表查看");}},10000);
+    String request=pending;anchor.postDelayed(()->{if(request.equals(pending)){pending=null;waiting=false;create.setEnabled(true);batch.clear();bulkAction=null;toast("操作结果尚未确认，批量操作已暂停，请重新打开列表查看");}},10000);
   }
 }

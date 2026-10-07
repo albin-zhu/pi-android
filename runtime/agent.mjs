@@ -219,6 +219,27 @@ async function emitSessions(){
   emit({type:'sessions',currentId,items});
 }
 
+async function switchSession(command){
+  if(changingSession)throw new Error('会话正在切换，请稍后再试');
+  if(!config)throw new Error('请先连接模型');
+  changingSession=true;
+  try{
+    if(busy&&session){stopRequested=true;await session.abort().catch(()=>{});}
+    let manager;
+    if(command.type==='new_session'||command.newSession)manager=SessionManager.create(workspace,sessions);
+    else{
+      const selected=await sessionCatalog.find(command.id);
+      if(selected.archived||selected.deleted)throw new Error('请先把这个会话恢复到会话列表');
+      if(selected.id===session?.sessionId){emitHistory();return;}
+      manager=sessionCatalog.open(selected);
+    }
+    await activateSession(manager);
+    await emitSessions();
+    emit({type:'session_changed',sessionId:session.sessionId});
+    emitHistory();
+  }finally{changingSession=false;}
+}
+
 async function manageSession(command){
   let locked=false;
   try{
@@ -816,28 +837,14 @@ async function receive(command) {
   if(command.type==='session_manage'){await manageSession(command);return;}
   if(command.type==='skills_manage'){receiveSkills(command);return;}
   if(command.type==='new_session'||command.type==='open_session'){
-    if(busy)throw new Error('请先停止当前任务再切换会话');
-    if(changingSession)throw new Error('会话正在切换，请稍后再试');
-    if(!config)throw new Error('请先连接模型');
-    changingSession=true;try{
-    let manager;
-    if(command.type==='new_session')manager=SessionManager.create(workspace,sessions);
-    else{
-      const selected=await sessionCatalog.find(command.id);
-      if(selected.archived||selected.deleted)throw new Error('请先把这个会话恢复到会话列表');
-      if(selected.id===session?.sessionId){emitHistory();return;}
-      manager=sessionCatalog.open(selected);
-    }
-    await activateSession(manager);
-    await emitSessions();changingSession=false;
-    emit({type:'session_changed',sessionId:session.sessionId});emitHistory();
-    }finally{changingSession=false;}return;
+    await switchSession(command);return;
   }
   if(command.type==='probe') {
     const info=await android('device_info',{},undefined);
     emit({type:'probe',node:process.version,pi:'0.85.1',platform:process.platform,arch:process.arch,device:info}); return;
   }
   if(command.type==='prompt') {
+    if(command.newSession)await switchSession({type:'new_session'});
     if(changingSession)throw new Error('会话正在切换，请稍后再试');
     if(!session) throw new Error('请先配置模型地址、名称和 API Key');
     if(command.sessionId&&command.sessionId!==session.sessionId)throw new Error('发送目标会话已经改变，请重新提交');

@@ -75,12 +75,18 @@ final class SelectionAskOverlay {
     input.setImeOptions(EditorInfo.IME_ACTION_SEND);input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);
     body.addView(input,new LinearLayout.LayoutParams(-1,-2));
 
-    LinearLayout actions=new LinearLayout(app);actions.setGravity(Gravity.END);
+    LinearLayout actions=new LinearLayout(app);actions.setGravity(Gravity.CENTER_VERTICAL);
     actions.setPadding(0,Ui.dp(app,4),0,0);
-    Ui.Action send=new Ui.Action(app,R.drawable.ic_arrow_up,"发送","发送提问",0xffedf4ff,0xff2563eb,()->submit(app,input.getText().toString(),image,selectedText));
+    boolean[] fresh={false};
+    TextView neu=Ui.text(app,"新会话",12,0xff8aa0b5);
+    neu.setPadding(Ui.dp(app,4),Ui.dp(app,8),Ui.dp(app,8),Ui.dp(app,8));
+    neu.setContentDescription("发送到新会话");
+    neu.setOnClickListener(v->{fresh[0]=!fresh[0];neu.setText(fresh[0]?"新会话 · 开":"新会话");neu.setTextColor(fresh[0]?0xff93c5fd:0xff8aa0b5);});
+    actions.addView(neu,new LinearLayout.LayoutParams(0,-2,1f));
+    Ui.Action send=new Ui.Action(app,R.drawable.ic_arrow_up,"发送","发送提问",0xffedf4ff,0xff2563eb,()->submit(app,input.getText().toString(),image,selectedText,fresh[0]));
     actions.addView(send,new LinearLayout.LayoutParams(Ui.dp(app,88),Ui.dp(app,40)));
     body.addView(actions);
-    input.setOnEditorActionListener((v,actionId,event)->{if(actionId==EditorInfo.IME_ACTION_SEND){submit(app,input.getText().toString(),image,selectedText);return true;}return false;});
+    input.setOnEditorActionListener((v,actionId,event)->{if(actionId==EditorInfo.IME_ACTION_SEND){submit(app,input.getText().toString(),image,selectedText,fresh[0]);return true;}return false;});
 
     int type=service!=null?WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY:WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
     WindowManager.LayoutParams params=new WindowManager.LayoutParams(Ui.dp(app,280),-2,type,WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
@@ -91,15 +97,15 @@ final class SelectionAskOverlay {
     catch(RuntimeException error){Toast.makeText(app,"未能在当前屏幕打开提问窗",Toast.LENGTH_LONG).show();}
   }
 
-  private static void submit(Context app,String raw,String image,String selectedText){
+  private static void submit(Context app,String raw,String image,String selectedText,boolean newSession){
     String text=raw==null?"":raw.trim();
     if(text.isEmpty())text=image!=null?"请看圈选区域，说明里面是什么，并给出有用建议。":"请解释这段选中的文字，并给出简要建议。";
     if(selectedText!=null&&!selectedText.isBlank())text=text+"\n\n选中内容：\n"+selectedText;
     PiRuntime runtime=PiRuntime.get(app);
     if(!runtime.ready||!runtime.configured){Toast.makeText(app,"请先在橙橙里连接模型",Toast.LENGTH_LONG).show();return;}
-    if(runtime.busy){Toast.makeText(app,"助手正忙，稍后再问",Toast.LENGTH_SHORT).show();return;}
+    if(runtime.busy&&!newSession){Toast.makeText(app,"当前会话忙碌，可打开「新会话」再问",Toast.LENGTH_SHORT).show();return;}
     JSONObject command=PiRuntime.json("type","prompt","id",java.util.UUID.randomUUID().toString(),"text",text);
-    try{if(image!=null)command.put("image",image);}catch(Exception ignored){}
+    try{if(image!=null)command.put("image",image);if(newSession)command.put("newSession",true);}catch(Exception ignored){}
     runtime.send(command);hide();CircleOverlay.ensureBubble(app);
   }
 
