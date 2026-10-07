@@ -7,7 +7,9 @@ export function currentGoal(manager){
 }
 export function changeGoal(previous,command,user=false){
   if(command.action==='create'){
-    if(previous&&previous.status==='active')throw new Error('已有目标，请先取消或验收');
+    if(previous&&previous.status==='active'&&!previous.steps.every(s=>s.status==='done'))throw new Error('已有未完成目标，请先完成或由用户取消');
+    // Completed-but-unaccepted goals remain unchanged in append-only history.
+    // Selecting a new goal is not acceptance or cancellation of the old one.
     if(!Array.isArray(command.steps)||command.steps.length<1||command.steps.length>20)throw new Error('需要 1–20 个步骤');
     return {revision:(previous?.revision||0)+1,title:text(command.title,300),criteria:text(command.criteria),status:'active',steps:command.steps.map((s,i)=>({id:String(i+1),text:text(s,500),status:'pending',evidence:''}))};
   }
