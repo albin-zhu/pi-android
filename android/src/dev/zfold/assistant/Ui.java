@@ -256,6 +256,11 @@ final class Ui {
       label=Ui.text(c,text,13,foreground);label.setTypeface(Typeface.create("sans-serif-medium",0));label.setSingleLine(true);label.setEllipsize(android.text.TextUtils.TruncateAt.END);label.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,-2);lp.leftMargin=dp(c,7);addView(label,lp);label.setVisibility(text.isEmpty()?GONE:VISIBLE);
       setContentDescription(description);setBackground(ripple(c,fill,14,foreground));setClickable(true);setFocusable(true);setOnClickListener(v->{if(isEnabled()){click(v);action.run();}});
     }
+    @Override public void setPressed(boolean pressed){
+      super.setPressed(pressed);
+      // Immediate down feedback; native click cancellation remains authoritative.
+      if(image!=null)image.setAlpha(pressed?.65f:1f);if(label!=null)label.setAlpha(pressed?.65f:1f);
+    }
     void setIcon(int resource){image.setImageDrawable(icon(getContext(),resource,tint));}
     void setText(String text){if(!text.contentEquals(label.getText()))label.setText(text);label.setVisibility(compact||text.isEmpty()?GONE:VISIBLE);if(!text.isEmpty())setContentDescription(text);}
     void setCompact(boolean value){

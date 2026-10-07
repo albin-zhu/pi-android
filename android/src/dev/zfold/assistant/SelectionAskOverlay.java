@@ -31,6 +31,8 @@ final class SelectionAskOverlay {
   private static PiRuntime.Listener listener;
   private static String requestId;
   private static boolean pending;
+  private static Ui.Action sendAction;
+  private static EditText questionInput;
 
   static void showImage(Context context,String image){show(context,image,null);}
   static void showText(Context context,String text){show(context,null,text);}
@@ -80,14 +82,20 @@ final class SelectionAskOverlay {
     input.setTextSize(14);input.setTextColor(theme.ink);input.setHintTextColor(theme.muted);
     input.setBackground(Ui.shape(app,theme.field,12,0));
     input.setPadding(Ui.dp(app,10),Ui.dp(app,8),Ui.dp(app,10),Ui.dp(app,8));
-    input.setMinHeight(Ui.dp(app,40));
+    questionInput=input;input.setMaxLines(3);
+    input.setMinHeight(Ui.dp(app,48));
     input.setImeOptions(EditorInfo.IME_ACTION_SEND);input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);
     body.addView(input,new LinearLayout.LayoutParams(-1,-2));
     status=Ui.text(app,"",11,theme.muted);status.setPadding(0,Ui.dp(app,4),0,0);status.setVisibility(android.view.View.GONE);body.addView(status);
-    ScrollView scroller=new ScrollView(app);scroller.setFillViewport(false);
+    ScrollView scroller=new ScrollView(app){
+      @Override protected void onMeasure(int width,int height){
+        int available=((WindowManager)getContext().getSystemService(Context.WINDOW_SERVICE)).getCurrentWindowMetrics().getBounds().height();
+        super.onMeasure(width,android.view.View.MeasureSpec.makeMeasureSpec(Math.max(Ui.dp(getContext(),64),Math.min(Ui.dp(getContext(),240),available/3)),android.view.View.MeasureSpec.AT_MOST));
+      }
+    };scroller.setFillViewport(false);
     reply=Ui.text(app,"",13,theme.ink);reply.setPadding(0,Ui.dp(app,4),0,0);
     scroller.addView(reply,new android.widget.FrameLayout.LayoutParams(-1,-2));
-    LinearLayout.LayoutParams scrollParams=new LinearLayout.LayoutParams(-1,Ui.dp(app,180));scrollParams.topMargin=Ui.dp(app,4);scroller.setVisibility(android.view.View.GONE);body.addView(scroller,scrollParams);
+    LinearLayout.LayoutParams scrollParams=new LinearLayout.LayoutParams(-1,-2);scrollParams.topMargin=Ui.dp(app,4);scroller.setVisibility(android.view.View.GONE);body.addView(scroller,scrollParams);
 
     LinearLayout actions=new LinearLayout(app);actions.setGravity(Gravity.CENTER_VERTICAL);
     actions.setPadding(0,Ui.dp(app,4),0,0);
@@ -97,13 +105,13 @@ final class SelectionAskOverlay {
     neu.setContentDescription("发送到新会话");
     neu.setOnClickListener(v->{fresh[0]=!fresh[0];neu.setText(fresh[0]?"新会话 · 开":"新会话");neu.setTextColor(fresh[0]?theme.accent:theme.muted);});
     actions.addView(neu,new LinearLayout.LayoutParams(0,-2,1f));
-    Ui.Action send=new Ui.Action(app,R.drawable.ic_arrow_up,"发送","发送提问",theme.onAccent,theme.accent,()->submit(app,input.getText().toString(),image,selectedText,fresh[0]));
-    actions.addView(send,new LinearLayout.LayoutParams(Ui.dp(app,88),Ui.dp(app,40)));
+    Ui.Action send=new Ui.Action(app,R.drawable.ic_arrow_up,"发送","发送提问",theme.onAccent,theme.accent,()->{if(pending){PiRuntime.get(app).send(PiRuntime.json("type","stop"));return;}submit(app,input.getText().toString(),image,selectedText,fresh[0]);});
+    sendAction=send;actions.addView(send,new LinearLayout.LayoutParams(Ui.dp(app,88),Ui.dp(app,48)));
     body.addView(actions);
     input.setOnEditorActionListener((v,actionId,event)->{if(actionId==EditorInfo.IME_ACTION_SEND){submit(app,input.getText().toString(),image,selectedText,fresh[0]);return true;}return false;});
 
     int type=service!=null?WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY:WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-    WindowManager.LayoutParams params=new WindowManager.LayoutParams(Ui.dp(app,280),-2,type,WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
+    WindowManager.LayoutParams params=new WindowManager.LayoutParams(Math.min(Ui.dp(app,320),Math.max(1,wm.getCurrentWindowMetrics().getBounds().width()-Ui.dp(app,32))),-2,type,WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
     params.gravity=Gravity.BOTTOM|Gravity.END;
     params.x=Ui.dp(app,16);params.y=Ui.dp(app,88);
     params.setFitInsetsTypes(WindowInsets.Type.ime()|WindowInsets.Type.navigationBars()|WindowInsets.Type.displayCutout());
@@ -122,6 +130,7 @@ final class SelectionAskOverlay {
     JSONObject command=PiRuntime.json("type","prompt","id",java.util.UUID.randomUUID().toString(),"text",text);
     try{if(image!=null)command.put("image",image);if(newSession)command.put("newSession",true);}catch(Exception ignored){}
     requestId=command.optString("id");pending=true;
+    if(sendAction!=null){sendAction.setIcon(R.drawable.ic_stop);sendAction.setText("停止");sendAction.setContentDescription("停止本次提问");}if(questionInput!=null)questionInput.setEnabled(false);
     if(card!=null){android.view.View focus=card.findFocus();if(focus!=null)((android.view.inputmethod.InputMethodManager)app.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(focus.getWindowToken(),0);}
     stream.setLength(0);if(status!=null){status.setVisibility(android.view.View.VISIBLE);status.setText("正在思考…");}
     if(reply!=null){reply.setText("");if(reply.getParent() instanceof android.view.View)((android.view.View)reply.getParent()).setVisibility(android.view.View.VISIBLE);}
@@ -139,6 +148,9 @@ final class SelectionAskOverlay {
       else if(type.equals("delta")){stream.append(event.optString("text"));reply.setText(stream.toString());status.setText("");}
       else if(type.equals("turn_end")){pending=false;status.setText(event.optBoolean("aborted")?"已停止":"回复完成");}
       else if(type.equals("error")){pending=false;status.setText(event.optString("message"));}
+      if(type.equals("turn_end")||type.equals("error")){
+        if(sendAction!=null){sendAction.setIcon(R.drawable.ic_arrow_up);sendAction.setText("发送");sendAction.setContentDescription("发送提问");}if(questionInput!=null)questionInput.setEnabled(true);
+      }
     };runtime.listen(listener);
   }
 
@@ -147,6 +159,6 @@ final class SelectionAskOverlay {
     boundRuntime=null;listener=null;requestId=null;pending=false;
     if(card==null)return;
     try{manager.removeView(card);}catch(Exception ignored){}
-    card=null;manager=null;status=null;reply=null;
+    card=null;manager=null;status=null;reply=null;sendAction=null;questionInput=null;
   }
 }
