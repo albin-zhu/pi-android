@@ -1,3 +1,4 @@
+import { createGoalExtension } from './goal-extension.mjs';
 import { writeJsonLine } from './protocol-output.mjs';
 import { anthropicOAuth, openaiCodexOAuth, githubCopilotOAuth, openRouterOAuth, kimiCodingOAuth, xaiOAuth, createRadiusOAuth } from './oauth-bundle.mjs';
 import fs from 'node:fs';
@@ -171,7 +172,7 @@ async function activateSession(manager){
   sessionCatalog.persist(manager);
   const result=await createAgentSession({cwd:workspace,agentDir,resourceLoader,modelRuntime,model:activeModel,
     sessionManager:manager,settingsManager:SettingsManager.inMemory({}),customTools:tools.map(tool=>questionGate.wrap(tool)),
-    tools:['read','edit','write','ls','bash',...tools.map(t=>t.name)]});
+    tools:['read','edit','write','ls','bash','goal_plan',...tools.map(t=>t.name)]});
   try{saveActiveSession(result.session.sessionId);}catch(error){result.session.dispose();throw error;}
   const previous=session;session=result.session;
   activeTools.clear();streamingAssistant=undefined;
@@ -198,7 +199,9 @@ async function activateSession(manager){
   if(previous)previous.dispose();
   return session;
 }
+const goalHarness=createGoalExtension({emit,getSession:()=>session});
 function emitHistory(){
+  goalHarness.publish();
   const messages=[...(session?.messages||[])];
   if(streamingAssistant)messages.push({...streamingAssistant,content:streamingAssistant.content?.filter(part=>part.type==='text')});
   emit({type:'history',sessionId:session?.sessionId,items:chatHistory(messages,activeTools),busy});
@@ -718,7 +721,7 @@ async function configure(raw) {
   const model = modelRuntime.getModel(next.provider,next.model);
   if (!model) throw new Error('模型配置未能加载');
   resourceLoader = new DefaultResourceLoader({cwd:workspace,agentDir,noExtensions:true,noSkills:true,additionalSkillPaths:[phoneSkillPath,skillCreatorPath],noPromptTemplates:true,noThemes:true,
-    extensionFactories:[{name:'camera-context',hidden:true,factory:pi=>pi.on('context',event=>({messages:cameraWorkingContext(event.messages)}))}],
+    extensionFactories:[{name:'goal-panel',factory:goalHarness.factory},{name:'camera-context',hidden:true,factory:pi=>pi.on('context',event=>({messages:cameraWorkingContext(event.messages)}))}],
     skillsOverride:current=>{
       const project=loadSkillsFromDir({dir:projectSkillDir(),source:'zfold-project-skills'});
       const global=loadSkillsFromDir({dir:globalSkillDir,source:'zfold-global-skills'});
@@ -776,6 +779,16 @@ async function receive(command) {
   }
   if(command.type==='jev_status'){emitJevStatus();return;}
   if(nativeTools.receive(command))return;
+  if(command.type==='goal_manage'){
+    try{
+      if(command.sessionId!==session?.sessionId)throw new Error('会话已切换');
+      if(command.action==='get')goalHarness.publish();
+      else{
+        if(busy||changingSession)throw new Error('请先停止任务，等待会话稳定后修改目标');
+        goalHarness.update(command,true);
+      }
+    }catch(error){emit({type:'goal_error',message:error.message});}return;
+  }
   if(command.type==='steer') {
     try {
       const text=String(command.text||'').trim();

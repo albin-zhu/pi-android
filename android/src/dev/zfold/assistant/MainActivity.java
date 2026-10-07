@@ -87,6 +87,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     boolean chrome=label.equals("会话")||label.equals("模型")||label.equals("手机能力");
     return new Ui.Action(this,icon,visible,label.equals("↑")?"发送":label,filled?theme.onAccent:chrome?theme.muted:theme.ink,filled?theme.accent:chrome?Color.TRANSPARENT:theme.surface,action);
   }
+  private Ui.Action goalAction;
   private LinearLayout pendingRows;
   private Ui.Action steerAction,stopAction;
   private String pendingSignature="";
@@ -127,6 +128,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   void buildUI(){
     root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(theme.page);root.setPadding(dp(12),0,dp(12),dp(10));
     root.setOnApplyWindowInsetsListener((view,insets)->{windowBars=insets.getInsets(WindowInsets.Type.systemBars());windowIme=insets.getInsets(WindowInsets.Type.ime());applyWindowPadding();return insets;});
+    goalAction=new Ui.Action(this,R.drawable.ic_file,GoalPanel.summary(runtime.goalState),"目标与任务面板",theme.accent,Color.TRANSPARENT,()->GoalPanel.show(this,runtime));goalAction.label.setMaxLines(1);goalAction.label.setEllipsize(android.text.TextUtils.TruncateAt.END);root.addView(goalAction,new LinearLayout.LayoutParams(-1,dp(44)));
     scroll=new ConversationMinimap.Scroll(this);scroll.setFillViewport(true);scroll.setVerticalScrollBarEnabled(false);scroll.setClipToPadding(false);
     conversation=new LinearLayout(this);conversation.setOrientation(LinearLayout.VERTICAL);conversation.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(conversation);FrameLayout viewport=new FrameLayout(this);viewport.setMotionEventSplittingEnabled(false);viewport.addView(scroll,new FrameLayout.LayoutParams(-1,-1));minimap=new ConversationMinimap(this,scroll,conversation);viewport.addView(minimap,new FrameLayout.LayoutParams(dp(48),-1,Gravity.RIGHT));root.addView(viewport,new LinearLayout.LayoutParams(-1,0,1));
     intro=new LinearLayout(this);intro.setOrientation(LinearLayout.VERTICAL);intro.setGravity(Gravity.CENTER);intro.setPadding(dp(12),dp(34),dp(12),dp(30));
@@ -405,6 +407,8 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       case "ready":showStatus(idleStatus());updateModelChip();break;
       case "configured":showStatus(idleStatus());updateModelChip();break;
       case "agent_identity":runtime.send(PiRuntime.json("type","history"));break;
+      case "goal_state":goalAction.setText(GoalPanel.summary(runtime.goalState));break;
+      case "goal_error":notice(event.optString("message"));break;
       case "steer_result":
         if(event.optBoolean("accepted")){
           if(input.getText().toString().trim().equals(event.optString("text")))input.setText("");
@@ -414,7 +418,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
         break;
       case "jev_status":break;
       case "jev_error":notice(event.optString("message"));break;
-      case "session_changed":followVersion++;displayedSessionId=event.optString("sessionId",runtime.sessionId);minimap.reset();conversation.removeAllViews();toolViews.clear();toolGroups.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
+      case "session_changed":goalAction.setText(GoalPanel.summary(null));followVersion++;displayedSessionId=event.optString("sessionId",runtime.sessionId);minimap.reset();conversation.removeAllViews();toolViews.clear();toolGroups.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
       case "history":showHistory(event);showStatus(runtime.busy?"正在处理…":idleStatus());break;
       case "turn_start":{
         displayedSessionId=runtime.sessionId;
