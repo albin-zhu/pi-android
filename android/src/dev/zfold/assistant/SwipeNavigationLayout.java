@@ -40,7 +40,8 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
   private void paint(){if(picker!=null){picker.drawer.setTranslationX((position-1)*picker.drawerWidth);picker.scrim.setAlpha(position);}}
   private void cancelSpring(){settling=false;Choreographer.getInstance().removeFrameCallback(this);lastFrame=0;}
   private void settle(float destination,float releaseVelocity){
-    cancelSpring();target=destination;velocity=releaseVelocity;
+    float carried=settling?velocity:0;
+    cancelSpring();target=destination;velocity=releaseVelocity==0?carried:releaseVelocity;
     if(!Ui.motion()){position=target;touchOpening=false;paint();if(target==0)removeDrawer();return;}
     settling=true;Choreographer.getInstance().postFrameCallback(this);
   }

@@ -867,7 +867,7 @@ async function receive(command) {
   }
 }
 const decode=new StringDecoder('utf8');
-const consume=jsonLines(command=>{receive(command).catch(error=>emit({type:'error',message:error.message,turnId}));},error=>emit({type:'error',message:error.message}));
+const consume=jsonLines(command=>{receive(command).catch(error=>emit({type:'error',message:error.message,turnId:command.id||turnId}));},error=>emit({type:'error',message:error.message}));
 const input=fs.createReadStream(null,{fd:inputFd,autoClose:false});
 input.on('data',chunk=>consume(decode.write(chunk)));
 input.on('error',error=>emit({type:'error',message:error.message}));
