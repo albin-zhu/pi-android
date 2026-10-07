@@ -15,6 +15,7 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import org.json.JSONObject;
@@ -23,6 +24,13 @@ import org.json.JSONObject;
 final class SelectionAskOverlay {
   private static LinearLayout card;
   private static WindowManager manager;
+  private static TextView status;
+  private static TextView reply;
+  private static final StringBuilder stream=new StringBuilder();
+  private static PiRuntime boundRuntime;
+  private static PiRuntime.Listener listener;
+  private static String requestId;
+  private static boolean pending;
 
   static void showImage(Context context,String image){show(context,image,null);}
   static void showText(Context context,String text){show(context,null,text);}
@@ -74,6 +82,11 @@ final class SelectionAskOverlay {
     input.setMinHeight(Ui.dp(app,40));
     input.setImeOptions(EditorInfo.IME_ACTION_SEND);input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);
     body.addView(input,new LinearLayout.LayoutParams(-1,-2));
+    status=Ui.text(app,"",11,0xffa8bed4);status.setPadding(0,Ui.dp(app,4),0,0);status.setVisibility(android.view.View.GONE);body.addView(status);
+    ScrollView scroller=new ScrollView(app);scroller.setFillViewport(false);
+    reply=Ui.text(app,"",13,0xffedf4ff);reply.setPadding(0,Ui.dp(app,4),0,0);
+    scroller.addView(reply,new android.widget.FrameLayout.LayoutParams(-1,-2));
+    LinearLayout.LayoutParams scrollParams=new LinearLayout.LayoutParams(-1,Ui.dp(app,180));scrollParams.topMargin=Ui.dp(app,4);scroller.setVisibility(android.view.View.GONE);body.addView(scroller,scrollParams);
 
     LinearLayout actions=new LinearLayout(app);actions.setGravity(Gravity.CENTER_VERTICAL);
     actions.setPadding(0,Ui.dp(app,4),0,0);
@@ -98,6 +111,7 @@ final class SelectionAskOverlay {
   }
 
   private static void submit(Context app,String raw,String image,String selectedText,boolean newSession){
+    if(pending)return;
     String text=raw==null?"":raw.trim();
     if(text.isEmpty())text=image!=null?"请看圈选区域，说明里面是什么，并给出有用建议。":"请解释这段选中的文字，并给出简要建议。";
     if(selectedText!=null&&!selectedText.isBlank())text=text+"\n\n选中内容：\n"+selectedText;
@@ -106,12 +120,32 @@ final class SelectionAskOverlay {
     if(runtime.busy&&!newSession){Toast.makeText(app,"当前会话忙碌，可打开「新会话」再问",Toast.LENGTH_SHORT).show();return;}
     JSONObject command=PiRuntime.json("type","prompt","id",java.util.UUID.randomUUID().toString(),"text",text);
     try{if(image!=null)command.put("image",image);if(newSession)command.put("newSession",true);}catch(Exception ignored){}
-    runtime.send(command);hide();CircleOverlay.ensureBubble(app);
+    requestId=command.optString("id");pending=true;
+    if(card!=null){android.view.View focus=card.findFocus();if(focus!=null)((android.view.inputmethod.InputMethodManager)app.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(focus.getWindowToken(),0);}
+    stream.setLength(0);if(status!=null){status.setVisibility(android.view.View.VISIBLE);status.setText("正在思考…");}
+    if(reply!=null){reply.setText("");if(reply.getParent() instanceof android.view.View)((android.view.View)reply.getParent()).setVisibility(android.view.View.VISIBLE);}
+    bind(runtime);
+    runtime.send(command);
+  }
+
+  private static void bind(PiRuntime runtime){
+    if(listener!=null)return;boundRuntime=runtime;
+    listener=event->{
+      if(card==null||status==null||reply==null)return;
+      if(requestId==null||!requestId.equals(event.optString("turnId")))return;
+      String type=event.optString("type");
+      if(type.equals("turn_start"))status.setText("正在思考…");
+      else if(type.equals("delta")){stream.append(event.optString("text"));reply.setText(stream.toString());status.setText("");}
+      else if(type.equals("turn_end")){pending=false;status.setText(event.optBoolean("aborted")?"已停止":"回复完成");}
+      else if(type.equals("error")){pending=false;status.setText(event.optString("message"));}
+    };runtime.listen(listener);
   }
 
   static void hide(){
+    if(boundRuntime!=null&&listener!=null)boundRuntime.unlisten(listener);
+    boundRuntime=null;listener=null;requestId=null;pending=false;
     if(card==null)return;
     try{manager.removeView(card);}catch(Exception ignored){}
-    card=null;manager=null;
+    card=null;manager=null;status=null;reply=null;
   }
 }
