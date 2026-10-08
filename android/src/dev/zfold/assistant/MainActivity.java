@@ -132,7 +132,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     conversation=new LinearLayout(this);conversation.setOrientation(LinearLayout.VERTICAL);conversation.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(conversation);FrameLayout viewport=new FrameLayout(this);viewport.setMotionEventSplittingEnabled(false);viewport.addView(scroll,new FrameLayout.LayoutParams(-1,-1));minimap=new ConversationMinimap(this,scroll,conversation);viewport.addView(minimap,new FrameLayout.LayoutParams(dp(48),-1,Gravity.RIGHT));root.addView(viewport,new LinearLayout.LayoutParams(-1,0,1));
     intro=new LinearLayout(this);intro.setOrientation(LinearLayout.VERTICAL);intro.setGravity(Gravity.CENTER);intro.setPadding(dp(12),dp(34),dp(12),dp(30));
     welcomeMark=new Ui.Mark(this);welcomeMark.setElevation(dp(6));intro.addView(welcomeMark,new LinearLayout.LayoutParams(dp(54),dp(54)));
-    TextView title=text("今天想做什么？",27,theme.ink);welcomeTitle=title;title.setGravity(Gravity.CENTER);title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));title.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams titleParams=new LinearLayout.LayoutParams(-1,-2);titleParams.topMargin=dp(22);intro.addView(title,titleParams);
+    TextView title=text("今天想做什么？",27,theme.ink);welcomeTitle=title;title.setGravity(Gravity.CENTER);title.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));title.setLetterSpacing(-.02f);title.setLineSpacing(dp(3),1f);LinearLayout.LayoutParams titleParams=new LinearLayout.LayoutParams(-1,-2);titleParams.topMargin=dp(22);intro.addView(title,titleParams);
     TextView desc=text("说一句话，或圈住屏幕里的内容。",14,theme.muted);welcomeDescription=desc;desc.setGravity(Gravity.CENTER);desc.setLineSpacing(dp(4),1f);LinearLayout.LayoutParams descParams=new LinearLayout.LayoutParams(-1,-2);descParams.topMargin=dp(10);intro.addView(desc,descParams);
     LinearLayout suggestions=new LinearLayout(this);this.suggestions=suggestions;suggestions.setGravity(Gravity.CENTER);suggestions.setOrientation(LinearLayout.HORIZONTAL);
     Ui.Action sample=new Ui.Action(this,R.drawable.ic_arrows_out_simple,"看看手机状态","查看手机状态",theme.ink,theme.surface,()->sendText("请使用工具查看这台手机的型号和电量。"));
@@ -147,7 +147,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     draftRow.setOnClickListener(v->draftExpanded.setVisibility(draftExpanded.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE));draftRow.setContentDescription("预览随消息发送的屏幕图片");draftAttachment.addView(draftRow);
     draftExpanded=new ImageView(this);draftExpanded.setScaleType(ImageView.ScaleType.FIT_CENTER);draftExpanded.setVisibility(View.GONE);draftAttachment.addView(draftExpanded,new LinearLayout.LayoutParams(-1,dp(160)));
     fileList=new LinearLayout(this);fileList.setOrientation(LinearLayout.VERTICAL);draftAttachment.addView(fileList,new LinearLayout.LayoutParams(-1,-2));
-    composerSurface=new LinearLayout(this);composerSurface.setOrientation(LinearLayout.VERTICAL);composerSurface.setBackground(Ui.shape(this,theme.surface,28,0));composerSurface.setElevation(0);composerSurface.setPadding(dp(10),dp(8),dp(10),dp(8));
+    composerSurface=new LinearLayout(this);composerSurface.setOrientation(LinearLayout.VERTICAL);composerSurface.setBackground(Ui.shape(this,theme.surface,24,theme.line));composerSurface.setElevation(dp(2));composerSurface.setPadding(dp(10),dp(8),dp(10),dp(8));
     attachmentScroll=new ScrollView(this){@Override protected void onMeasure(int width,int height){super.onMeasure(width,View.MeasureSpec.makeMeasureSpec(dp(smallWindow?64:200),View.MeasureSpec.AT_MOST));}};
     attachmentScroll.setVisibility(View.GONE);attachmentScroll.addView(draftAttachment);composerSurface.addView(attachmentScroll,new LinearLayout.LayoutParams(-1,-2));
     pendingRows=new LinearLayout(this);pendingRows.setOrientation(LinearLayout.VERTICAL);pendingRows.setVisibility(View.GONE);
@@ -183,7 +183,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   void adjustColumn(){
     if(scroll==null||composerFrame==null)return;int viewport=scroll.getWidth();if(viewport<=0)return;
     updateWindowLayout();
-    int width=Math.min(viewport,dp(720)),side=Math.max(0,(viewport-width)/2);
+    int width=Math.min(viewport,dp(640)),side=Math.max(0,(viewport-width)/2);
     if(conversation.getPaddingLeft()!=side||conversation.getPaddingTop()!=dp(smallWindow?4:14))conversation.setPadding(side,dp(smallWindow?4:14),side,dp(smallWindow?8:22));
     FrameLayout.LayoutParams params=(FrameLayout.LayoutParams)composerSurface.getLayoutParams();
     if(params.width!=width){params.width=width;composerSurface.setLayoutParams(params);}
@@ -275,7 +275,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       TextView name=text(runtime.agentName,12,theme.muted);name.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));LinearLayout.LayoutParams nameParams=new LinearLayout.LayoutParams(-2,-2);nameParams.leftMargin=dp(8);meta.addView(name,nameParams);
       View space=new View(this);meta.addView(space,new LinearLayout.LayoutParams(0,1,1));
       Ui.Action copy=new Ui.Action(this,R.drawable.ic_copy,"","复制回答",theme.muted,Color.TRANSPARENT,()->{
-        ((android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Zfold",value));
+        ((android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("橙橙",view.getText().toString()));
         Toast.makeText(this,"回答已复制",Toast.LENGTH_SHORT).show();
       });meta.addView(copy,new LinearLayout.LayoutParams(dp(38),dp(38)));
       card.addView(meta);LinearLayout.LayoutParams replyParams=new LinearLayout.LayoutParams(-1,-2);replyParams.topMargin=dp(9);card.addView(view,replyParams);
@@ -475,10 +475,10 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     screenShareButton.setCompact(false);
     sendButton.setCompact(false);overflowButton.setCompact(true);
 
-    sessionButton.setVisibility(View.GONE);
+    sessionButton.setVisibility(widthDp>=350?View.VISIBLE:View.GONE);
     circleButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
     attachButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
-    screenShareButton.setVisibility(View.VISIBLE);
+    screenShareButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
     overflowButton.setVisibility(View.VISIBLE);
     overflowButton.setContentDescription("更多工具：会话、工作台"+(mode>=2?"、圈选、文件":""));
     updateModelChip();updateScreenShareControl();

@@ -17,9 +17,9 @@ final class Ui {
     final boolean dark;
     final int page,surface,card,field,ink,muted,line,accent,accentSoft,onAccent,error,success;
     Theme(Context c){dark=(c.getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
-      page=dark?0xff0b0f14:0xfff5f6f7;surface=dark?0xff121821:0xffffffff;card=dark?0xff161d26:0xffffffff;field=dark?0xff1d2530:0xffeef1f4;
-      ink=dark?0xffe8edf4:0xff101418;muted=dark?0xff93a0af:0xff5f6b78;line=dark?0xff2a333f:0xffe2e6ea;
-      accent=dark?0xff65a2ff:0xff2f6fed;accentSoft=dark?0xff1b2a40:0xffe8f0ff;onAccent=dark?0xfff2f7ff:0xffffffff;
+      page=dark?0xff101012:0xfff6f5f3;surface=dark?0xff1c1c1e:0xffffffff;card=dark?0xff242426:0xffffffff;field=dark?0xff2c2c2e:0xffeeedeb;
+      ink=dark?0xfff2f2f7:0xff1c1c1e;muted=dark?0xffaeaeb2:0xff636366;line=dark?0xff38383a:0xffdeddda;
+      accent=dark?0xffffa45c:0xffac4c12;accentSoft=dark?0xff38271d:0xffffeee2;onAccent=dark?0xff1c1c1e:0xffffffff;
       error=dark?0xffff9696:0xffd0342c;success=dark?0xff77c79a:0xff1e7c4f;
     }
   }
@@ -131,12 +131,15 @@ final class Ui {
 
   static final class RichBlock extends LinearLayout {
     private final TextView body;
+    private String rawText="";
+    String getText(){return rawText;}
     RichBlock(Context c,int size,int color,String value){
       super(c);setOrientation(VERTICAL);
       body=text(c,"",size,color);body.setTextIsSelectable(true);body.setLineSpacing(dp(c,5),1f);body.setHighlightColor(0x22000000);
       addView(body,new LayoutParams(-1,-2));setText(value);
     }
     void setText(String raw){
+      rawText=raw==null?"":raw;
       removeAllViews();addView(body,new LayoutParams(-1,-2));
       appendMarkdown(this,raw,13,((body.getTextColors()!=null?body.getTextColors().getDefaultColor():0xff101418)));
     }
@@ -145,11 +148,11 @@ final class Ui {
   private static void appendMarkdown(LinearLayout parent,String raw,int tableSize,int color){
     String value=raw==null?"":raw;int at=tableStart(value);
     if(at<0){
-      if(!value.trim().isEmpty())parent.addView(richText(parent.getContext(),value));
+      if(!value.trim().isEmpty())parent.addView(richText(parent.getContext(),value,color));
       return;
     }
     String prefix=at==0?"":value.substring(0,at);
-    if(!prefix.trim().isEmpty())parent.addView(richText(parent.getContext(),prefix));
+    if(!prefix.trim().isEmpty())parent.addView(richText(parent.getContext(),prefix,color));
     String remainder=value.substring(at),tableText=remainder;
     int end=tableEnd(remainder);String table=remainder;
     if(end>=0&&end<remainder.length()){table=remainder.substring(0,end);tableText=table;}
@@ -158,8 +161,8 @@ final class Ui {
     appendMarkdown(parent,rest,tableSize,color);
   }
 
-  private static TextView richText(Context c,String value){
-    TextView view=text(c,"",16,0xff101418);view.setTextIsSelectable(true);bindLinks(view,markdown(value));
+  private static TextView richText(Context c,String value,int color){
+    TextView view=text(c,"",16,color);view.setTextColor(color);view.setLinkTextColor(new Theme(c).accent);view.setTextIsSelectable(true);bindLinks(view,markdown(value));
     view.setLineSpacing(dp(c,5),1f);view.setHighlightColor(0x22000000);
     return view;
   }
@@ -252,6 +255,11 @@ final class Ui {
       image=new ImageView(c);image.setImageDrawable(icon(c,resource,foreground));image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);addView(image,new LinearLayout.LayoutParams(dp(c,21),dp(c,21)));
       label=Ui.text(c,text,13,foreground);label.setTypeface(Typeface.create("sans-serif-medium",0));label.setSingleLine(true);label.setEllipsize(android.text.TextUtils.TruncateAt.END);label.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,-2);lp.leftMargin=dp(c,7);addView(label,lp);label.setVisibility(text.isEmpty()?GONE:VISIBLE);
       setContentDescription(description);setBackground(ripple(c,fill,14,foreground));setClickable(true);setFocusable(true);setOnClickListener(v->{if(isEnabled()){click(v);action.run();}});
+    }
+    @Override public void setPressed(boolean pressed){
+      super.setPressed(pressed);
+      // Immediate down feedback; native click cancellation remains authoritative.
+      if(image!=null)image.setAlpha(pressed?.65f:1f);if(label!=null)label.setAlpha(pressed?.65f:1f);
     }
     void setIcon(int resource){image.setImageDrawable(icon(getContext(),resource,tint));}
     void setText(String text){if(!text.contentEquals(label.getText()))label.setText(text);label.setVisibility(compact||text.isEmpty()?GONE:VISIBLE);if(!text.isEmpty())setContentDescription(text);}

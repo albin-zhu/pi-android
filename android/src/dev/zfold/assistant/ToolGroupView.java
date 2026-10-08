@@ -20,8 +20,8 @@ final class ToolGroupView extends LinearLayout {
 
   ToolGroupView(Context context,String key,Runnable beforeDisclosure){
     super(context);this.key=key;this.beforeDisclosure=beforeDisclosure;theme=new Ui.Theme(context);
-    setOrientation(VERTICAL);setBackground(Ui.shape(context,theme.surface,14,theme.line));
-    header=new LinearLayout(context);header.setGravity(Gravity.CENTER_VERTICAL);header.setMinimumHeight(Ui.dp(context,52));header.setPadding(Ui.dp(context,12),Ui.dp(context,6),0,Ui.dp(context,6));
+    setOrientation(VERTICAL);setBackground(null);
+    header=new LinearLayout(context);header.setGravity(Gravity.CENTER_VERTICAL);header.setMinimumHeight(Ui.dp(context,48));header.setPadding(Ui.dp(context,12),Ui.dp(context,6),0,Ui.dp(context,6));
     LinearLayout copy=new LinearLayout(context);copy.setOrientation(VERTICAL);
     title=Ui.text(context,"",13,theme.ink);copy.addView(title);
     summary=Ui.text(context,"",12,theme.muted);summary.setPadding(0,Ui.dp(context,3),0,0);copy.addView(summary);
@@ -58,7 +58,10 @@ final class ToolGroupView extends LinearLayout {
     java.util.Set<String> files=new java.util.HashSet<>();int edits=0,shell=0;
     for(ToolCallView call:calls){String name=call.record.optString("name");if(name.equals("edit")||name.equals("write")){edits++;try{files.add(new org.json.JSONObject(call.record.optString("args","{}")).optString("path"));}catch(Exception ignored){}}if(name.equals("bash"))shell++;}
     files.remove("");
+    boolean compact=running==0&&!waiting&&failed==0&&blocked==0&&unverified==0&&!expanded;
     title.setText(!files.isEmpty()?"文件变更 · "+files.size()+" 个文件 / "+calls.size()+" 步":shell>0?"终端与工具 · "+calls.size()+" 步":"执行过程 · "+calls.size()+" 步");summary.setText(String.join(" · ",states)+(running>0&&!waiting?"\n正在："+current:""));
+    if(compact){title.setText(title.getText()+" · "+String.join(" · ",states));summary.setVisibility(GONE);}else summary.setVisibility(VISIBLE);
+    setBackground(expanded?Ui.shape(getContext(),theme.surface,14,theme.line):null);
     summary.setTextColor(failed>0?theme.error:running>0||blocked>0||unverified>0?theme.accent:theme.muted);
     ConversationMinimap.mark(this,failed>0?ConversationMinimap.ERROR:ConversationMinimap.TOOL);refreshAccessibility();
   }

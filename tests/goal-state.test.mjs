@@ -29,3 +29,14 @@ test('goal reads only current branch and does not leak across sessions',()=>{
  assert.equal(currentGoal({getBranch:()=>[entry,{...entry,data:next}]}).steps[0].status,'blocked');
  assert.equal(currentGoal({getBranch:()=>[entry]}).steps[0].status,'pending');
 });
+
+test('a reported-complete goal does not block a new plan or forge acceptance',()=>{
+ let old=create();
+ for(const step of old.steps)old=changeGoal(old,{action:'update',revision:old.revision,stepId:step.id,status:'done',evidence:'explicit completion evidence'});
+ const saved=structuredClone(old);
+ const next=changeGoal(old,{action:'create',title:'完整产品设计',criteria:'实机验证',steps:['设计','实现','验证']});
+ assert.equal(next.revision,old.revision+1);
+ assert.equal(next.status,'active');assert.deepEqual(old,saved);assert.equal(old.status,'active');
+ const entries=[{type:'custom',customType:GOAL_ENTRY,data:old},{type:'custom',customType:GOAL_ENTRY,data:next}];
+ assert.equal(currentGoal({getBranch:()=>entries}),next);assert.deepEqual(entries[0].data,saved);
+});

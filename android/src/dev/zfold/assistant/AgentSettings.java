@@ -52,8 +52,15 @@ final class AgentSettings implements PiRuntime.Listener {
     LinearLayout buttons=new LinearLayout(context);buttons.setOrientation(LinearLayout.HORIZONTAL);LinearLayout.LayoutParams buttonsParams=new LinearLayout.LayoutParams(-1,-2);buttonsParams.topMargin=Ui.dp(context,10);sheet.addView(buttons,buttonsParams);
     buttons.addView(new Ui.Action(context,R.drawable.ic_arrow_clockwise,"恢复默认","恢复默认名字与提示词模板，不移除头像",theme.ink,theme.field,()->{name.setText("Zfold");prompt.setText(runtime.agentDefaultPrompt.isEmpty()?"{{AGENT_NAME}}":runtime.agentDefaultPrompt);}),new LinearLayout.LayoutParams(0,-2,1));
     buttons.addView(new Ui.Action(context,R.drawable.ic_check,"保存并重载","写入 system.md 并热重载",theme.onAccent,theme.accent,this::save),new LinearLayout.LayoutParams(0,-2,1));LinearLayout.LayoutParams saveParams=(LinearLayout.LayoutParams)buttons.getChildAt(1).getLayoutParams();saveParams.leftMargin=Ui.dp(context,8);
-    frame.addView(sheet,new FrameLayout.LayoutParams(width,-2));
-    handle[0]=new PopupWindow(frame,-2,-2,true);handle[0].setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));handle[0].setOutsideTouchable(true);
+    ScrollView form=new ScrollView(context){
+      @Override protected void onMeasure(int w,int h){
+        int height=((WindowManager)getContext().getSystemService(Context.WINDOW_SERVICE)).getCurrentWindowMetrics().getBounds().height();
+        super.onMeasure(w,View.MeasureSpec.makeMeasureSpec(Math.max(Ui.dp(getContext(),120),height-Ui.dp(getContext(),80)),View.MeasureSpec.AT_MOST));
+      }
+    };
+    form.setFillViewport(false);form.addView(sheet,new FrameLayout.LayoutParams(-1,-2));
+    frame.addView(form,new FrameLayout.LayoutParams(width,-2));
+    handle[0]=new PopupWindow(frame,-2,-2,true);handle[0].setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));handle[0].setOutsideTouchable(true);handle[0].setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     handle[0].setOnDismissListener(()->runtime.unlisten(this));
     runtime.listen(this);
     try{handle[0].showAtLocation(anchor,Gravity.CENTER,0,0);}catch(RuntimeException error){runtime.unlisten(this);Toast.makeText(context,"Agent 设置无法打开",Toast.LENGTH_SHORT).show();return;}

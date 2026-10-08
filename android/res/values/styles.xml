@@ -1,9 +1,9 @@
 <resources>
  <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-  <item name="android:fontFamily">sans</item><item name="android:colorAccent">#2F6FED</item>
-  <item name="android:windowLightStatusBar">true</item><item name="android:statusBarColor">#F5F6F7</item>
-  <item name="android:navigationBarColor">#F5F6F7</item><item name="android:windowLightNavigationBar">true</item>
-  <item name="android:windowActionModeOverlay">true</item><item name="android:windowBackground">#F5F6F7</item>
+  <item name="android:fontFamily">sans</item><item name="android:colorAccent">#AC4C12</item>
+  <item name="android:windowLightStatusBar">true</item><item name="android:statusBarColor">#F6F5F3</item>
+  <item name="android:navigationBarColor">#F6F5F3</item><item name="android:windowLightNavigationBar">true</item>
+  <item name="android:windowActionModeOverlay">true</item><item name="android:windowBackground">#F6F5F3</item>
  </style>
  <style name="WorkScreenTheme" parent="AppTheme">
   <item name="android:windowDisablePreview">true</item>
