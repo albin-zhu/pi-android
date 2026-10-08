@@ -1,0 +1,25 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:background="@drawable/widget_surface">
+ <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+ <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="橙橙" android:textColor="@color/widget_ink" android:textSize="15sp" android:fontFamily="sans-serif-medium" android:includeFontPadding="false" />
+ <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="随手开始" android:textSize="10sp" android:textColor="@color/widget_muted" android:includeFontPadding="false" />
+ </LinearLayout><LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical" android:orientation="horizontal"><LinearLayout android:id="@+id/widget_chat" android:layout_width="0dp" android:layout_weight="1" android:layout_height="82dp" android:orientation="vertical" android:gravity="center" android:contentDescription="聊天" android:background="@drawable/widget_touch">
+  <FrameLayout android:layout_width="46dp" android:layout_height="46dp" android:background="@drawable/widget_icon_surface">
+   <ImageView android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="center" android:src="@drawable/ic_chat_circle_text" android:tint="@color/widget_accent" android:importantForAccessibility="no" />
+  </FrameLayout>
+  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="聊天" android:textColor="@color/widget_ink" android:textSize="12sp" android:includeFontPadding="false" />
+ </LinearLayout><LinearLayout android:id="@+id/widget_circle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="82dp" android:orientation="vertical" android:gravity="center" android:contentDescription="圈选" android:background="@drawable/widget_touch">
+  <FrameLayout android:layout_width="46dp" android:layout_height="46dp" android:background="@drawable/widget_icon_surface">
+   <ImageView android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="center" android:src="@drawable/ic_corners_out" android:tint="@color/widget_accent" android:importantForAccessibility="no" />
+  </FrameLayout>
+  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="圈选" android:textColor="@color/widget_ink" android:textSize="12sp" android:includeFontPadding="false" />
+ </LinearLayout><LinearLayout android:id="@+id/widget_voice" android:layout_width="0dp" android:layout_weight="1" android:layout_height="82dp" android:orientation="vertical" android:gravity="center" android:contentDescription="语音" android:background="@drawable/widget_touch">
+  <FrameLayout android:layout_width="46dp" android:layout_height="46dp" android:background="@drawable/widget_icon_surface">
+   <ImageView android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="center" android:src="@drawable/ic_microphone" android:tint="@color/widget_accent" android:importantForAccessibility="no" />
+  </FrameLayout>
+  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="语音" android:textColor="@color/widget_ink" android:textSize="12sp" android:includeFontPadding="false" />
+ </LinearLayout><LinearLayout android:id="@+id/widget_sessions" android:layout_width="0dp" android:layout_weight="1" android:layout_height="82dp" android:orientation="vertical" android:gravity="center" android:contentDescription="会话" android:background="@drawable/widget_touch">
+  <FrameLayout android:layout_width="46dp" android:layout_height="46dp" android:background="@drawable/widget_icon_surface">
+   <ImageView android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="center" android:src="@drawable/ic_sidebar" android:tint="@color/widget_accent" android:importantForAccessibility="no" />
+  </FrameLayout>
+  <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="会话" android:textColor="@color/widget_ink" android:textSize="12sp" android:includeFontPadding="false" />
+ </LinearLayout></LinearLayout></LinearLayout>

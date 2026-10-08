@@ -96,10 +96,10 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   void insertGuidance(){
     if(!runtime.busy){notice("任务已结束，请直接发送");return;}
     String text=input.getText().toString().trim();
-    if(text.isEmpty()||pendingImage!=null||!localFiles.isEmpty()){notice("引导仅支持非空文字；附件请排队发送");return;}
+    if(!hasDraft()){notice("请输入文字或添加附件");return;}
     new AlertDialog.Builder(this).setTitle("引导当前任务")
       .setMessage("将在工具调用结束后的安全边界交给模型。提交后暂不能单独撤回。")
-      .setNegativeButton("取消",null).setPositiveButton("插入",(d,w)->runtime.send(PiRuntime.json("type","steer","id",UUID.randomUUID().toString(),"sessionId",runtime.sessionId,"text",text))).show();
+      .setNegativeButton("取消",null).setPositiveButton("插入",(d,w)->dispatchText(text,true)).show();
   }
   void renderPendingMessages(){
     if(pendingRows==null)return;
@@ -120,6 +120,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("编辑消息 · 保留附件").setView(editor).setNegativeButton("取消",null).setPositiveButton("保存",null).create();
         dialog.setOnShowListener(v->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button->{if(dispatcher.edit(id,editor.getText().toString()))dialog.dismiss();else notice("未保存：消息已开始或文字无效");}));dialog.show();
       });row.addView(edit);
+      row.addView(new Ui.Action(this,R.drawable.ic_arrow_up,"插入","插入当前任务（含附件）",theme.accent,Color.TRANSPARENT,()->{if(!dispatcher.insert(id))notice("任务已结束或消息正在插入");}));
       row.addView(new Ui.Action(this,R.drawable.ic_x,"","取消待发消息",theme.muted,Color.TRANSPARENT,()->{if(!dispatcher.cancel(id))notice("消息已开始，无法取消");}));
       LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(-1,-2);params.bottomMargin=dp(3);pendingRows.addView(row,params);
     }
@@ -307,13 +308,10 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   }
   void busyMessageMenu(){
     new AlertDialog.Builder(this).setTitle("任务执行中")
-      .setItems(new String[]{"排队：当前任务完成后发送","引导当前任务（仅文字，提交后不可撤回）","查看 / 编辑 / 取消待发队列","停止任务并清空队列"},(d,which)->{
+      .setItems(new String[]{"排队：当前任务完成后发送","插入当前任务（含附件，提交后不可撤回）","查看 / 编辑 / 取消待发队列","停止任务并清空队列"},(d,which)->{
         if(which==0)sendText(input.getText().toString());
         else if(which==1){
-          String text=input.getText().toString().trim();
-          if(text.isEmpty()){notice("请先输入引导文字");return;}
-          if(pendingImage!=null||!localFiles.isEmpty()){notice("引导暂不支持附件，请选择排队发送");return;}
-          runtime.send(PiRuntime.json("type","steer","id",UUID.randomUUID().toString(),"sessionId",runtime.sessionId,"text",text));
+          insertGuidance();
         }else if(which==2)showPendingMessages();else stop();
       }).show();
   }
@@ -341,10 +339,11 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     if(ScreenContext.enabled()||screenWindowPending){openScreenWorkspace(text,true);return;}
     dispatchText(text);
   }
-  private void dispatchText(String text){
+  private void dispatchText(String text){dispatchText(text,false);}
+  private void dispatchText(String text,boolean steering){
     if(text.isBlank())text="请分析这些本地文件。";
     String draftText=input.getText().toString(),draftImage=pendingImage;List<LocalFileAttachment> submittedFiles=new ArrayList<>(localFiles);
-    JSONObject command=PiRuntime.json("type","prompt","id",UUID.randomUUID().toString(),"text",text);
+    JSONObject command=PiRuntime.json("type",steering?"steer":"prompt","id",UUID.randomUUID().toString(),"text",text);
     try{
       if(pendingImage!=null)command.put("image",pendingImage);
       JSONArray images=new JSONArray(),files=new JSONArray();
@@ -361,7 +360,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       if(!accepted){showStatus(error);notice(error);return;}
       if(input.getText().toString().equals(draftText))input.setText("");
       if(Objects.equals(pendingImage,draftImage)){pendingImage=null;pendingImageLabel=null;}
-      localFiles.removeAll(submittedFiles);updateDraftAttachment();showStatus(queued?"已排队，完成当前任务后继续":"正在思考…");updateSend();
+      localFiles.removeAll(submittedFiles);updateDraftAttachment();showStatus(steering?"已插入，将在安全边界处理":queued?"已排队，完成当前任务后继续":"正在思考…");updateSend();
     });
   }
   boolean followsBottom(){return !scroll.touching()&&!minimap.interacting()&&conversation.getHeight()-scroll.getHeight()-scroll.getScrollY()<dp(48);}
@@ -412,7 +411,6 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       case "goal_error":notice(event.optString("message"));break;
       case "steer_result":
         if(event.optBoolean("accepted")){
-          if(input.getText().toString().trim().equals(event.optString("text")))input.setText("");
           bubble("[引导已提交] "+event.optString("text"),true,null,false);
           showStatus("引导已提交，将在安全边界处理");
         }else notice(event.optString("message"));

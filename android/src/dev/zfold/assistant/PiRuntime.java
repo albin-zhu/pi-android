@@ -146,6 +146,7 @@ public final class PiRuntime {
     if(event.optString("type").equals("tool_cancel")){NativeToolExecution.cancel(event.optString("id"));return;}
     main.post(() -> {
       String type=event.optString("type");
+      if(type.equals("usage_record")){UsageStore.record(context,event);return;}
       if(type.equals("goal_state"))goalState=event.optJSONObject("goal");
       if(type.equals("session_changed"))goalState=null;
       if(type.equals("auth_state"))AuthSessionService.update(context,event);
