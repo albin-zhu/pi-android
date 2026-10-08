@@ -1,1 +1,1 @@
-<resources><color name="widget_surface">#1C1C1F</color><color name="widget_ink">#F3F3F5</color><color name="widget_muted">#B1B1BA</color></resources>
+<resources><color name="widget_surface">#1C1C1F</color><color name="widget_ink">#F3F3F5</color><color name="widget_muted">#B1B1BA</color><color name="widget_accent">#FFAD70</color><color name="widget_soft">#33271F</color><color name="widget_track">#37373D</color></resources>
