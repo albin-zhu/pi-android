@@ -37,12 +37,12 @@ export class SessionCatalog {
     manager.setSessionFile(file);
   }
   async list(){
-    const flags=this.read(),items=await SessionManager.list(this.workspace,this.directory);
+    const flags=this.read(),items=await SessionManager.listAll(this.directory);
     return items.filter(item=>{try{this.safeFile(item.path);return !flags[item.id]?.purgedAt;}catch{return false;}})
       .map(item=>({...item,pinned:Boolean(flags[item.id]?.pinnedAt),archived:Boolean(flags[item.id]?.archivedAt),deleted:Boolean(flags[item.id]?.deletedAt)}));
   }
   async find(id){const item=(await this.list()).find(item=>item.id===id);if(!item)throw new Error('这个会话不存在或已被彻底删除');return item;}
-  open(item){return SessionManager.open(this.safeFile(item.path),this.directory,this.workspace);}
+  open(item){return SessionManager.open(this.safeFile(item.path),this.directory);}
   rename(item,name,current){
     if(typeof name!=='string')throw new Error('请输入会话名称');
     name=name.trim();if(!name||Array.from(name).length>80||/[\u0000-\u001f\u007f]/u.test(name))throw new Error('会话名称需要 1–80 个字符，不能含换行或控制字符');

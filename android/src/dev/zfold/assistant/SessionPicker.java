@@ -18,6 +18,7 @@ final class SessionPicker implements PiRuntime.Listener {
   final FrameLayout frame;final View scrim;final LinearLayout drawer,list;final TextView footer;Ui.Action create,filterAction;PopupWindow popup;
   final Host host;
   private EditText search;
+  private String currentWorkspace="/storage/emulated/0/pi/workspace";
   private Ui.Action selectAction,archiveSelected,deleteSelected;
   private LinearLayout bulkBar;
   private ScrollView sessionScroll;
@@ -57,6 +58,8 @@ final class SessionPicker implements PiRuntime.Listener {
     Ui.Action close=new Ui.Action(context,R.drawable.ic_x,"","关闭会话侧边栏",theme.muted,Color.TRANSPARENT,()->dismiss());brand.addView(close,new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));drawer.addView(brand);
     LinearLayout controls=new LinearLayout(context);controls.setGravity(Gravity.CENTER_VERTICAL);drawer.addView(controls,new LinearLayout.LayoutParams(-1,-2));
     create=new Ui.Action(context,R.drawable.ic_chat_circle_text,"新对话","新建会话",theme.accent,theme.accentSoft,()->{if(waiting)return;waiting=true;create.setEnabled(false);runtime.send(PiRuntime.json("type","new_session"));});controls.addView(create,new LinearLayout.LayoutParams(0,-2,1));
+    create.setOnLongClickListener(v->{sessionOptions(null);return true;});
+    controls.addView(new Ui.Action(context,R.drawable.ic_gear_six,"","新对话高级选项：指定工作目录",theme.muted,Color.TRANSPARENT,()->sessionOptions(null)),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     filterAction=new Ui.Action(context,R.drawable.ic_sidebar,"会话 ▾","会话列表筛选",theme.muted,Color.TRANSPARENT,this::chooseFilter);filterAction.label.setTextSize(12);filterAction.label.setMaxWidth(Ui.dp(context,60));controls.addView(filterAction,new LinearLayout.LayoutParams(-2,-2));
     LinearLayout searchRow=new LinearLayout(context);searchRow.setGravity(Gravity.CENTER_VERTICAL);searchRow.setPadding(0,Ui.dp(context,8),0,Ui.dp(context,6));
     search=new EditText(context);search.setSingleLine(true);search.setTextSize(14);search.setTextColor(theme.ink);search.setHintTextColor(theme.muted);search.setHint("搜索标题或首条消息");search.setPadding(Ui.dp(context,12),0,Ui.dp(context,8),0);search.setBackground(Ui.shape(context,theme.field,12,0));search.setMinimumHeight(Ui.dp(context,48));
@@ -118,7 +121,7 @@ final class SessionPicker implements PiRuntime.Listener {
   @Override public void event(JSONObject event){
     if(nativeHost!=null?nativeHost.currentPicker()!=this:!popup.isShowing())return;
     switch(event.optString("type")){
-      case "sessions":render(event.optJSONArray("items"));break;
+      case "sessions":currentWorkspace=event.optString("workspace",currentWorkspace);render(event.optJSONArray("items"));break;
       case "session_changed":if(!"session_management".equals(event.optString("reason")))dismiss();break;
       case "session_managed":if(event.optString("requestId").equals(pending)){pending=null;if(bulkAction!=null){batchDone++;waiting=false;if(!batch.isEmpty())nextBatch();else{bulkAction=null;selected.clear();selecting=false;render(records);toast("已处理 "+batchDone+" 个会话");}}else{render(records);toast("会话已更新");}}break;
       case "session_error":if(pending==null||pending.equals(event.optString("requestId"))){pending=null;waiting=false;batch.clear();bulkAction=null;create.setEnabled(!waiting);toast(event.optString("message"));if(records.length()==0)message(event.optString("message"));}break;
@@ -191,12 +194,33 @@ final class SessionPicker implements PiRuntime.Listener {
   }
   private void manage(JSONObject item){
     if(!canManage(item))return;
-    String[] actions=item.optBoolean("deleted")?new String[]{"恢复到会话列表","彻底删除"}:new String[]{item.optBoolean("pinned")?"取消置顶":"置顶","重命名",item.optBoolean("archived")?"恢复到会话列表":"归档","删除"};
+    String[] actions=item.optBoolean("deleted")?new String[]{"恢复到会话列表","彻底删除"}:new String[]{item.optBoolean("pinned")?"取消置顶":"置顶","重命名",item.optBoolean("archived")?"恢复到会话列表":"归档","删除","高级：Fork 为新分支"};
     String title=item.optString("title","新对话");if(title.codePointCount(0,title.length())>24)title=title.substring(0,title.offsetByCodePoints(0,24))+"…";
     show(new android.app.AlertDialog.Builder(anchor.getContext()).setTitle(title).setItems(actions,(d,which)->{
       if(item.optBoolean("deleted")){if(which==0)send(item,"restore",null);else confirmDelete(item,true);}
-      else if(which==0)send(item,item.optBoolean("pinned")?"unpin":"pin",null);else if(which==1)rename(item);else if(which==2)send(item,item.optBoolean("archived")?"restore":"archive",null);else confirmDelete(item,false);
+      else if(which==0)send(item,item.optBoolean("pinned")?"unpin":"pin",null);else if(which==1)rename(item);else if(which==2)send(item,item.optBoolean("archived")?"restore":"archive",null);else if(which==3)confirmDelete(item,false);else sessionOptions(item);
     }).setNegativeButton("取消",null).create());
+  }
+  private void sessionOptions(JSONObject source){
+    if(waiting||!activityHost())return;
+    Context context=anchor.getContext();boolean fork=source!=null;
+    LinearLayout body=new LinearLayout(context);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(Ui.dp(context,20),0,Ui.dp(context,20),Ui.dp(context,12));
+    TextView help=Ui.text(context,fork?"复制当前分支的对话记录，原对话不会被覆盖；工作目录文件不会复制。":"普通新建沿用当前工作目录。高级设置只影响新对话。",13,theme.muted);body.addView(help);
+    if(runtime.busy)body.addView(Ui.text(context,"创建并切换会停止当前正在执行的任务。",13,theme.error));
+    TextView toggle=Ui.text(context,"高级选项 ▾",14,theme.accent);toggle.setMinHeight(Ui.dp(context,48));toggle.setGravity(Gravity.CENTER_VERTICAL);toggle.setFocusable(true);body.addView(toggle);
+    LinearLayout advanced=new LinearLayout(context);advanced.setOrientation(LinearLayout.VERTICAL);advanced.setVisibility(View.GONE);body.addView(advanced);
+    advanced.addView(Ui.text(context,"工作目录（现有 /storage/pi 内的目录）",12,theme.muted));
+    EditText directory=new EditText(context);directory.setSingleLine(true);directory.setText(source==null?currentWorkspace:source.optString("cwd",currentWorkspace));directory.setTextSize(14);directory.setTextColor(theme.ink);directory.setContentDescription("新会话工作目录");advanced.addView(directory,new LinearLayout.LayoutParams(-1,-2));
+    toggle.setOnClickListener(v->{boolean open=advanced.getVisibility()!=View.VISIBLE;advanced.setVisibility(open?View.VISIBLE:View.GONE);toggle.setText(open?"高级选项 ▴":"高级选项 ▾");});
+    ScrollView scroll=new ScrollView(context);scroll.addView(body);
+    android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(context).setTitle(fork?"Fork 为新分支":"新对话高级选项").setView(scroll).setNegativeButton("取消",null).setPositiveButton(fork?"创建分支":"创建对话",null).create();show(dialog);
+    dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+      String path=directory.getText().toString().trim();if(path.isEmpty()){advanced.setVisibility(View.VISIBLE);directory.setError("请输入工作目录");return;}
+      if(waiting)return;waiting=true;create.setEnabled(false);
+      JSONObject command=PiRuntime.json("type",fork?"fork_session":"new_session","cwd",path);if(fork)try{command.put("id",source.optString("id"));}catch(Exception ignored){}
+      runtime.send(command);dialog.dismiss();
+    });
   }
   private void rename(JSONObject item){
     Context context=anchor.getContext();EditText name=new EditText(context);name.setSingleLine(true);name.setText(item.optString("title"));name.setSelectAllOnFocus(true);name.setContentDescription("会话名称");
