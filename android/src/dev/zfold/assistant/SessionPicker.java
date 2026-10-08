@@ -210,13 +210,15 @@ final class SessionPicker implements PiRuntime.Listener {
     TextView toggle=Ui.text(context,"高级选项 ▾",14,theme.accent);toggle.setMinHeight(Ui.dp(context,48));toggle.setGravity(Gravity.CENTER_VERTICAL);toggle.setFocusable(true);body.addView(toggle);
     LinearLayout advanced=new LinearLayout(context);advanced.setOrientation(LinearLayout.VERTICAL);advanced.setVisibility(View.GONE);body.addView(advanced);
     advanced.addView(Ui.text(context,"工作目录（现有 /storage/pi 内的目录）",12,theme.muted));
-    EditText directory=new EditText(context);directory.setSingleLine(true);directory.setText(source==null?currentWorkspace:source.optString("cwd",currentWorkspace));directory.setTextSize(14);directory.setTextColor(theme.ink);directory.setContentDescription("新会话工作目录");advanced.addView(directory,new LinearLayout.LayoutParams(-1,-2));
+    final String[] selectedDirectory={source==null?currentWorkspace:source.optString("cwd",currentWorkspace)};
+    TextView directory=Ui.text(context,selectedDirectory[0],13,theme.ink);directory.setTextIsSelectable(true);directory.setPadding(0,Ui.dp(context,8),0,Ui.dp(context,8));advanced.addView(directory,new LinearLayout.LayoutParams(-1,-2));
+    advanced.addView(new Ui.Action(context,R.drawable.ic_file,"选择文件夹…","浏览并选择新会话工作目录",theme.accent,theme.accentSoft,()->DirectoryPicker.show(context,selectedDirectory[0],path->{selectedDirectory[0]=path;directory.setText(path);})),new LinearLayout.LayoutParams(-1,-2));
     toggle.setOnClickListener(v->{boolean open=advanced.getVisibility()!=View.VISIBLE;advanced.setVisibility(open?View.VISIBLE:View.GONE);toggle.setText(open?"高级选项 ▴":"高级选项 ▾");});
     ScrollView scroll=new ScrollView(context);scroll.addView(body);
     android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(context).setTitle(fork?"Fork 为新分支":"新对话高级选项").setView(scroll).setNegativeButton("取消",null).setPositiveButton(fork?"创建分支":"创建对话",null).create();show(dialog);
     dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
     dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
-      String path=directory.getText().toString().trim();if(path.isEmpty()){advanced.setVisibility(View.VISIBLE);directory.setError("请输入工作目录");return;}
+      String path=selectedDirectory[0];if(path==null||path.isEmpty()){advanced.setVisibility(View.VISIBLE);toast("请选择工作目录");return;}
       if(waiting)return;waiting=true;create.setEnabled(false);
       JSONObject command=PiRuntime.json("type",fork?"fork_session":"new_session","cwd",path);if(fork)try{command.put("id",source.optString("id"));}catch(Exception ignored){}
       runtime.send(command);dialog.dismiss();
