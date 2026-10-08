@@ -1,0 +1,7 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp" android:background="@drawable/widget_surface">
+ <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="橙橙 · 模型用量" android:textStyle="bold" android:textSize="18sp" android:textColor="@color/widget_ink" />
+ <TextView android:id="@+id/widget_openai" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textSize="14sp" android:textColor="@color/widget_ink" />
+ <TextView android:id="@+id/widget_xai" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textSize="14sp" android:textColor="@color/widget_ink" />
+ <TextView android:id="@+id/widget_kimi" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textSize="14sp" android:textColor="@color/widget_ink" />
+ <TextView android:id="@+id/widget_note" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textSize="11sp" android:textColor="@color/widget_muted" />
+</LinearLayout>

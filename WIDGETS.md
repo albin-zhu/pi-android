@@ -1,0 +1,13 @@
+# Home screen widgets — first local preview
+
+Implemented: native AppWidgetProvider/RemoteViews usage and shortcut widgets, light/dark resources, resizable widgets, immutable per-instance pending intents. Usage widget opens a budget/detail activity; shortcut widget opens chat, circle ask, voice entry or session library. No automatic prompt, new session, stopping, or background model request on widget update.
+
+Usage is collected from SDK assistant message_end usage receipts through usage_record protocol to private SharedPreferences. No credentials or conversation text are stored in widget data. Dedup keys contain session/turn/timestamp/model IDs. Families OpenAI/xAI/Kimi include gateway-routed model IDs; therefore the widget explicitly describes model-family local usage, NOT provider-account usage. SDK totalTokens is used as reported, without adding reasoning/cache twice. Zero/missing receipts are flagged as partial, not extrapolated. Collection starts on this installation; old sessions are not imported.
+
+Optional user-entered monthly token budget: remaining=max(0,budget-knownTokens); over-budget visible. No budget means local used count, not fabricated remaining. Natural month/day use device local calendar. Receipts are booked when received; this is not a billing reconciliation system. Local records do not cover other clients or devices. Partial receipts make budget remaining incomplete. Numeric budget entry is bounded and validated. Data updates on every persisted receipt and provider's periodic 30-minute refresh (Android may delay it); clicking local refresh does not query provider.
+
+Not yet implemented: official OpenAI/xAI/Kimi subscription/API account queries, official refresh authentication and expiry/error handling, monetary budgets, task-status widget, workspace shortcut configuration, historical import. Do not describe this local preview as having queried or verified official balances. No login tokens are requested for this preview.
+
+Evidence: pure Java family/remaining tests passed; six runtime integration tests passed, including real fixture usage receipt totalTokens=60 and unique IDs. Local target28 compilation/package/sign passed. Artifact: artifacts/Zfold-0.2.85-compat28-widgets.apk. No installation, remote CI or Samsung launcher rendering/resize/entry-flow verification performed for this preview.
+
+Manual checks: add both widgets from launcher; open details and set/reset budget; make a supported-family reply and verify receipt update; check missing-receipt indicator; test duplicate suppression, app/process restart, month rollover; check outer/inner display, larger fonts and light/dark theme; confirm all four shortcuts retain correct entry semantics. Widgets show no conversation text by default.

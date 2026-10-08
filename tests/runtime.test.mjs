@@ -54,7 +54,7 @@ test('Pi loads the bundled phone skill before calling a native tool', {timeout:3
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const child=spawn(process.execPath,['android/assets/runtime/agent.cjs','0','1',root],{stdio:['pipe','pipe','pipe'],env:{...process.env,PI_CODING_AGENT_DIR:path.join(root,'pi')}});
-  let stderr='',text='',toolCalled=false,skillLoaded=false;child.stderr.on('data',b=>stderr+=b);
+  let stderr='',text='',toolCalled=false,skillLoaded=false;const usageRecords=[];child.stderr.on('data',b=>stderr+=b);
   const send=value=>child.stdin.write(JSON.stringify(value)+'\n');
   try {
     await new Promise((resolve,reject)=>{
@@ -64,11 +64,13 @@ test('Pi loads the bundled phone skill before calling a native tool', {timeout:3
         if(event.type==='configured'){skillLoaded=event.skills.includes('phone-control');send({type:'prompt',id:'test-turn',text:'看看手机状态🙂'});}
         if(event.type==='tool_request'){toolCalled=true;send({type:'tool_result',id:event.id,result:{model:'真实设备测试',batteryPercent:72}});}
         if(event.type==='delta')text+=event.text;
+        if(event.type==='usage_record')usageRecords.push(event);
         if(event.type==='turn_end')resolve();
         if(event.type==='error')reject(new Error(event.message));
       },reject));
     });
     assert.equal(requests,3);assert.ok(skillLoaded);assert.ok(toolCalled);assert.match(text,/72%/);
+    assert.ok(usageRecords.some(e=>e.usage.totalTokens===60));assert.equal(new Set(usageRecords.map(e=>e.id)).size,usageRecords.length);assert.ok(usageRecords.every(e=>e.model==='zfold-test'&&e.provider==='custom'));
   }finally{await stopRuntimeChild(child);server.closeAllConnections();server.close();await rm(root,{recursive:true,force:true});}
 });
 

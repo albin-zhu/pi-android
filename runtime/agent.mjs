@@ -182,7 +182,10 @@ async function activateSession(manager){
   session.subscribe(event=>{
     questionGate.observe(event);
     if((event.type==='message_start'||event.type==='message_update')&&event.message?.role==='assistant')streamingAssistant=event.message;
-    if(event.type==='message_end'&&event.message?.role==='assistant')streamingAssistant=undefined;
+    if(event.type==='message_end'&&event.message?.role==='assistant'){
+      streamingAssistant=undefined;const m=event.message;
+      if(m.usage)emit({type:'usage_record',id:session.sessionId+':'+turnId+':'+m.timestamp+':'+m.model,provider:m.provider||config?.provider,model:m.model||config?.model,usage:m.usage});
+    }
     if(event.type==='message_start'&&event.message?.role==='assistant')emit({type:'assistant_start',turnId});
     if(event.type==='message_update'&&event.assistantMessageEvent?.type==='text_delta')emit({type:'delta',text:event.assistantMessageEvent.delta,turnId});
     if(event.type==='tool_execution_start'){

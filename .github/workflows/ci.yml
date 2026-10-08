@@ -35,6 +35,8 @@ jobs:
           java -cp .build/design-check dev.zfold.assistant.SlashCommandsCheck
           javac -d .build/design-check android/src/dev/zfold/assistant/DirectoryChoices.java tests/DirectoryChoicesCheck.java
           java -cp .build/design-check dev.zfold.assistant.DirectoryChoicesCheck
+          javac -d .build/design-check android/src/dev/zfold/assistant/UsageMath.java tests/UsageMathCheck.java
+          java -cp .build/design-check dev.zfold.assistant.UsageMathCheck
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 35
