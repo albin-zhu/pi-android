@@ -839,8 +839,13 @@ async function receive(command) {
       const text=String(command.text||'').trim();
       if(!session||!busy||stopRequested||changingSession)throw new Error('当前任务已结束或正在停止，请作为新消息发送');
       if(command.sessionId!==session.sessionId)throw new Error('会话已切换');
-      if(!text||text.length>32000)throw new Error('引导消息需要 1–32000 个字符');
-      await session.steer(text);
+      const images=[];
+      if(command.image)images.push({type:'image',data:command.image,mimeType:'image/png'});
+      for(const image of command.images||[])if(image?.data)images.push({type:'image',data:image.data,mimeType:image.mime||'image/png',...(image.source==='camera'&&image.frameId?{_zfoldCameraFrame:image.frameId}:{})});
+      if(text.length>32000||(!text&&!images.length&&!command.files?.length))throw new Error('请输入文字或添加附件');
+      if(images.length&&activeModel?.input&&!activeModel.input.includes('image'))throw new Error('当前模型不支持图片，附件已保留');
+      const disposition=await session.steer(text+attachmentPrompt(command.files)+cameraPromptSuffix(command.cameraFrame),images.length?images:undefined);
+      if(disposition==='handled')throw new Error('消息被扩展处理，未插入当前任务');
       emit({type:'steer_result',accepted:true,text,id:command.id});
     }catch(error){emit({type:'steer_result',accepted:false,message:error.message,id:command.id});}
     return;
