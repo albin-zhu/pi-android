@@ -22,7 +22,7 @@ import java.util.*;
 public final class MainActivity extends Activity implements PiRuntime.Listener {
   static final int BG=Color.rgb(245,246,247), INK=Color.rgb(16,20,24), MUTED=Color.rgb(95,107,120), ACCENT=Color.rgb(47,111,237), LINE=Color.rgb(226,230,234);
   static volatile MainActivity current;
-  PiRuntime runtime; LinearLayout conversation,root,intro,draftAttachment,fileList,composerSurface,statusRow,actionToolbar; android.view.View slashSuggest; FrameLayout composerFrame;ConversationMinimap.Scroll scroll;ConversationMinimap minimap; TextView status,draftLabel; Ui.RichBlock answer; Ui.Action voiceButton,modelButton,circleButton,attachButton,screenShareButton,sendButton,sessionButton,overflowButton; EditText input; ImageView draftThumbnail,draftExpanded; Bitmap draftBitmap; Ui.Theme theme;
+  PiRuntime runtime; LinearLayout conversation,root,intro,draftAttachment,fileList,composerSurface,statusRow,actionToolbar; android.view.View slashSuggest; FrameLayout composerFrame;ConversationMinimap.Scroll scroll;ConversationMinimap minimap; TextView status,draftLabel,thinkingButton; Ui.RichBlock answer; Ui.Action voiceButton,modelButton,circleButton,attachButton,screenShareButton,sendButton,sessionButton,overflowButton; EditText input; ImageView draftThumbnail,draftExpanded; Bitmap draftBitmap; Ui.Theme theme;
   StringBuilder response=new StringBuilder(); boolean continuous,screenSharing,capturingScreen,composerCompact,screenWindowPending;
   final Runnable screenListener=()->{screenSharing=ScreenContext.enabled();updateScreenShareControl();};
   private boolean returnWorkbench,temporarySettingsHost,smallWindow,windowLayoutApplied;
@@ -176,6 +176,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     overflowButton=new Ui.Action(this,R.drawable.ic_dots_three,"","更多工具",theme.muted,Color.TRANSPARENT,()->showToolbarOverflow());LinearLayout.LayoutParams overflowParams=new LinearLayout.LayoutParams(-2,-2);overflowParams.leftMargin=dp(2);toolbar.addView(overflowButton,overflowParams);
     workbenchButton=new Ui.Action(this,R.drawable.ic_workbench,"工作台","打开工作台",theme.ink,Color.TRANSPARENT,()->WorkbenchActivity.open(this));
     View spacer=new View(this);toolbar.addView(spacer,new LinearLayout.LayoutParams(0,1,1));
+    thinkingButton=text("思考 · —",12,theme.muted);thinkingButton.setGravity(Gravity.CENTER);thinkingButton.setMinimumHeight(dp(48));thinkingButton.setPadding(dp(8),0,dp(8),0);thinkingButton.setBackground(Ui.ripple(this,Color.TRANSPARENT,12,theme.ink));thinkingButton.setClickable(true);thinkingButton.setFocusable(true);thinkingButton.setOnClickListener(v->ThinkingPicker.show(thinkingButton,runtime));toolbar.addView(thinkingButton,new LinearLayout.LayoutParams(-2,dp(48)));
     sendButton=button("↑",true,()->{if(runtime.busy&&!hasDraft())stop();else sendText(input.getText().toString());});sendButton.setBackground(Ui.ripple(this,theme.accent,26,theme.onAccent));sendButton.setElevation(0);sendButton.setOnLongClickListener(v->{showPendingMessages();return true;});toolbar.addView(sendButton,new LinearLayout.LayoutParams(dp(80),dp(48)));composerSurface.addView(toolbar);
     input.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence t,int a,int b,int c){}public void afterTextChanged(android.text.Editable e){}public void onTextChanged(CharSequence t,int a,int b,int c){updateSend();}});updateSend();
     composerFrame=new FrameLayout(this);composerFrame.addView(composerSurface,new FrameLayout.LayoutParams(-1,-2,Gravity.CENTER_HORIZONTAL));LinearLayout.LayoutParams footerParams=new LinearLayout.LayoutParams(-1,-2);footerParams.topMargin=dp(8);root.addView(composerFrame,footerParams);
@@ -406,6 +407,11 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     switch(event.optString("type")){
       case "ready":showStatus(idleStatus());updateModelChip();break;
       case "configured":showStatus(idleStatus());updateModelChip();break;
+      case "models_catalog":updateThinkingControl();break;
+      case "thinking_level_result":
+        if(event.optBoolean("ok")){updateThinkingControl();showStatus("思考强度已设为 "+ThinkingPicker.label(event.optString("level")));}
+        else notice(event.optString("error","思考强度设置失败"));
+        break;
       case "agent_identity":runtime.send(PiRuntime.json("type","history"));break;
       case "goal_state":break;
       case "goal_error":notice(event.optString("message"));break;
@@ -464,7 +470,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     int mode=widthDp>=680?0:widthDp>=570?1:widthDp>=420?2:3;
     composerCompact=mode>=1;
     modelButton.label.setMaxWidth(mode==3?dp(56):mode==2?dp(70):dp(84));
-    modelButton.setCompact(mode>=3);modelButton.setVisibility(widthDp<350&&getResources().getConfiguration().fontScale>1.15f?View.GONE:View.VISIBLE);screenShareButton.label.setMaxWidth(dp((mode>=2?42:100)*getResources().getConfiguration().fontScale));
+    modelButton.setCompact(mode>=3);modelButton.setVisibility(widthDp<350?View.GONE:View.VISIBLE);screenShareButton.label.setMaxWidth(dp((mode>=2?42:100)*getResources().getConfiguration().fontScale));
     voiceButton.setCompact(mode>=1);
     voiceButton.setVisibility(View.VISIBLE);
     sessionButton.setCompact(true);
@@ -473,7 +479,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     screenShareButton.setCompact(false);
     sendButton.setCompact(false);overflowButton.setCompact(true);
 
-    sessionButton.setVisibility(widthDp>=350?View.VISIBLE:View.GONE);
+    sessionButton.setVisibility(widthDp>=420?View.VISIBLE:View.GONE);
     circleButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
     attachButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
     screenShareButton.setVisibility(mode<=1?View.VISIBLE:View.GONE);
@@ -492,8 +498,12 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     items.add(workbenchButton);
     ToolbarOverflow.show(overflowButton,items);
   }
+  void updateThinkingControl(){
+    if(thinkingButton==null)return;JSONObject state=runtime.thinkingState;JSONArray levels=state==null?null:state.optJSONArray("available");boolean supported=levels!=null&&levels.length()>0&&state.optBoolean("supported");
+    thinkingButton.setText(supported?"思考 · "+ThinkingPicker.label(state.optString("level")):"思考 · —");thinkingButton.setContentDescription(supported?"思考强度，当前 "+ThinkingPicker.label(state.optString("level"))+"，点击调整":"当前模型未声明支持调整思考强度");
+  }
   void updateModelChip(){
-    if(modelButton==null)return;String model=runtime.currentModel;String label=model.isEmpty()?"模型":model;
+    updateThinkingControl();if(modelButton==null)return;String model=runtime.currentModel;String label=model.isEmpty()?"模型":model;
     if(!runtime.currentProvider.isEmpty()&&!runtime.currentProvider.equals("custom")&&!model.isEmpty())label=runtime.currentProvider+"/"+model;
     modelButton.setText(label);modelButton.setContentDescription((runtime.busy?"当前模型 "+label+"，执行中不能切换":"快速切换模型，当前 "+label));modelButton.setEnabled(!runtime.busy);
   }

@@ -252,7 +252,7 @@ async function switchSession(command){
     }
     await activateSession(manager);
     await emitSessions();
-    emit({type:'session_changed',sessionId:session.sessionId});
+    emitModelsCatalog();emit({type:'session_changed',sessionId:session.sessionId});
     emitHistory();
   }catch(error){workspace=oldWorkspace;workspaceName=oldWorkspaceName;throw error;}finally{changingSession=false;}
 }
@@ -277,7 +277,7 @@ async function manageSession(command){
       if(current&&['archive','delete'].includes(command.action)){
         try{await activateSession(SessionManager.create(workspace,sessions));}
         catch(error){sessionCatalog.status(item.id,old);throw error;}
-        emit({type:'session_changed',sessionId:session.sessionId,reason:'session_management'});emitHistory();
+        emit({type:'session_changed',sessionId:session.sessionId,reason:'session_management'});emitModelsCatalog();emitHistory();
       }
     }
     await emitSessions();
@@ -684,7 +684,7 @@ function providerCatalog(){
       oauthLogin:oauth&&typeof provider.auth?.oauth?.login==='function',
       apiKeyLogin:apiKey&&typeof provider.auth?.apiKey?.login==='function',
       models:!includeModels?[]:modelRuntime.getModels(provider.id).map(model=>({
-        id:model.id,name:model.name||model.id,api:model.api,reasoning:Boolean(model.reasoning),
+        id:model.id,name:model.name||model.id,api:model.api,reasoning:Boolean(model.reasoning),thinkingLevelMap:model.thinkingLevelMap||null,
         input:model.input||['text'],contextWindow:model.contextWindow,maxTokens:model.maxTokens,
       })),
     };
@@ -705,7 +705,7 @@ function allProviderCatalog(){
 
 function emitModelsCatalog(){
   if(!modelRuntime)return;
-  emit({type:'models_catalog',selected:config?{provider:config.provider,model:config.model}:null,providers:providerCatalog(),availableProviders:allProviderCatalog(),error:modelRuntime.getError()||null});
+  emit({type:'models_catalog',selected:config?{provider:config.provider,model:config.model}:null,thinking:session?{level:session.thinkingLevel,available:session.getAvailableThinkingLevels(),supported:session.supportsThinking()}:null,providers:providerCatalog(),availableProviders:allProviderCatalog(),error:modelRuntime.getError()||null});
 }
 
 const providerAuth=new ProviderAuthManager({getRuntime:async()=>{await ensureModelRuntime();return modelRuntime;},emit,onSuccess:emitModelsCatalog});
@@ -859,6 +859,19 @@ async function receive(command) {
   if(command.type==='tools_catalog'){emitCatalog();return;}
   if(command.type==='connector_manage'){await manageConnector(command);return;}
   if(command.type==='models_catalog'){emitModelsCatalog();return;}
+  if(command.type==='thinking_level'){
+    try{
+      if(!session||!config)throw new Error('请先连接模型');
+      if(command.sessionId&&command.sessionId!==session.sessionId)throw new Error('会话已切换');
+      const available=session.getAvailableThinkingLevels();
+      if(!session.supportsThinking()||!available.length)throw new Error('当前模型未声明支持调整思考强度');
+      const level=String(command.level||'');
+      if(!available.includes(level))throw new Error('该思考档位不受当前模型支持');
+      session.setThinkingLevel(level);
+      emitModelsCatalog();emit({type:'thinking_level_result',ok:true,level,id:command.id});
+    }catch(error){emit({type:'thinking_level_result',ok:false,error:error.message,id:command.id});}
+    return;
+  }
   if(command.type==='auth_manage'){try{await receiveAuth(command);}catch(error){providerAuth.rejectCommand(command,'登录操作未完成，请刷新供应商列表后重试');}return;}
   if(command.type==='sessions'){try{await emitSessions();}catch(error){emit({type:'session_error',message:error.message});}return;}
   if(command.type==='session_manage'){await manageSession(command);return;}
