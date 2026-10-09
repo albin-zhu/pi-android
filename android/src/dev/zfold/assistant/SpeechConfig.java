@@ -24,7 +24,7 @@ final class SpeechConfig {
     value.put("schemaVersion",1).put("provider","volc").put("apiKey",key);
     JSONObject recognition=value.optJSONObject("asr");if(recognition==null)recognition=new JSONObject();
     recognition.put("provider",asr?"volc":"system").put("resourceId","volc.seedasr.sauc.duration").put("sampleRate",16000);
-    if(!recognition.has("hotwords"))recognition.put("hotwords",new JSONArray(new String[]{"橙橙","Pi","API","ADB"}));
+    if(!recognition.has("hotwords"))recognition.put("hotwords",new JSONArray(new String[]{"Pi","API","ADB"}));
     JSONObject synthesis=value.optJSONObject("tts");if(synthesis==null)synthesis=new JSONObject();
     synthesis.put("provider",tts?"volc":"system").put("resourceId","seed-tts-2.0").put("sampleRate",24000).put("speaker",VOICES[voice]);
     value.put("asr",recognition).put("tts",synthesis);

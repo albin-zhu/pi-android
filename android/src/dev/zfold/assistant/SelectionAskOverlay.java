@@ -57,7 +57,7 @@ final class SelectionAskOverlay {
 
     LinearLayout head=new LinearLayout(app);head.setOrientation(LinearLayout.HORIZONTAL);head.setGravity(Gravity.CENTER_VERTICAL);
     head.addView(Ui.agentMark(app,PiRuntime.get(app).agentAvatar,22),new LinearLayout.LayoutParams(Ui.dp(app,22),Ui.dp(app,22)));
-    TextView title=Ui.text(app,"问橙橙",13,theme.ink);title.setPadding(Ui.dp(app,8),0,0,0);
+    TextView title=Ui.text(app,"问"+AgentIdentity.name(app),13,theme.ink);title.setPadding(Ui.dp(app,8),0,0,0);
     head.addView(title,new LinearLayout.LayoutParams(0,-2,1f));
     head.addView(new Ui.Action(app,R.drawable.ic_x,"","关闭",0xffe8eff8,Color.TRANSPARENT,SelectionAskOverlay::hide),new LinearLayout.LayoutParams(Ui.dp(app,40),Ui.dp(app,40)));
     body.addView(head);
@@ -136,7 +136,7 @@ final class SelectionAskOverlay {
     if(text.isEmpty())text=image!=null?"请看圈选区域，说明里面是什么，并给出有用建议。":"请解释这段选中的文字，并给出简要建议。";
     if(selectedText!=null&&!selectedText.isBlank())text=text+"\n\n选中内容：\n"+selectedText;
     PiRuntime runtime=PiRuntime.get(app);
-    if(!runtime.ready||!runtime.configured){Toast.makeText(app,"请先在橙橙里连接模型",Toast.LENGTH_LONG).show();return;}
+    if(!runtime.ready||!runtime.configured){Toast.makeText(app,"请先在"+runtime.agentName+"里连接模型",Toast.LENGTH_LONG).show();return;}
     if(runtime.busy&&!newSession){Toast.makeText(app,"当前会话忙碌，可打开「新会话」再问",Toast.LENGTH_SHORT).show();return;}
     JSONObject command=PiRuntime.json("type","prompt","id",java.util.UUID.randomUUID().toString(),"text",text);
     try{if(image!=null)command.put("image",image);if(newSession)command.put("newSession",true);}catch(Exception ignored){}

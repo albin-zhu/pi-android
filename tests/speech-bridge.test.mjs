@@ -58,3 +58,11 @@ test('authentication and oversized buffers fail without exposing credentials or 
   assert.equal(f.events.at(-1).code,'audio_limit');assert.equal(f.bridge.asr.size,0);
   assert.ok(!JSON.stringify(f.events).includes('synthetic-secret'));f.bridge.close();
 });
+
+ test('ASR uses the current agent name on each start and migrates legacy default hotwords',()=>{
+  const config={apiKey:'synthetic-secret',asr:{hotwords:['橙橙','Pi','API','ADB']}};
+  const f=fixture(config);let name='小折';f.bridge.readAgentName=()=>name;
+  function words(){f.command('asr_start');const socket=f.sockets.at(-1);socket.emit('open');return JSON.parse(JSON.parse(gunzipSync(socket.sent[0].subarray(12))).request.corpus.context).hotwords.map(item=>item.word);}
+  assert.deepEqual(words(),['小折','Pi','API','ADB']);name='阿蓝';assert.deepEqual(words(),['阿蓝','Pi','API','ADB']);
+  config.asr.hotwords=['我的项目'];assert.deepEqual(words(),['阿蓝','我的项目']);name=' ';assert.deepEqual(words(),['Zfold','我的项目']);f.bridge.close();
+});

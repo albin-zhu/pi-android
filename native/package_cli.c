@@ -33,10 +33,12 @@ static int number(int fd, uint32_t value) {
     return transfer(fd, &value, sizeof(value), 1);
 }
 int main(int argc, char **argv) {
+    const char *agent_name = getenv("ZFOLD_AGENT_NAME");
+    if (!agent_name || !*agent_name) agent_name = "Zfold";
     const char *endpoint = getenv("ZFOLD_PKG_SOCKET");
     struct sockaddr_un address = {.sun_family = AF_UNIX};
     if (!endpoint || !*endpoint || strlen(endpoint) >= sizeof(address.sun_path) - 1) {
-        fprintf(stderr, "pkg: 请在橙橙的终端中运行，或重新打开终端以加载运行环境。\n");
+        fprintf(stderr, "pkg: 请在%s的终端中运行，或重新打开终端以加载运行环境。\n", agent_name);
         return 69;
     }
     if (argc > 65) { fprintf(stderr, "pkg: 参数过多\n"); return 2; }
@@ -52,7 +54,7 @@ int main(int argc, char **argv) {
     connection = fd;
     memcpy(address.sun_path + 1, endpoint, strlen(endpoint));
     if (connect(fd, (struct sockaddr *)&address, offsetof(struct sockaddr_un, sun_path) + 1 + strlen(endpoint)) < 0) {
-        fprintf(stderr, "pkg: 本机包管理服务不可用，请重新打开橙橙。\n"); close(fd); return 69;
+        fprintf(stderr, "pkg: 本机包管理服务不可用，请重新打开%s。\n", agent_name); close(fd); return 69;
     }
     struct ucred peer; socklen_t peer_size = sizeof(peer);
     if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &peer, &peer_size) < 0 || peer.uid != getuid()) {

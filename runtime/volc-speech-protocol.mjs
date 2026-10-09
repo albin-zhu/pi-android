@@ -9,8 +9,8 @@ export const VOICES = Object.freeze([
   {name:'xiaohe', label:'小何 2.0', speaker:'zh_female_xiaohe_uranus_bigtts'},
   {name:'yunzhou', label:'云舟 2.0', speaker:'zh_male_m191_uranus_bigtts'},
 ]);
-export const SAMPLE_TEXT = '你好，我是橙橙。你先忙，我来检查这段代码。API 返回了 403，可能是权限配置的问题。修好后我会告诉你，别担心。';
-export const ASR_HOTWORDS = Object.freeze(['橙橙','Pi','API','ADB']);
+export const SAMPLE_TEXT = '你好，我是Zfold。你先忙，我来检查这段代码。API 返回了 403，可能是权限配置的问题。修好后我会告诉你，别担心。';
+export const ASR_HOTWORDS = Object.freeze(['Zfold','Pi','API','ADB']);
 export const MAX_FRAME = 2 * 1024 * 1024;
 export const MAX_AUDIO = 16000 * 2 * 60;
 

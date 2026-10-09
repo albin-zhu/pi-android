@@ -277,7 +277,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       TextView name=text(runtime.agentName,12,theme.muted);name.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));LinearLayout.LayoutParams nameParams=new LinearLayout.LayoutParams(-2,-2);nameParams.leftMargin=dp(8);meta.addView(name,nameParams);
       View space=new View(this);meta.addView(space,new LinearLayout.LayoutParams(0,1,1));
       Ui.Action copy=new Ui.Action(this,R.drawable.ic_copy,"","复制回答",theme.muted,Color.TRANSPARENT,()->{
-        ((android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("橙橙",view.getText().toString()));
+        ((android.content.ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText(runtime.agentName,view.getText().toString()));
         Toast.makeText(this,"回答已复制",Toast.LENGTH_SHORT).show();
       });meta.addView(copy,new LinearLayout.LayoutParams(dp(38),dp(38)));
       card.addView(meta);LinearLayout.LayoutParams replyParams=new LinearLayout.LayoutParams(-1,-2);replyParams.topMargin=dp(9);card.addView(view,replyParams);
@@ -590,7 +590,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     String[] items={"默认助手 · "+(defaultAssistant?"已设置":"未设置"),"读屏与操作 · "+(PhoneAccessibility.instance!=null?"已连接":"未连接"),"兼容浮层权限 · "+(Settings.canDrawOverlays(this)?"已允许":"未允许"),"系统小窗与分屏","查看运行状态","唤起手势 · 从底角向内划","圈选提问 · "+(CircleAskPrefs.assistInvokesCircle(this)?"助手唤起即圈选":"打开聊天"),"本机语音 · 检测与下载","Jev 手机操作 · "+(runtime.jevEnabled&&runtime.jevConfigured?"已启用":"未配置"),"storage/pi 文件 · "+(Environment.isExternalStorageManager()?"已授权":"未授权"),"Runtime Packs","软件包管理"};
     new AlertDialog.Builder(this).setTitle("手机能力").setItems(items,(d,i)->{
       if(i==4){runtime.send(PiRuntime.json("type","probe"));return;}
-      if(i==5){new AlertDialog.Builder(this).setTitle("从当前应用唤起").setMessage("将橙橙设为默认助手后，侧键/关机键若绑定「数字助理」，以及底角向内划，会按「圈选提问」设置唤起。\n\n三星导航条正中长按的「圈选即搜」是系统功能，普通应用不能改绑。可用无障碍快捷键（音量键）作为可设置的圈选开关。").setPositiveButton("知道了",null).show();return;}
+      if(i==5){new AlertDialog.Builder(this).setTitle("从当前应用唤起").setMessage("将"+runtime.agentName+"设为默认助手后，侧键/关机键若绑定「数字助理」，以及底角向内划，会按「圈选提问」设置唤起。\n\n三星导航条正中长按的「圈选即搜」是系统功能，普通应用不能改绑。可用无障碍快捷键（音量键）作为可设置的圈选开关。").setPositiveButton("知道了",null).show();return;}
       if(i==6){circleAskSettings();return;}
       if(i==7){speechCapabilities();return;}
       if(i==8){jevSettings();return;}

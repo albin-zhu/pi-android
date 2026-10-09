@@ -6,7 +6,7 @@ test('speech provisioning replaces only the key in an existing Volc configuratio
   const old={schemaVersion:1,provider:'volc',apiKey:'old-key',tts:{speaker:'chosen-voice',sampleRate:16000},custom:{preserve:true}};
   const next=mergeSpeechConfig(old,'new-key');
   assert.equal(next.apiKey,'new-key');assert.equal(next.tts.speaker,old.tts.speaker);assert.equal(next.tts.sampleRate,16000);
-  assert.deepEqual(next.custom,old.custom);assert.equal(old.apiKey,'old-key');assert.ok(next.asr.hotwords.includes('橙橙'));
+  assert.deepEqual(next.custom,old.custom);assert.equal(old.apiKey,'old-key');assert.ok(next.asr.hotwords.includes('Zfold'));
   assert.throws(() => mergeSpeechConfig({provider:'other'},'key'));
   assert.throws(() => mergeSpeechConfig({schemaVersion:2},'key'));
 });

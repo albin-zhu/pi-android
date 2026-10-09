@@ -4,14 +4,18 @@ import {SERVICES,decodeResponse,ttsRequest,asrRequest,ASR_HOTWORDS} from './volc
 
 // Credentials are read on start and never returned in events or exceptions.
 export class SpeechBridge {
-  constructor({readConfig,emit,connect=(url,options)=>new WebSocket(url,options)}) {
-    this.readConfig=readConfig;this.emit=emit;this.connect=connect;this.tts=new Map();this.asr=new Map();
+  constructor({readConfig,emit,readAgentName=()=>'Zfold',connect=(url,options)=>new WebSocket(url,options)}) {
+    this.readAgentName=readAgentName;this.readConfig=readConfig;this.emit=emit;this.connect=connect;this.tts=new Map();this.asr=new Map();
   }
   event(client,id,kind,extra={}) { this.emit({type:'speech_event',client,id,kind,...extra}); }
   config() {
     const config=this.readConfig();
     if(!config || typeof config.apiKey!=='string' || !config.apiKey.trim() || /\s/.test(config.apiKey))throw Error('missing_key');
-    return config;
+    const name=String(this.readAgentName()||'Zfold').trim().slice(0,48)||'Zfold';
+    let words=Array.isArray(config.asr?.hotwords)?config.asr.hotwords:ASR_HOTWORDS.slice(1);
+    // Only migrate the old shipped defaults; keep user supplied vocabulary.
+    if(JSON.stringify(words)===JSON.stringify(['橙橙','Pi','API','ADB']))words=words.slice(1);
+    return {...config,asr:{...config.asr,hotwords:[...new Set([name,...words])]}};
   }
   receive(command) {
     if(command.type!=='speech')return false;

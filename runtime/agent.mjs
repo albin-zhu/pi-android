@@ -45,7 +45,7 @@ catch(error){
 const emit = data => writeJsonLine(outputFd,data);
 const agentDir = path.join(root, '.pi'), sessions = path.join(root, 'sessions');
 const credentialsDir = process.env.ZFOLD_CREDENTIALS_DIR || path.join(root, '.pi', 'agent');
-const speechBridge=new SpeechBridge({emit,readConfig:()=>JSON.parse(fs.readFileSync(path.join(credentialsDir,'speech.json'),'utf8'))});
+const speechBridge=new SpeechBridge({emit,readAgentName:()=>agentIdentity.name,readConfig:()=>JSON.parse(fs.readFileSync(path.join(credentialsDir,'speech.json'),'utf8'))});
 const modelsPath = path.join(credentialsDir,'models.json');
 const defaultWorkspace = path.join(root, 'workspace'), workspacesRoot = path.join(root, 'workspaces');
 let workspace = defaultWorkspace, workspaceName = 'default';

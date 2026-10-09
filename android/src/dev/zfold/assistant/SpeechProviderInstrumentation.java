@@ -42,7 +42,7 @@ public final class SpeechProviderInstrumentation extends Instrumentation {
       if(live){
         check(SpeechConfig.load(getTargetContext()).hasKey(),"Provision an isolated test key before live tests");
         CountDownLatch played=new CountDownLatch(1);String[] problem={null};
-        runOnMainSync(()->{player=new CloudTtsPlayer(chat,new CloudTtsPlayer.Callback(){public void start(String id){}public void done(String id){played.countDown();}public void error(String id,String reason){problem[0]=reason;played.countDown();}});player.begin("live-tts");player.text("live-tts","你好，我是橙橙。语音服务已经连接。");player.finish("live-tts");});
+        runOnMainSync(()->{player=new CloudTtsPlayer(chat,new CloudTtsPlayer.Callback(){public void start(String id){}public void done(String id){played.countDown();}public void error(String id,String reason){problem[0]=reason;played.countDown();}});player.begin("live-tts");player.text("live-tts","你好，我是"+AgentIdentity.name(chat)+"。语音服务已经连接。");player.finish("live-tts");});
         check(played.await(25,TimeUnit.SECONDS)&&problem[0]==null,"Live TTS playback failed: "+problem[0]);runOnMainSync(()->{player.close();player=null;});report.putBoolean("liveVolcTtsThroughAndroidAudioTrack",true);
         CountDownLatch started=new CountDownLatch(1);int[] completions={0};
         runOnMainSync(()->{player=new CloudTtsPlayer(chat,new CloudTtsPlayer.Callback(){public void start(String id){started.countDown();}public void done(String id){completions[0]++;}public void error(String id,String reason){problem[0]=reason;started.countDown();}});player.begin("cancel-tts");player.text("cancel-tts","这是一段用于验证点击打断的固定测试文本。停止之后，这一段语音不会继续播放。");player.finish("cancel-tts");});

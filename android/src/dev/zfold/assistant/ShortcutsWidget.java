@@ -4,8 +4,10 @@ import android.appwidget.*;
 import android.content.*;
 import android.widget.RemoteViews;
 public final class ShortcutsWidget extends AppWidgetProvider {
+  static void refresh(Context c){AppWidgetManager m=AppWidgetManager.getInstance(c);new ShortcutsWidget().onUpdate(c,m,m.getAppWidgetIds(new ComponentName(c,ShortcutsWidget.class)));}
   @Override public void onUpdate(Context c,AppWidgetManager manager,int[] ids){
     for(int id:ids){RemoteViews views=new RemoteViews(c.getPackageName(),R.layout.widget_shortcuts);
+      views.setTextViewText(R.id.widget_agent_name,AgentIdentity.name(c));
       int[] buttons={R.id.widget_chat,R.id.widget_circle,R.id.widget_voice,R.id.widget_sessions};
       for(int i=0;i<buttons.length;i++){
         Intent intent=i==1?CircleEntryActivity.intent(c):new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);

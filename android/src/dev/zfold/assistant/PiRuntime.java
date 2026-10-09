@@ -154,7 +154,7 @@ public final class PiRuntime {
       if(type.equals("phone_halt"))stopped=true;
       if(type.equals("jev_status")){jevConfigured=event.optBoolean("configured");jevEnabled=event.optBoolean("enabled");jevModel=event.optString("model","jev-1.13.0");}
       if(type.equals("default_config")){defaultConfig=event.optJSONObject("config");defaultModels=event.optJSONArray("models");}
-      if(type.equals("agent_identity")){agentName=event.optString("name","Zfold");agentAvatar=event.isNull("avatar")?null:event.optString("avatar",null);agentPrompt=event.optString("prompt");agentDefaultPrompt=event.optString("defaultPrompt",agentDefaultPrompt);}
+      if(type.equals("agent_identity")){ShortcutsWidget.refresh(context);agentName=event.optString("name","Zfold");agentAvatar=event.isNull("avatar")?null:event.optString("avatar",null);agentPrompt=event.optString("prompt");agentDefaultPrompt=event.optString("defaultPrompt",agentDefaultPrompt);}
       if(type.equals("ready")) {ready=true;status="Pi "+event.optString("pi")+" · Node "+event.optString("node");Log.i("ZfoldPi",event.toString());restoreConfiguration();}
       if(type.equals("configured")) {configured=true;imageInput=event.optBoolean("imageInput",true);restoring=false;currentModel=event.optString("model");activeConfig=event.optJSONObject("config");status="模型 · "+currentModel;sessionId=event.optString("sessionId");}
       if(type.equals("configured")){currentProvider=event.optString("provider","custom");activeConfig=event.optJSONObject("config");}

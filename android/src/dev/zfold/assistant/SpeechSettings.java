@@ -35,7 +35,7 @@ final class SpeechSettings {
       key.setText("");key.setHint("已保存 · 留空保留，输入可替换");voice.stopSession(false);current.setText(voice.providerStatus());status.setText("已保存，下次开始语音时生效");
       if(!audition)return;
       VoiceWakeService.suspendOutput(activity,outputOwner);wakeHeld[0]=true;
-      int token=preview[0];String id="speech-preview",text="你好，我是橙橙。你先忙，我来处理，完成后告诉你。";
+      int token=preview[0];String id="speech-preview",text="你好，我是"+AgentIdentity.name(activity)+"。你先忙，我来处理，完成后告诉你。";
       status.setText("正在准备试听…");
       if(tts.getSelectedItemPosition()==1){
         cloud[0]=new CloudTtsPlayer(activity,new CloudTtsPlayer.Callback(){

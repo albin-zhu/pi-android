@@ -15,7 +15,7 @@ final class UpdateGate {
     if(archive==null)throw new IllegalArgumentException("无法解析 APK");
     if(!context.getPackageName().equals(archive.packageName)){
       new AlertDialog.Builder(context).setTitle("安装其他应用")
-        .setMessage("包名："+archive.packageName+"\n版本："+archive.versionName+"\n这不是橙橙自身更新。继续后由系统确认安装。")
+        .setMessage("包名："+archive.packageName+"\n版本："+archive.versionName+"\n这不是"+AgentIdentity.name(context)+"自身更新。继续后由系统确认安装。")
         .setNegativeButton("取消",null).setPositiveButton("继续",(d,w)->{
           try{launch.run();}catch(Exception error){Toast.makeText(context,"无法打开安装页："+error.getMessage(),Toast.LENGTH_LONG).show();}
         }).show();return;
@@ -23,7 +23,7 @@ final class UpdateGate {
     PackageInfo installed=pm.getPackageInfo(context.getPackageName(),PackageManager.GET_SIGNING_CERTIFICATES);
     if(!sameSigners(installed,archive))throw new IllegalArgumentException("签名与当前安装不一致，已拒绝更新；不要卸载旧版");
     if(archive.getLongVersionCode()<installed.getLongVersionCode())throw new IllegalArgumentException("版本号低于当前安装，已拒绝降级");
-    new AlertDialog.Builder(context).setTitle("更新橙橙")
+    new AlertDialog.Builder(context).setTitle("更新"+AgentIdentity.name(context))
       .setMessage("当前："+installed.versionName+" ("+installed.getLongVersionCode()+")\n候选："+archive.versionName+" ("+archive.getLongVersionCode()+")\n\n包名及签名信息一致；最终校验由系统完成。\n更新会终止当前进程，请先结束正在执行的任务。安装后请手动重新打开；自动恢复任务尚未实现。")
       .setNegativeButton("取消",null).setPositiveButton("打开系统安装页",(d,w)->{
         try{launch.run();}catch(Exception error){Toast.makeText(context,"无法打开安装页："+error.getMessage(),Toast.LENGTH_LONG).show();}

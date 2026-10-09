@@ -11,7 +11,7 @@ public final class UsageActivity extends Activity {
     Ui.Theme theme=new Ui.Theme(this);ScrollView scroll=new ScrollView(this);LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(Ui.dp(this,24),Ui.dp(this,24),Ui.dp(this,24),Ui.dp(this,24));body.setBackgroundColor(theme.page);scroll.addView(body);setContentView(scroll);
     body.addView(new Ui.Action(this,R.drawable.ic_x,"关闭","关闭用量详情",theme.muted,android.graphics.Color.TRANSPARENT,this::finish));
     body.addView(Ui.text(this,"模型用量与本地预算",22,theme.ink));
-    TextView note=Ui.text(this,"仅统计安装此版本后，橙橙收到的模型用量回执。按模型家族归类，含网关调用；不代表 OpenAI、xAI 或 Kimi 的实际账户余额。\n\n预算按本机自然月重置，以 tokens 为单位。订阅额度和 API 账户余额尚未接入。",13,theme.muted);note.setPadding(0,Ui.dp(this,14),0,Ui.dp(this,14));body.addView(note);
+    TextView note=Ui.text(this,"仅统计安装此版本后，"+AgentIdentity.name(this)+"收到的模型用量回执。按模型家族归类，含网关调用；不代表 OpenAI、xAI 或 Kimi 的实际账户余额。\n\n预算按本机自然月重置，以 tokens 为单位。订阅额度和 API 账户余额尚未接入。",13,theme.muted);note.setPadding(0,Ui.dp(this,14),0,Ui.dp(this,14));body.addView(note);
     for(int i=0;i<UsageStore.FAMILIES.length;i++){
       final String family=UsageStore.FAMILIES[i],name=UsageStore.NAMES[i];
       TextView title=Ui.text(this,name,18,theme.ink);title.setPadding(0,Ui.dp(this,18),0,Ui.dp(this,8));body.addView(title);
