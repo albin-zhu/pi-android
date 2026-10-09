@@ -93,7 +93,7 @@ final class ProviderAuthDialog implements PiRuntime.Listener {
       LinearLayout card=new LinearLayout(context);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(Ui.dp(context,13),Ui.dp(context,11),Ui.dp(context,10),Ui.dp(context,10));
       card.setBackground(Ui.card(context,theme.surface,16,theme.line));
       LinearLayout head=new LinearLayout(context);head.setGravity(Gravity.CENTER_VERTICAL);
-      TextView name=Ui.text(context,provider.optString("name",provider.optString("id")),14,theme.ink);name.setTypeface(Typeface.create("sans-serif-medium",0));
+      TextView name=Ui.text(context,ProviderChoices.displayName(provider.optString("id"),provider.optString("name",provider.optString("id"))),14,theme.ink);name.setTypeface(Typeface.create("sans-serif-medium",0));
       head.addView(name,new LinearLayout.LayoutParams(0,-2,1));
       TextView status=Ui.text(context,provider.optBoolean("configured")?"已登录":"未登录",11,provider.optBoolean("configured")?theme.success:theme.muted);head.addView(status);
       card.addView(head);
@@ -117,7 +117,7 @@ final class ProviderAuthDialog implements PiRuntime.Listener {
     LinearLayout addCard=new LinearLayout(context);addCard.setGravity(Gravity.CENTER_VERTICAL);addCard.setPadding(Ui.dp(context,13),Ui.dp(context,11),Ui.dp(context,10),Ui.dp(context,10));
     addCard.setBackground(Ui.card(context,theme.accentSoft,16,0));addCard.setClickable(true);addCard.setFocusable(true);
     TextView addLabel=Ui.text(context,"添加供应商",14,theme.accent);addLabel.setTypeface(Typeface.create("sans-serif-medium",0));addCard.addView(addLabel,new LinearLayout.LayoutParams(0,-2,1));
-    addCard.addView(new Ui.Action(context,R.drawable.ic_arrows_out_simple,"","选择要添加的 OAuth 供应商",theme.accent,Color.TRANSPARENT,()->showAdd(available)),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
+    addCard.addView(new Ui.Action(context,R.drawable.ic_arrows_out_simple,"","选择要添加的供应商",theme.accent,Color.TRANSPARENT,()->showAdd(available)),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     addCard.setContentDescription("添加供应商");addCard.setOnClickListener(v->showAdd(available));
     list.addView(addCard,new LinearLayout.LayoutParams(-1,-2));LinearLayout.LayoutParams addParams=(LinearLayout.LayoutParams)addCard.getLayoutParams();addParams.topMargin=Ui.dp(context,10);addCard.setLayoutParams(addParams);
     footer.setText(outcomeStatus.isEmpty()?visible+" 个已添加供应商":outcomeStatus);
@@ -126,11 +126,11 @@ final class ProviderAuthDialog implements PiRuntime.Listener {
   private void showAdd(JSONArray available){
     if(available==null)return;Context context=anchor.getContext();
     java.util.ArrayList<JSONObject> items=new java.util.ArrayList<>();
-    for(int i=0;i<available.length();i++){JSONObject provider=available.optJSONObject(i);if(provider!=null&&provider.optBoolean("oauthLogin")&&!provider.optString("id").equals("custom"))items.add(provider);}
-    if(items.isEmpty()){Toast.makeText(context,"当前 Pi 没有可添加的 OAuth 供应商",Toast.LENGTH_LONG).show();return;}
+    for(int i=0;i<available.length();i++){JSONObject provider=available.optJSONObject(i);if(provider!=null&&ProviderChoices.canAdd(provider.optString("id"),provider.optBoolean("oauthLogin"),provider.optBoolean("apiKeyLogin")))items.add(provider);}
+    if(items.isEmpty()){Toast.makeText(context,"当前 Pi 没有可添加的供应商",Toast.LENGTH_LONG).show();return;}
     String[] labels=new String[items.size()];
-    for(int i=0;i<items.size();i++){JSONObject provider=items.get(i);labels[i]=provider.optString("name",provider.optString("id"))+(provider.optBoolean("configured")?" · 已登录":"");}
-    new AlertDialog.Builder(context).setTitle("添加 OAuth 供应商").setItems(labels,(dialog,index)->{
+    for(int i=0;i<items.size();i++){JSONObject provider=items.get(i);String auth=provider.optBoolean("oauthLogin")?(provider.optBoolean("apiKeyLogin")?"OAuth / API Key":"OAuth"):"API Key";labels[i]=ProviderChoices.displayName(provider.optString("id"),provider.optString("name",provider.optString("id")))+" · "+auth+(provider.optBoolean("configured")?" · 已登录":"");}
+    new AlertDialog.Builder(context).setTitle("添加供应商").setItems(labels,(dialog,index)->{
       JSONObject provider=items.get(index);commands.accept(PiRuntime.json("type","auth_manage","action","add","provider",provider.optString("id")));
     }).setNegativeButton("取消",null).show();
   }
