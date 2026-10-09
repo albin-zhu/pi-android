@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {toolCard,chatHistory} from '../runtime/chat-history.mjs';
+const result={content:[{type:'text',text:'Read image file [image/png]'},{type:'image',mimeType:'image/png',data:'fixture-not-transferred'}]};
+test('image read projects file path, not base64, into native card',()=>{const card=toolCard({id:'1',name:'read',arguments:{path:'/storage/pi/workspace/generated_images/example.png'}},result);assert.equal(card.imagePath,'/storage/pi/workspace/generated_images/example.png');assert.equal(card.hasImage,true);assert.ok(!JSON.stringify(card).includes('fixture-not-transferred'));});
+test('end-event serialized arguments preserve image path',()=>{assert.equal(toolCard({id:'1',name:'read',arguments:JSON.stringify({path:'example.png'})},result).imagePath,'example.png');});
+test('history restoration preserves read image preview metadata',()=>{const items=chatHistory([{role:'assistant',content:[{type:'toolCall',id:'1',name:'read',arguments:{path:'example.png'}}]},{role:'toolResult',toolCallId:'1',...result}]);assert.equal(items[0].imagePath,'example.png');});
+test('nonimage reads and other image tools do not guess file paths',()=>{assert.equal(toolCard({id:'1',name:'read',arguments:{path:'example.txt'}},{content:[{type:'text',text:'hello'}]}).imagePath,undefined);assert.equal(toolCard({id:'1',name:'screen_capture',arguments:{}},result).imagePath,undefined);});
+test('local image viewer enforces root, bounded decode and no network fetch',()=>{const source=readFileSync(new URL('../android/src/dev/zfold/assistant/ChatImages.java',import.meta.url),'utf8');assert.match(source,/ArtifactProvider.checked/);assert.match(source,/inSampleSize/);assert.match(source,/64L\*1024\*1024/);assert.match(source,/https\?/);assert.ok(!source.includes('openConnection'));});
+test('user attachments, assistant messages and file image links route to internal viewer',()=>{for(const [file,pattern] of [['MainActivity.java',/ChatImages.openBitmap/],['Ui.java',/ChatImages.paths/],['ArtifactProvider.java',/OpenTargets.open/],['ToolCallView.java',/ChatImages.preview/]])assert.match(readFileSync(new URL('../android/src/dev/zfold/assistant/'+file,import.meta.url),'utf8'),pattern);});

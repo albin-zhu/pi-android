@@ -1,6 +1,8 @@
 node_modules/
 .build/
 vendor/
+!runtime/vendor/
+!runtime/vendor/**
 android/assets/runtime/
 android/assets/licenses/
 artifacts/*.apk

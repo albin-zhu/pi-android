@@ -11,6 +11,8 @@ await build({entryPoints:['runtime/agent.mjs'],outfile:`${out}/agent.cjs`,bundle
   banner:{js:'const __zfoldModuleUrl = require("node:url").pathToFileURL(__filename).href;'},
   logLevel:'info'});
 fs.copyFileSync('node_modules/@earendil-works/pi-coding-agent/package.json',`${out}/package.json`);
+fs.mkdirSync(`${out}/subagent-roles`,{recursive:true});
+for(const role of ['scout','planner','reviewer','worker'])fs.copyFileSync(`runtime/vendor/pi-subagent-v1.1.0/agents/${role}.md`,`${out}/subagent-roles/${role}.md`);
 fs.copyFileSync('runtime/skills/phone-control/SKILL.md',`${out}/phone-control.SKILL.md`);
 fs.copyFileSync('runtime/skills/skill-creator/SKILL.md',`${out}/skill-creator.SKILL.md`);
 const licenses='android/assets/licenses';fs.mkdirSync(licenses,{recursive:true});
