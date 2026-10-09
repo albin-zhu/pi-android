@@ -43,7 +43,7 @@ public final class PiRuntime {
   public volatile JSONObject defaultConfig;
   public volatile org.json.JSONArray defaultModels;
   public volatile org.json.JSONArray modelProviders;
-  public volatile org.json.JSONObject selectedModel;
+  public volatile org.json.JSONObject selectedModel, thinkingState;
   public volatile String currentProvider="";public volatile String currentModel="";public volatile JSONObject activeConfig;
   private boolean restoring;
   public String lastResponse="";
@@ -158,7 +158,7 @@ public final class PiRuntime {
       if(type.equals("ready")) {ready=true;status="Pi "+event.optString("pi")+" · Node "+event.optString("node");Log.i("ZfoldPi",event.toString());restoreConfiguration();}
       if(type.equals("configured")) {configured=true;imageInput=event.optBoolean("imageInput",true);restoring=false;currentModel=event.optString("model");activeConfig=event.optJSONObject("config");status="模型 · "+currentModel;sessionId=event.optString("sessionId");}
       if(type.equals("configured")){currentProvider=event.optString("provider","custom");activeConfig=event.optJSONObject("config");}
-      if(type.equals("models_catalog")){modelProviders=event.optJSONArray("providers");selectedModel=event.optJSONObject("selected");}
+      if(type.equals("models_catalog")){modelProviders=event.optJSONArray("providers");selectedModel=event.optJSONObject("selected");thinkingState=event.optJSONObject("thinking");}
       if(type.equals("configured")) send(json("type","history"));
       if(type.equals("error")) restoring=false;
       if(type.equals("session_changed")){UserQuestions.endTurn(context,null);sessionId=event.optString("sessionId");lastPromptText="";lastPromptImage=null;lastPromptHasImage=false;lastResponse="";lastTools.clear();}
