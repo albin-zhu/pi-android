@@ -6,6 +6,8 @@ const clip = (value, limit = 12000) => {
 };
 export function toolCard(call, result, status) {
   const content = result?.content || [];
+  let args=call.arguments;
+  if(typeof args==='string')try{args=JSON.parse(args);}catch{args={};}
   const output = content.map(part => part.type === 'text' ? part.text : part.type === 'image' ? '[图片]' : '').filter(Boolean).join('\n');
   let performed = result?.details?.performed;
   let taskStatus = result?.details?.status;
@@ -17,7 +19,7 @@ export function toolCard(call, result, status) {
   const taskState=taskStatus==='cancelled'?'cancelled':taskStatus==='blocked'?'blocked':['unverified','unknown','partial','partial_unknown'].includes(taskStatus)?'unverified':['failed','permission_denied','timeout'].includes(taskStatus)?'error':undefined;
   return {role:'tool', id:call.id, name:call.name, args:clip(call.arguments),
     status:status || taskState || (result ? result.isError ? 'error' : performed === false ? 'not_performed' : 'success' : 'interrupted'),
-    output:clip(output), hasImage:content.some(part => part.type === 'image'),...(taskStatus?{taskStatus,verified:verified===true}:{})};
+    output:clip(output), ...(call.name==='read'&&content.some(part=>part.type==='image')?{imagePath:args?.path||''}:{}), hasImage:content.some(part => part.type === 'image'),...(taskStatus?{taskStatus,verified:verified===true}:{})};
 }
 
 export function chatHistory(messages, activeTools = new Map()) {

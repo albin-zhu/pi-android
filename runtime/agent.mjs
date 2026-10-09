@@ -1,4 +1,7 @@
 import { createGoalExtension } from './goal-extension.mjs';
+import { createSubagentTool } from './subagent.mjs';
+import { createSubagentRunner } from './subagent-session.mjs';
+import { createSubagentSearchTools } from './subagent-files.mjs';
 import { writeJsonLine } from './protocol-output.mjs';
 import { anthropicOAuth, openaiCodexOAuth, githubCopilotOAuth, openRouterOAuth, kimiCodingOAuth, xaiOAuth, createRadiusOAuth } from './oauth-bundle.mjs';
 import fs from 'node:fs';
@@ -394,9 +397,9 @@ function android(name, args, signal) {
     catch(error){stopPhoneLoop(error.message);throw error;}
   });
 }
-function secureFilePath(toolName,value){
+function secureFilePath(toolName,value,cwd=workspace){
   const raw=String(value||'.');
-  let requested=path.resolve(workspace,raw);
+  let requested=path.resolve(cwd,raw);
   const storageAlias=/^\/(?:storage\/pi|sdcard\/pi|storage\/emulated\/0\/pi)(?:\/|$)/;
   if(storageAlias.test(raw))requested=path.resolve(root,raw.replace(storageAlias,''));
     if(toolName==='read'&&[phoneSkillPath,skillCreatorPath].includes(requested))return requested;
@@ -594,6 +597,15 @@ const reloadSkillsTool={
   }
 };
 tools.push(reloadSkillsTool);
+
+const runSubagent=createSubagentRunner({directory:path.join(runtimeDir,'subagent-sessions'),rolesDirectory:path.join(runtimeDir,'subagent-roles'),
+  makeTools:cwd=>{
+    const resolvePath=value=>secureFilePath('subagent_read',value,cwd);
+    const readOnly=[createReadToolDefinition(cwd,{autoResizeImages:false}),createLsToolDefinition(cwd)].map(tool=>({...tool,execute(id,args,signal,onUpdate){return tool.execute(id,{...args,path:resolvePath(args.path||'.')},signal,onUpdate);}}));
+    return [...readOnly,...createSubagentSearchTools({Type,cwd,resolvePath})];
+  },onUsage:receipt=>emit({type:'usage_record',...receipt})});
+tools.push(createSubagentTool({Type,runChild:runSubagent,getParent:()=>({model:session?.model,modelRuntime,thinkingLevel:session?.thinkingLevel,cwd:workspace,sessionId:session?.sessionId}),
+  validateCwd:(value,current)=>resolveSessionWorkspace(value,{root,current})}));
 
 const connectors=new ConnectorManager({directory:credentialsDir,workspace:()=>workspace,environment:currentEnvironment,
   allowStdio:process.platform!=='android'||compatExec,

@@ -132,6 +132,7 @@ final class Ui {
   static final class RichBlock extends LinearLayout {
     private final TextView body;
     private String rawText="";
+    private final java.util.Map<String,View> imageViews=new java.util.LinkedHashMap<>();
     String getText(){return rawText;}
     RichBlock(Context c,int size,int color,String value){
       super(c);setOrientation(VERTICAL);
@@ -142,6 +143,8 @@ final class Ui {
       rawText=raw==null?"":raw;
       removeAllViews();addView(body,new LayoutParams(-1,-2));
       appendMarkdown(this,raw,13,((body.getTextColors()!=null?body.getTextColors().getDefaultColor():0xff101418)));
+      java.util.Set<String> paths=ChatImages.paths(rawText);imageViews.keySet().retainAll(paths);
+      for(String imagePath:paths){View preview=imageViews.get(imagePath);if(preview==null){preview=ChatImages.preview(getContext(),imagePath);imageViews.put(imagePath,preview);}addView(preview,new LayoutParams(-1,-2));}
     }
   }
 
@@ -174,8 +177,7 @@ final class Ui {
       text.setSpan(new android.text.style.ClickableSpan(){
         @Override public void onClick(View widget){
           try{
-            if(target.startsWith("file:///"))ArtifactProvider.open(widget.getContext(),target);
-            else if(target.startsWith("https://")||target.startsWith("http://"))widget.getContext().startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,android.net.Uri.parse(target)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+            if(target.startsWith("file:///")||target.startsWith("https://")||target.startsWith("http://"))OpenTargets.open(widget.getContext(),target,"",false);
             else throw new IllegalArgumentException("不支持的链接");
           }catch(Exception error){Toast.makeText(widget.getContext(),"无法打开："+error.getMessage(),Toast.LENGTH_LONG).show();}
         }

@@ -293,7 +293,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     if(!user||!hasPicture)return;
     Bitmap bitmap=Ui.thumbnail(picture,480);
     LinearLayout imageRow=new LinearLayout(this);ConversationMinimap.mark(imageRow,ConversationMinimap.IMAGE);imageRow.setGravity(Gravity.END);
-    if(bitmap!=null){ImageView image=new ImageView(this);image.setImageBitmap(bitmap);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setBackground(Ui.card(this,theme.surface,18,theme.line));image.setElevation(dp(3));image.setPadding(dp(4),dp(4),dp(4),dp(4));image.setClipToOutline(true);image.setContentDescription("本条消息附带的屏幕图片");imageRow.addView(image,new LinearLayout.LayoutParams(dp(180),dp(140)));}
+    if(bitmap!=null){ImageView image=new ImageView(this);image.setImageBitmap(bitmap);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setBackground(Ui.card(this,theme.surface,18,theme.line));image.setElevation(dp(3));image.setPadding(dp(4),dp(4),dp(4),dp(4));image.setClipToOutline(true);image.setContentDescription("打开本条消息的图片大图");image.setOnClickListener(v->ChatImages.openBitmap(this,picture));imageRow.addView(image,new LinearLayout.LayoutParams(dp(180),dp(140)));}
     else{TextView label=text("已附图片",13,theme.muted);label.setPadding(dp(12),dp(8),dp(12),dp(8));label.setBackground(Ui.shape(this,theme.field,12,0));imageRow.addView(label);}
     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(5);conversation.addView(imageRow,lp);minimap.changed();
   }

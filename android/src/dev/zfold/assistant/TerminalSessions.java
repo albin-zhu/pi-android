@@ -5,6 +5,7 @@ import android.os.*;
 import android.util.Log;
 import com.termux.terminal.*;
 import java.io.File;
+import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -48,15 +49,19 @@ final class TerminalSessions implements TerminalSessionClient {
         try{
           System.loadLibrary("zfold");
           File bash=PiPackageManager.prepareBash(owner.context);
-          boolean useBash=owner.context.getApplicationInfo().targetSdkVersion==28&&bash!=null&&bash.canExecute();
-          File executable=useBash?bash:new File("/system/bin/sh");
-          shell=useBash?"Bash":"系统 Shell";
+          File fish=null;
+          try{fish=PiPackageManager.executable(owner.context,"fish");}catch(IOException unreachable){fish=null;}
+          boolean modern=owner.context.getApplicationInfo().targetSdkVersion==28;
+          boolean useFish=modern&&fish!=null&&fish.canExecute();
+          boolean useBash=!useFish&&modern&&bash!=null&&bash.canExecute();
+          File executable=useFish?fish:useBash?bash:new File("/system/bin/sh");
+          shell=useFish?"Fish":useBash?"Bash":"系统 Shell";
           String[] argv=useBash?new String[]{executable.getPath(),"--noprofile"}:new String[]{executable.getPath()};
           Map<String,String> environment=new ProcessBuilder("true").environment();
           RuntimeEnvironment.apply(environment,RuntimeEnvironment.forExecutable(owner.context,executable),null);
-          if(!useBash)environment.putIfAbsent("ENV",new File(environment.get("HOME"),".mkshrc").getPath());
+          if(!useBash&&!useFish)environment.putIfAbsent("ENV",new File(environment.get("HOME"),".mkshrc").getPath());
           environment.put("TERM","xterm-256color");environment.put("COLORTERM","truecolor");
-          environment.put("PS1",useBash?"\\[\\e[38;5;114m\\]\\W\\[\\e[0m\\] $ ":"$ ");
+          if(!useFish)environment.put("PS1",useBash?"\\[\\e[38;5;114m\\]\\W\\[\\e[0m\\] $ ":"$ ");
           cwd=RuntimeEnvironment.workingDirectory(owner.context,null).getPath();
           id=PiRuntime.ptyOpen(argv,cwd,environment.entrySet().stream().map(entry->entry.getKey()+"="+entry.getValue()).toArray(String[]::new),rows,columns);
           if(closing){PiRuntime.ptyClose(id);session.finish(143);writer.shutdown();return;}

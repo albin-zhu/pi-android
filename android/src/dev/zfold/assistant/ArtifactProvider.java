@@ -19,21 +19,13 @@ public final class ArtifactProvider extends ContentProvider {
     return file;
   }
   static void open(Context c,String target)throws Exception {
-    Uri input=Uri.parse(target);
-    if(!"file".equals(input.getScheme())||(input.getAuthority()!=null&&!input.getAuthority().isEmpty())||input.getQuery()!=null||input.getFragment()!=null)throw new IOException("不支持的文件链接");
-    File file=checked(c,input.getPath());
-    String relative=root(c).toPath().relativize(file.toPath()).toString();
-    Uri uri=new Uri.Builder().scheme("content").authority(c.getPackageName()+".artifacts").appendPath(relative).build();
-    Intent intent=new Intent(Intent.ACTION_VIEW).setDataAndType(uri,mime(file)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_GRANT_READ_URI_PERMISSION);
-    intent.setClipData(ClipData.newRawUri(file.getName(),uri));
-    if(file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".apk"))UpdateGate.confirm(c,file,()->c.startActivity(intent));
-    else c.startActivity(intent);
+    OpenTargets.open(c,target,"",false);
   }
   private File resolve(Uri uri)throws IOException {
     if(!uri.getAuthority().equals(getContext().getPackageName()+".artifacts")||uri.getPathSegments().size()!=1)throw new FileNotFoundException("无效文件链接");
     return checked(getContext(),new File(root(getContext()),uri.getPathSegments().get(0)).getPath());
   }
-  private static String mime(File file){
+  static String mime(File file){
     String name=file.getName();int dot=name.lastIndexOf('.');
     String type=dot<0?null:android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substring(dot+1).toLowerCase(java.util.Locale.ROOT));
     return type==null?"application/octet-stream":type;

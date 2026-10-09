@@ -48,7 +48,7 @@ final class ToolCallView extends LinearLayout {
       case "ask_user_question":return "向用户提问";
       case "phone_capabilities":return "电话与相机能力";case "phone_call":return "拨打电话";case "phone_sms":return "短信与回执";case "contact_search":return "查找联系人";case "camera_capture":return "拍照并获取图片";
       case "read":return "读取文件";case "write":return "写入文件";case "edit":return "编辑文件";
-      case "ls":return "列出文件";case "bash":return "执行 Shell";case "reload_skills":return "重载 Skills";case "phone_task":return "Jev 操作手机";case "device_info":return "读取手机状态";
+      case "subagent":return "子Agent · 独立上下文";case "ls":return "列出文件";case "bash":return "执行 Shell";case "reload_skills":return "重载 Skills";case "phone_task":return "Jev 操作手机";case "device_info":return "读取手机状态";
       case "screen_read":return "读取当前界面";case "screen_capture":return "截取屏幕";
       case "ui_select":return "选择界面目标";case "ui_tap":return "点击界面";
       case "ui_input":return "输入文字";case "ui_swipe":return "滑动界面";
@@ -90,7 +90,12 @@ final class ToolCallView extends LinearLayout {
         ArtifactProvider.open(getContext(),android.net.Uri.fromFile(target).toString());
       }catch(Exception e){android.widget.Toast.makeText(getContext(),"无法打开："+e.getMessage(),android.widget.Toast.LENGTH_LONG).show();}});
     }
-    if(name.equals("edit")){
+    if(name.equals("subagent")){
+      org.json.JSONArray chain=args.optJSONArray("chain"),tasks=args.optJSONArray("tasks");
+      String mode=chain!=null?"链式委托 · "+chain.length()+" 步":tasks!=null?"并行委托 · "+tasks.length()+" 项":args.optString("agent")+" · 单个委托";
+      block(mode,"只读文件 · 沿用当前模型\n主聊天不传给子Agent · 停止按钮联动全部子任务",theme.muted);
+      if(chain==null&&tasks==null)block("分配任务",args.optString("task"),theme.ink);
+    }else if(name.equals("edit")){
       org.json.JSONArray edits=args.optJSONArray("edits");
       if(edits==null){edits=new org.json.JSONArray();edits.put(args);}
       block("修改预览 · "+edits.length()+" 处 · 以下为片段行号，不代表已应用","状态："+status.getText(),theme.muted);
@@ -102,6 +107,7 @@ final class ToolCallView extends LinearLayout {
     }else if(name.equals("bash"))block("$ 命令",args.optString("command"),theme.ink);
     else if(name.equals("write"))block("写入内容预览 · 不代表已写入",args.optString("content"),theme.ink);
     else if(name.equals("read"))block("读取范围","起始行 "+args.optInt("offset",1)+(args.has("limit")?" · 最多 "+args.optInt("limit")+" 行":""),theme.muted);
+    if(!record.optString("imagePath").isEmpty())preview.addView(ChatImages.preview(getContext(),record.optString("imagePath")),new LayoutParams(-1,-2));
     block(state.equals("error")?"失败原因 / 返回结果":"返回结果",output.isEmpty()?(state.equals("running")?"等待工具返回…":"没有返回内容"):output,state.equals("error")?theme.error:theme.ink);
     details.setText(name+"\n\n参数\n"+pretty(record.optString("args","{}"))+"\n\n结果\n"+pretty(output));
   }
