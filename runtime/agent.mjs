@@ -13,7 +13,7 @@ import { createBashToolDefinition } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
 import { jsonLines, validateProviderSelection } from './protocol.mjs';
 import { choosePhoneTarget } from './phone-select.mjs';
-import { chatHistory, toolCard } from './chat-history.mjs';
+import { assistantInterruption, chatHistory, toolCard } from './chat-history.mjs';
 import { JEV_MODEL, validateJevConfig } from './jev-client.mjs';
 import { decidePhoneAction, runPhoneTask } from './phone-task.mjs';
 import { PhoneTurnGuard } from './phone-turn-guard.mjs';
@@ -32,6 +32,7 @@ import {resolveSessionWorkspace} from './session-workspace.mjs';
 import { ProviderAuthManager } from './provider-auth.mjs';
 import { createAskUserQuestionTool, QuestionToolGate } from './user-question.mjs';
 
+const PI_VERSION = __ZFOLD_PI_VERSION__;
 const inputFd = Number(process.argv[2]), outputFd = Number(process.argv[3]);
 registerBundledOAuthFlowLoaders({anthropic:()=>anthropicOAuth,openaiCodex:()=>openaiCodexOAuth,githubCopilot:()=>githubCopilotOAuth,openrouter:()=>openRouterOAuth,kimiCoding:()=>kimiCodingOAuth,xai:()=>xaiOAuth,radius:createRadiusOAuth});
 const rawRoot = process.argv[4];
@@ -45,7 +46,11 @@ catch(error){
   if(!fs.statSync(rawRoot,{throwIfNoEntry:false})?.isDirectory())throw error;
   root=path.resolve(rawRoot);
 }
-const emit = data => writeJsonLine(outputFd,data);
+let retryStatus = null;
+const emit = data => {
+  if(data.type==='turn_start'||data.type==='turn_end'||data.type==='error')retryStatus=null;
+  writeJsonLine(outputFd,data);
+};
 const agentDir = path.join(root, '.pi'), sessions = path.join(root, 'sessions');
 const credentialsDir = process.env.ZFOLD_CREDENTIALS_DIR || path.join(root, '.pi', 'agent');
 const speechBridge=new SpeechBridge({emit,readConfig:()=>JSON.parse(fs.readFileSync(path.join(credentialsDir,'speech.json'),'utf8'))});
@@ -133,7 +138,7 @@ const agentAvatar=()=>fs.existsSync(agentAvatarFile)?fs.readFileSync(agentAvatar
 if(!fs.existsSync(agentIdentityFile))fs.writeFileSync(agentIdentityFile,JSON.stringify({name:agentIdentity.name,hasAvatar:fs.existsSync(agentAvatarFile)}),{encoding:'utf8',mode:0o600});
 if(!fs.existsSync(agentSystemFile))fs.writeFileSync(agentSystemFile,agentIdentity.prompt,{encoding:'utf8',mode:0o600});
 let session, modelRuntime, resourceLoader, activeModel, config, busy = false, turnId = null, stopRequested=false;
-let streamingAssistant, changingSession=false;
+let streamingAssistant, changingSession=false, lastInterruption=null, compactionFailure=null;
 const questionGate=new QuestionToolGate();
 let phoneGuard=new PhoneTurnGuard(),phoneFailure;
 function stopPhoneLoop(message){phoneFailure=message;emit({type:'phone_halt',turnId});queueMicrotask(()=>{session?.abort().catch(()=>{});});}
@@ -172,6 +177,10 @@ async function selectedSessionManager(){
   const recent=entries.filter(item=>!item.archived&&!item.deleted).sort((a,b)=>b.modified-a.modified)[0];
   return recent?sessionCatalog.open(recent):SessionManager.create(workspace,sessions);
 }
+function publishRetry(status){
+  retryStatus={turnId,...status};
+  emit({type:'retry_status',...retryStatus});
+}
 async function activateSession(manager){
   workspace=resolveSessionWorkspace(manager.getCwd(),{root,current:workspace});workspaceName=path.basename(workspace);
   await reloadSessionResources();
@@ -181,13 +190,35 @@ async function activateSession(manager){
     tools:['read','edit','write','ls','bash','goal_plan',...tools.map(t=>t.name)]});
   try{saveActiveSession(result.session.sessionId);}catch(error){result.session.dispose();throw error;}
   const previous=session;session=result.session;
-  activeTools.clear();streamingAssistant=undefined;
+  activeTools.clear();streamingAssistant=undefined;retryStatus=null;lastInterruption=null;compactionFailure=null;
   session.subscribe(event=>{
     questionGate.observe(event);
     if((event.type==='message_start'||event.type==='message_update')&&event.message?.role==='assistant')streamingAssistant=event.message;
     if(event.type==='message_end'&&event.message?.role==='assistant'){
       streamingAssistant=undefined;const m=event.message;
+      lastInterruption=assistantInterruption(m);
+      if(lastInterruption)emit({type:'assistant_interruption',...lastInterruption,turnId});
       if(m.usage)emit({type:'usage_record',id:session.sessionId+':'+turnId+':'+m.timestamp+':'+m.model,provider:m.provider||config?.provider,model:m.model||config?.model,usage:m.usage});
+    }
+    if(event.type==='auto_retry_start')publishRetry({source:'model',status:'waiting',attempt:event.attempt,maxAttempts:event.maxAttempts,delayMs:event.delayMs,message:event.errorMessage});
+    if(event.type==='auto_retry_end')publishRetry({source:'model',status:'finished',attempt:event.attempt,
+      maxAttempts:retryStatus?.source==='model'?retryStatus.maxAttempts:0,delayMs:retryStatus?.source==='model'?retryStatus.delayMs:0,
+      message:event.finalError||(event.success?'自动重试已结束。':'自动重试未成功。'),success:event.success});
+    if(event.type==='agent_start'&&retryStatus?.source==='model'&&retryStatus.status==='waiting')publishRetry({
+      ...retryStatus,delayMs:0,message:'正在重新请求模型。'});
+    if(event.type==='compaction_start'){
+      compactionFailure=null;
+      publishRetry({source:'compaction',status:'waiting',attempt:0,maxAttempts:0,delayMs:0,message:'正在压缩上下文，请等待。'});
+    }
+    if(event.type==='summarization_retry_scheduled'&&retryStatus?.source==='compaction')publishRetry({source:'compaction',status:'waiting',
+      attempt:event.attempt,maxAttempts:event.maxAttempts,delayMs:event.delayMs,message:event.errorMessage});
+    if(event.type==='summarization_retry_attempt_start'&&event.source==='compaction'&&retryStatus?.source==='compaction')publishRetry({
+      ...retryStatus,status:'waiting',delayMs:0,message:'正在重试上下文压缩。'});
+    if(event.type==='compaction_end'){
+      compactionFailure=event.errorMessage||(event.aborted?'上下文压缩已中止，本次请求未能继续。':null);
+      publishRetry({source:'compaction',status:'finished',attempt:retryStatus?.source==='compaction'?retryStatus.attempt:0,
+        maxAttempts:retryStatus?.source==='compaction'?retryStatus.maxAttempts:0,delayMs:retryStatus?.source==='compaction'?retryStatus.delayMs:0,
+        message:compactionFailure||(event.willRetry?'上下文压缩完成，继续模型请求。':'上下文压缩完成。'),success:Boolean(event.result)&&!compactionFailure});
     }
     if(event.type==='message_start'&&event.message?.role==='assistant')emit({type:'assistant_start',turnId});
     if(event.type==='message_update'&&event.assistantMessageEvent?.type==='text_delta')emit({type:'delta',text:event.assistantMessageEvent.delta,turnId});
@@ -212,9 +243,9 @@ async function activateSession(manager){
 const goalHarness=createGoalExtension({emit,getSession:()=>session});
 function emitHistory(){
   goalHarness.publish();
-  const messages=[...(session?.messages||[])];
+  const messages=(session?.sessionManager.getBranch()||[]).filter(entry=>entry.type==='message').map(entry=>entry.message);
   if(streamingAssistant)messages.push({...streamingAssistant,content:streamingAssistant.content?.filter(part=>part.type==='text')});
-  emit({type:'history',sessionId:session?.sessionId,items:chatHistory(messages,activeTools),busy});
+  emit({type:'history',sessionId:session?.sessionId,items:chatHistory(messages,activeTools),busy,retry:retryStatus});
 }
 async function emitSessions(){
   const currentId=session?.sessionId;
@@ -893,7 +924,7 @@ async function receive(command) {
   }
   if(command.type==='probe') {
     const info=await android('device_info',{},undefined);
-    emit({type:'probe',node:process.version,pi:'1.0.4',platform:process.platform,arch:process.arch,device:info}); return;
+    emit({type:'probe',node:process.version,pi:PI_VERSION,platform:process.platform,arch:process.arch,device:info}); return;
   }
   if(command.type==='prompt') {
     if(command.newSession)await switchSession({type:'new_session'});
@@ -904,7 +935,7 @@ async function receive(command) {
     if(busy) throw new Error('当前任务正在执行，请先停止');
     const text=String(command.text||'').trim();
     if(!text && !(Array.isArray(command.images)&&command.images.length) && !command.image) return;
-    busy=true; stopRequested=false;phoneGuard=new PhoneTurnGuard();phoneFailure=null; activeTools.clear();turnId=command.id; emit({type:'turn_start',turnId,files:command.files||[]});
+    busy=true; stopRequested=false;phoneGuard=new PhoneTurnGuard();phoneFailure=null;lastInterruption=null;compactionFailure=null; activeTools.clear();turnId=command.id; emit({type:'turn_start',turnId,files:command.files||[]});
     try {
       const images=[];
       if(command.image)images.push({type:'image',data:command.image,mimeType:'image/png'});
@@ -912,10 +943,15 @@ async function receive(command) {
       await session.prompt(text+attachmentPrompt(command.files)+cameraPromptSuffix(command.cameraFrame),{images:images.length?images:undefined});
       const messages=session.messages;
       const last=[...messages].reverse().find(m=>m.role==='assistant');
-      if(last?.stopReason==='error') throw new Error(last.errorMessage||'模型请求失败');
-      if(phoneFailure)emit({type:'error',message:phoneFailure,turnId});else emit({type:'turn_end',turnId,aborted:stopRequested||last?.stopReason==='aborted'});
-    } catch(error) { if(stopRequested)emit({type:'turn_end',turnId,aborted:true});else emit({type:'error',message:phoneFailure||error.message,turnId}); }
-    finally {busy=false;turnId=null;}
+      if(compactionFailure)throw new Error(compactionFailure);
+      if(lastInterruption?.reason==='error')throw new Error(lastInterruption.message);
+      if(phoneFailure)emit({type:'error',message:phoneFailure,turnId});else emit({type:'turn_end',turnId,aborted:stopRequested||lastInterruption?.reason==='aborted'||last?.stopReason==='aborted'});
+    } catch(error) {
+      if(stopRequested)emit({type:'turn_end',turnId,aborted:true});
+      else emit({type:'error',message:phoneFailure||compactionFailure||error.message,turnId,
+        ...(!phoneFailure&&!compactionFailure&&lastInterruption?.reason==='error'?{interruptionId:lastInterruption.id}:{})});
+    }
+    finally {busy=false;retryStatus=null;turnId=null;}
   }
 }
 const decode=new StringDecoder('utf8');
@@ -924,7 +960,7 @@ const input=fs.createReadStream(null,{fd:inputFd,autoClose:false});
 input.on('data',chunk=>consume(decode.write(chunk)));
 input.on('error',error=>emit({type:'error',message:error.message}));
 process.on('unhandledRejection',error=>emit({type:'error',message:String(error)}));
-emit({type:'ready',node:process.version,pi:'1.0.4',platform:process.platform,arch:process.arch,execPath:process.execPath,argv:process.argv});
+emit({type:'ready',node:process.version,pi:PI_VERSION,platform:process.platform,arch:process.arch,execPath:process.execPath,argv:process.argv});
 emit({type:'default_config',config:defaultModelConfig,models:defaultModelOptions});
 emit({type:'agent_identity',name:agentIdentity.name,avatar:agentAvatar(),prompt:agentIdentity.prompt,customPrompt:agentIdentity.customPrompt,defaultPrompt:defaultAgentPrompt('{{AGENT_NAME}}')});
 emitJevStatus();

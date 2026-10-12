@@ -101,6 +101,7 @@
  <instrumentation android:name=".OAuthInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng OAuth UI and callback (isolated emulator fixtures)" />
  <instrumentation android:name=".UserQuestionInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng structured user questions (isolated emulator fixture)" />
  <instrumentation android:name=".ToolGroupInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng consecutive tool disclosures (emulator only)" />
+ <instrumentation android:name=".InterruptionInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng interruption history and retry visibility (isolated emulator only)" />
  <instrumentation android:name=".WakePipelineInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng wake word and ready cue (emulator only, synthetic WAV)" />
  <instrumentation android:name=".VideoCallInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold video call check (emulator only)" />
  <instrumentation android:name=".MinimapInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold conversation minimap check (emulator only)" />

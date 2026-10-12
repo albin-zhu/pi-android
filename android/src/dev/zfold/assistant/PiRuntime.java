@@ -51,6 +51,8 @@ public final class PiRuntime {
   public boolean lastPromptHasImage;
   public String sessionId="";
   final java.util.LinkedHashMap<String,JSONObject> lastTools=new java.util.LinkedHashMap<>();
+  final java.util.LinkedHashMap<String,JSONObject> lastInterruptions=new java.util.LinkedHashMap<>();
+  JSONObject retryStatus;
   public volatile String status = "正在启动本地 Pi…";
   private static native boolean prepare(String cache);
   private static native int startNode(String entry, String data, String credentials, String nativeDir);
@@ -161,16 +163,23 @@ public final class PiRuntime {
       if(type.equals("models_catalog")){modelProviders=event.optJSONArray("providers");selectedModel=event.optJSONObject("selected");thinkingState=event.optJSONObject("thinking");}
       if(type.equals("configured")) send(json("type","history"));
       if(type.equals("error")) restoring=false;
-      if(type.equals("session_changed")){UserQuestions.endTurn(context,null);sessionId=event.optString("sessionId");lastPromptText="";lastPromptImage=null;lastPromptHasImage=false;lastResponse="";lastTools.clear();}
+      if(type.equals("session_changed")){UserQuestions.endTurn(context,null);sessionId=event.optString("sessionId");lastPromptText="";lastPromptImage=null;lastPromptHasImage=false;lastResponse="";lastTools.clear();lastInterruptions.clear();retryStatus=null;}
       if(type.equals("history")){
         String previousSession=sessionId,previousText=lastPromptText,previousImage=lastPromptImage;
         sessionId=event.optString("sessionId",sessionId);lastPromptText="";lastPromptImage=null;lastPromptHasImage=false;lastResponse="";
+        if(!sessionId.equals(previousSession))lastInterruptions.clear();
+        else lastInterruptions.entrySet().removeIf(entry->!entry.getValue().optBoolean("runtimeOnly"));
+        retryStatus=event.optJSONObject("retry");busy=event.optBoolean("busy",busy);
         org.json.JSONArray items=event.optJSONArray("items");JSONObject latestUser=null;String latestAnswer="";
         lastTools.clear();
-        if(items!=null)for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item==null)continue;if("user".equals(item.optString("role"))){latestUser=item;latestAnswer="";lastTools.clear();}else if("assistant".equals(item.optString("role")))latestAnswer+=item.optString("text");else if("tool".equals(item.optString("role")))lastTools.put(item.optString("id"),item);}
+        if(items!=null)for(int i=0;i<items.length();i++){JSONObject item=items.optJSONObject(i);if(item==null)continue;if("user".equals(item.optString("role"))){latestUser=item;latestAnswer="";lastTools.clear();}else if("assistant".equals(item.optString("role")))latestAnswer+=item.optString("text");else if("tool".equals(item.optString("role")))lastTools.put(item.optString("id"),item);else if("interruption".equals(item.optString("role")))lastInterruptions.put(item.optString("id"),item);}
         if(latestUser!=null){lastPromptText=latestUser.optString("text");lastPromptHasImage=latestUser.optBoolean("hasImage");String picture=latestUser.optString("image");if(!picture.isEmpty())lastPromptImage=picture;else if(sessionId.equals(previousSession)&&lastPromptText.equals(previousText))lastPromptImage=previousImage;}
         lastResponse=latestAnswer;
       }
+      if(type.equals("assistant_interruption"))lastInterruptions.put(event.optString("id"),event);
+      if(type.equals("retry_status"))retryStatus=event;
+      if(type.equals("turn_start")||type.equals("turn_end")||type.equals("error"))retryStatus=null;
+      if(type.equals("error")){JSONObject interruption=errorInterruption(event);try{event.put("interruption",interruption);}catch(org.json.JSONException ignored){}}
       if(type.equals("turn_start")) {busy=true;stopped=false;stopUnconfirmed=false;activeTurnId=event.optString("turnId");lastResponse="";lastTools.clear();}
       if(type.equals("tool_uncertain")&&activeTurnId.equals(event.optString("turnId"))){stopUnconfirmed=true;status=event.optString("message");}
       if(type.equals("tool_execution")) {lastTools.put(event.optString("id"),event);String toolName=event.optString("name");
@@ -204,6 +213,14 @@ public final class PiRuntime {
       }
       for(Listener listener:listeners) listener.event(event);
     });
+  }
+  JSONObject errorInterruption(JSONObject event){
+    String id=event.optString("interruptionId");JSONObject existing=lastInterruptions.get(id);
+    if(existing!=null)return existing;
+    boolean runtimeOnly=id.isEmpty();if(runtimeOnly)id="runtime:"+java.util.UUID.randomUUID();
+    JSONObject item=json("role","interruption","id",id,"reason","error","message",event.optString("message"),"timestamp",System.currentTimeMillis(),"provider",currentProvider,"model",currentModel,"runtimeOnly",runtimeOnly);
+    lastInterruptions.put(id,item);try{event.put("interruptionId",id);}catch(org.json.JSONException ignored){}
+    return item;
   }
   public void listen(Listener listener){listeners.add(listener);}
   public void unlisten(Listener listener){listeners.remove(listener);}

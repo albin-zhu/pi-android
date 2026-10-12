@@ -22,6 +22,15 @@ export function toolCard(call, result, status) {
     output:clip(output), ...(call.name==='read'&&content.some(part=>part.type==='image')?{imagePath:args?.path||''}:{}), hasImage:content.some(part => part.type === 'image'),...(taskStatus?{taskStatus,verified:verified===true}:{})};
 }
 
+export function assistantInterruption(message) {
+  if (message?.role !== 'assistant' || !['error','length','aborted'].includes(message.stopReason)) return null;
+  const provider = message.provider || '', model = message.model || '', timestamp = message.timestamp ?? 0;
+  const reason = message.stopReason;
+  return {role:'interruption', id:'assistant:'+JSON.stringify([provider,model,timestamp]), reason,
+    message:clip(reason === 'error' ? message.errorMessage || '模型请求失败' : reason === 'length' ? '模型达到输出长度限制，回答可能未完成。' : '回答已中止，未完成本次请求。', 24000),
+    timestamp, provider, model};
+}
+
 export function chatHistory(messages, activeTools = new Map()) {
   const results = new Map(messages.filter(m => m.role === 'toolResult').map(m => [m.toolCallId, m]));
   const items = [];
@@ -36,6 +45,8 @@ export function chatHistory(messages, activeTools = new Map()) {
         if (part.type === 'text' && part.text) items.push({role:'assistant', text:part.text});
         if (part.type === 'toolCall') items.push(activeTools.get(part.id) || toolCard(part, results.get(part.id)));
       }
+      const interruption = assistantInterruption(message);
+      if (interruption) items.push(interruption);
     }
   }
   // Execution can begin before the SDK adds its assistant message to history.

@@ -1,6 +1,18 @@
 # 验证记录 · 2026-09-22
 
-当前交付状态（2026-10-06）：Fold7 已覆盖安装 0.2.85-compat28，新增连续工具调用折叠，保留 OAuth 修复、原生提问和系统助手入口统一。六份私有配置保留已核对。前置镜头、真人声学回声/蓝牙/唤醒听感与完整全屏到系统小窗的真机按钮路径仍待完成。下面保留各版本原始记录。
+当前交付状态（2026-10-12）：Fold7 已覆盖安装 0.2.87-compat28，实际 Pi SDK 为 1.0.4，`openai-codex/gpt-6.1-sol` 与原会话恢复；模型中断原因可从历史查看，自动重试/压缩进度可见。八份私有配置指纹保留已核对。本次只修复可观察性与构建版本校验，不宣称消除上游连接故障或完成 CLI/TUI 迁移。下面保留各版本原始记录。
+
+## 0.2.87 中断可观察性与 SDK 降级纠正 · 2026-10-12
+
+- 原会话 JSONL 记录 44 次模型失败尝试，涉及 17 组用户消息；其中 6 组随后恢复正常回答。33 条为 `fetch failed`，另有响应头超时、连接/流终止和两条超过 52428800 bytes 的 HTTP 413。失败尝试数不等于整轮任务中断数；历史 `fetch failed` 不能单独归因于账号过期、VPN或进程被系统杀死。
+- 原主聊天只投影助手正文/toolCall，漏掉没有正文的 error/length/aborted；SDK 自动重试和压缩事件也未转给 GUI，最终错误只 Toast。修复后以稳定记录 ID 投影中断卡，当前分支原始消息用于恢复历史；部分正文、工具顺序和阅读位置保持，实时/历史/最终错误去重。超大错误详情明确截断，完整原文仍在 Pi JSONL。
+- 实际 Pi 1.0.4 上的定向回归 27/27 通过：`chat-history`、`runtime-interruption`、`runtime`、`chat-images`、`session-management`。初次运行发现 macOS 临时目录 `/var` 与 canonical `/private/var` 不一致，已规范化两份测试夹具根路径；没有为通过而放宽生产工作区边界。
+- 独立 bundled runtime 烟测使用本地 HTTP/SSE：503 失败卡 → 自动重试 → 正常正文；401 最终错误；重启后失败尝试和正常正文仍在同一历史。另在 compiled runtime 中成功选择 `openai-codex/gpt-6.1-sol`，未发送真实模型请求。
+- 模拟器 `InterruptionInstrumentation` 与既有 `ToolGroupInstrumentation` 均结束码 -1；实际 GUI 验证原始详情/复制、重进页面、跨会话隔离、停止/截断、部分回答、重试/压缩状态、阅读位置与正常工具组。已目视检查模拟器截图。
+- 发布回归：本轮临时 0.2.86 错将本地实际 0.85.1 SDK 打包，尽管 package.json/lock 要求 1.0.4，且 ready/probe 版本曾写死 1.0.4。用户报告目标模型消失后核对证实降级。已恢复锁定依赖、改为实际版本注入并增加构建拒绝检查；独立错配项目烟测验证在创建 APK 前拒绝构建。0.2.86 产物撤回。
+- 用户明确允许更新中断终端/本地服务后覆盖安装。最终包管理器报告 287 / 0.2.87-compat28 / targetSdk28；手机 `files/runtime/package.json` 实际为 1.0.4。主界面与私有选中配置均为 `openai-codex/gpt-6.1-sol`，活动会话恢复为 `01a12579-e20a-76e3-a21d-6dff77c690ab`；真实历史中的 `fetch failed` 与 300000ms 响应头超时详情已在 Fold7 展开显示。
+- 安装前后 model/auth/models/agent/system/connectors/speech/jev 八份配置 SHA-256 均一致；未清除应用数据，未代用户重发旧任务，未在真机运行 instrumentation。最终截图 `artifacts/interruption-0.2.87-fold.png`。
+- APK：`artifacts/Zfold-0.2.87-compat28-debug.apk`，SHA-256 `8c649170137bd3dafaa403f0040c4e42f7747594667d66629557489eb76e6e49`。完整测试套件未运行；受控模型烟测不代表真实供应商连接故障已解决。
 
 ## 0.2.85 Fold7 覆盖安装 · 2026-10-06
 
