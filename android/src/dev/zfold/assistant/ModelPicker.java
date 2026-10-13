@@ -47,9 +47,8 @@ final class ModelPicker {
           row.setContentDescription((selected?"当前模型 ":"切换到 ")+providerId+"/"+modelId);row.setClickable(true);row.setFocusable(true);
           row.setOnClickListener(v->{
             if(runtime.busy){Toast.makeText(context,"请先停止当前任务，再切换模型",Toast.LENGTH_SHORT).show();return;}
-            if(runtime.activeConfig==null){Toast.makeText(context,"模型还没有连接，不能切换",Toast.LENGTH_SHORT).show();return;}
             try{
-              JSONObject next=new JSONObject(runtime.activeConfig.toString());
+              JSONObject next=runtime.activeConfig==null?new JSONObject():new JSONObject(runtime.activeConfig.toString());
               File file=new File(context.getNoBackupFilesDir(),"model.json");
               if(file.isFile())next=new JSONObject(new String(java.nio.file.Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8));
               next.put("provider",providerId);next.put("model",modelId);

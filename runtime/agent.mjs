@@ -819,7 +819,8 @@ async function configure(raw) {
     providerConfig={name:modelRuntime.getProvider(next.provider)?.name||next.provider,modelOverrides:{[next.model]:{}}};
     document.providers[next.provider]=providerConfig;writeModelsDocument(document);
   }
-  if(providerConfig)modelRuntime.registerProvider(next.provider,providerConfig);
+  // Reload models.json through the config layer; extension registration would replace built-in models.
+  await modelRuntime.refresh();
   const model = modelRuntime.getModel(next.provider,next.model);
   if (!model) throw new Error('模型配置未能加载');
   await reloadSessionResources();
