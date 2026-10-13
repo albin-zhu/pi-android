@@ -30,6 +30,7 @@ import { SpeechBridge } from './speech-bridge.mjs';
 import { SessionCatalog, atomicJson } from './session-catalog.mjs';
 import {resolveSessionWorkspace} from './session-workspace.mjs';
 import { ProviderAuthManager } from './provider-auth.mjs';
+import {filterModelCatalog} from './model-picker-preferences.mjs';
 import { createAskUserQuestionTool, QuestionToolGate } from './user-question.mjs';
 
 const PI_VERSION = __ZFOLD_PI_VERSION__;
@@ -746,9 +747,12 @@ function allProviderCatalog(){
   });
 }
 
+function modelPickerPreferences(){
+  try{const file=path.join(credentialsDir,'model-picker.json');if(fs.statSync(file).size>16384)return {};const value=JSON.parse(fs.readFileSync(file,'utf8'));return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return {};}
+}
 function emitModelsCatalog(){
   if(!modelRuntime)return;
-  emit({type:'models_catalog',selected:config?{provider:config.provider,model:config.model}:null,thinking:session?{level:session.thinkingLevel,available:session.getAvailableThinkingLevels(),supported:session.supportsThinking()}:null,providers:providerCatalog(),availableProviders:allProviderCatalog(),error:modelRuntime.getError()||null});
+  emit({type:'models_catalog',selected:config?{provider:config.provider,model:config.model}:null,thinking:session?{level:session.thinkingLevel,available:session.getAvailableThinkingLevels(),supported:session.supportsThinking()}:null,providers:filterModelCatalog(providerCatalog(),modelPickerPreferences()),availableProviders:allProviderCatalog(),error:modelRuntime.getError()||null});
 }
 
 const providerAuth=new ProviderAuthManager({getRuntime:async()=>{await ensureModelRuntime();return modelRuntime;},emit,onSuccess:emitModelsCatalog});
