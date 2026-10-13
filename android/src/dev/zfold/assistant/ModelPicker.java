@@ -71,9 +71,19 @@ final class ModelPicker {
     manage.setOnClickListener(v->{handle[0].dismiss();context.startActivity(new Intent(context,MainActivity.class).putExtra("open_models",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));});
     list.addView(manage);
     ScrollView scroll=new ScrollView(context);scroll.setVerticalScrollBarEnabled(false);scroll.addView(list);
-    int maxHeight=Ui.dp(context,Math.min(420,Math.max(190,rows*40+46)));
+    android.graphics.Rect visible=new android.graphics.Rect();anchor.getWindowVisibleDisplayFrame(visible);
+    int[] location=new int[2];anchor.getLocationOnScreen(location);int gap=Ui.dp(context,6);
+    int above=Math.max(0,location[1]-visible.top-gap),below=Math.max(0,visible.bottom-location[1]-anchor.getHeight()-gap);
+    boolean placeAbove=above>=below;int available=Math.max(1,Math.max(above,below));
+    int maxHeight=Math.min(Ui.dp(context,Math.min(420,Math.max(190,rows*40+46))),Math.max(1,available-Ui.dp(context,80)));
     sheet.addView(scroll,new LinearLayout.LayoutParams(-1,maxHeight));
+    int measuredWidth=View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),unbounded=View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED);
+    sheet.measure(measuredWidth,unbounded);
+    int headerHeight=sheet.getMeasuredHeight()-maxHeight;
+    scroll.getLayoutParams().height=Math.min(maxHeight,Math.max(1,available-headerHeight));
+    sheet.measure(measuredWidth,unbounded);int popupHeight=sheet.getMeasuredHeight();
     handle[0]=new PopupWindow(frame,-2,-2,true);handle[0].setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));handle[0].setOutsideTouchable(true);
-    handle[0].showAsDropDown(anchor,0,-Math.min(maxHeight,Ui.dp(context,330))-anchor.getHeight()-Ui.dp(context,6));
+    // Position using the full measured popup so Android cannot clip the scroll viewport.
+    handle[0].showAsDropDown(anchor,0,placeAbove?-popupHeight-anchor.getHeight()-gap:gap);
   }
 }
