@@ -208,56 +208,7 @@ public final class AndroidTools {
         result.done(PiRuntime.json("path",target.getCanonicalPath(),"size",target.length()),null);return;
       }
       if(name.equals("open")) {
-        String target=args.getString("target"),mime=args.optString("mime");
-        if(target==null||target.trim().isEmpty()||target.length()>4096)throw new Exception("open 需要 1 到 4096 个字符的 target");
-        target=target.trim();Uri uri;String kind;
-        Intent intent;
-        if(target.matches("(?i)^(https?|mailto|tel|sms|geo|market)://.+")) {
-          uri=Uri.parse(target);kind="uri";intent=new Intent(Intent.ACTION_VIEW,uri);
-        }else if(target.startsWith("content://")) {
-          uri=Uri.parse(target);kind="content";intent=new Intent(Intent.ACTION_VIEW,uri);
-          if(!mime.isEmpty())intent.setType(mime);
-        }else {
-          File storageRoot=new File(Environment.getExternalStorageDirectory(),"pi").getCanonicalFile();
-          File file=new File(target).getCanonicalFile();
-          if(!file.getPath().equals(storageRoot.getPath())&&!file.getPath().startsWith(storageRoot.getPath()+File.separator))
-            throw new Exception("open 只能打开 /storage/pi 内的文件或目录；URL 可直接打开");
-          String relative=storageRoot.toPath().relativize(file.toPath()).toString().replace(File.separatorChar,'/');
-          String documentId="primary"+(relative.isEmpty()?"":":"+relative);
-          uri=DocumentsContract.buildDocumentUri("com.android.externalstorage.documents",documentId);
-          boolean directory=file.isDirectory();
-          if(mime.isEmpty()) {
-            if(directory)mime="vnd.android.document/directory";
-            else {
-              int dot=file.getName().lastIndexOf('.');
-              String extension=dot>=0?file.getName().substring(dot+1).toLowerCase(Locale.ROOT):"";
-              mime=android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
-              if(mime==null||mime.isEmpty())mime="application/octet-stream";
-            }
-          }
-          kind=directory?"directory":"file";
-          intent=new Intent(Intent.ACTION_VIEW).setDataAndType(uri,mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-          if(intent.resolveActivity(context.getPackageManager())==null&&!directory) {
-            File parent=file.getParentFile();
-            if(parent!=null&&parent.getPath().startsWith(storageRoot.getPath())) {
-              String parentRelative=storageRoot.toPath().relativize(parent.toPath()).toString().replace(File.separatorChar,'/');
-              Uri parentUri=DocumentsContract.buildDocumentUri("com.android.externalstorage.documents","primary:"+parentRelative);
-              Intent fallback=new Intent(Intent.ACTION_VIEW).setDataAndType(parentUri,"vnd.android.document/directory").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-              if(fallback.resolveActivity(context.getPackageManager())!=null) {
-                context.startActivity(fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                result.done(PiRuntime.json("opened",false,"fallbackOpened",true,"kind",kind,"target",target,"mime",mime,
-                  "reason","no file handler","fallback",parent.getPath()),null);return;
-              }
-            }
-            throw new Exception("系统没有找到能打开 "+mime+" 的应用");
-          }
-        }
-        if(args.optBoolean("chooser",false))intent=Intent.createChooser(intent,"使用以下方式打开");
-        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        ResolveInfo handler=context.getPackageManager().resolveActivity(intent,PackageManager.MATCH_DEFAULT_ONLY);
-        result.done(PiRuntime.json("opened",true,"kind",kind,"target",target,"mime",mime,
-          "handler",handler==null?"":handler.loadLabel(context.getPackageManager()).toString(),
-          "handlerPackage",handler==null?"":handler.activityInfo.packageName),null);return;
+        result.done(OpenTargets.open(context,args.getString("target"),args.optString("mime"),args.optBoolean("chooser",false)),null);return;
       }
       if(name.equals("pkg")) {
         final String action=args.optString("action","list"),packageName=args.optString("name"),query=args.optString("query");

@@ -1,6 +1,6 @@
 {
   "name": "zfold-local-assistant",
-  "version": "0.2.86",
+  "version": "0.2.88",
   "private": true,
   "type": "module",
   "scripts": {

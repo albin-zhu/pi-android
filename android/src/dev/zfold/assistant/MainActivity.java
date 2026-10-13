@@ -41,6 +41,8 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   final Map<String,ToolCallView> toolViews=new LinkedHashMap<>();
   final Map<String,ToolGroupView> toolGroups=new LinkedHashMap<>();
   private String displayedSessionId="";private int followVersion;
+  final Map<String,InterruptionView> interruptionViews=new LinkedHashMap<>();
+  private TextView retryLabel;
   @Override public void onCreate(Bundle state){
     super.onCreate(state);returnWorkbench=getIntent().getBooleanExtra("return_workbench",false);temporarySettingsHost=returnWorkbench;theme=new Ui.Theme(this);getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);
     getWindow().getDecorView().setSystemUiVisibility(theme.dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
@@ -58,6 +60,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     getWindow().setDecorFitsSystemWindows(false);
     AppShortcuts.publish(this);
     buildUI();UserQuestions.listen(questionChanged);backCallback=ChatBackNavigation.register(this);ScreenContext.listen(screenListener);screenListener.run();
+    displayedSessionId=runtime.sessionId;for(JSONObject item:runtime.lastInterruptions.values())showInterruption(item);
     if(runtime.ready&&!runtime.configured)runtime.restoreConfiguration();
     else if(runtime.configured)runtime.send(PiRuntime.json("type","history"));
     if(getIntent().getBooleanExtra("open_capabilities",false)){getIntent().removeExtra("open_capabilities");permissions();}
@@ -163,6 +166,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     status=text(idleStatus(),11,theme.muted);status.setSingleLine(true);status.setEllipsize(android.text.TextUtils.TruncateAt.END);statusRow.addView(status,new LinearLayout.LayoutParams(0,-2,1));
     statusRow.setVisibility(View.GONE);
     composerSurface.addView(statusRow,new LinearLayout.LayoutParams(-1,-2));
+    retryLabel=text("",12,theme.error);retryLabel.setPadding(dp(8),dp(4),dp(8),dp(6));retryLabel.setVisibility(View.GONE);composerSurface.addView(retryLabel,new LinearLayout.LayoutParams(-1,-2));renderRetry();
     inputRow=new LinearLayout(this);inputRow.setGravity(Gravity.CENTER_VERTICAL);composerSurface.addView(inputRow,new LinearLayout.LayoutParams(-1,-2));
     input=new EditText(this);input.setTextSize(16);input.setTextColor(theme.ink);input.setHintTextColor(theme.muted);input.setHint("说说你的想法…");input.setBackgroundColor(Color.TRANSPARENT);input.setMinLines(1);input.setMaxLines(5);input.setMinimumHeight(dp(48));input.setPadding(dp(11),dp(4),dp(11),dp(6));input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);input.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI|android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN);inputRow.addView(input,new LinearLayout.LayoutParams(0,-2,1));
     slashSuggest=SlashSuggest.attach(input,theme,this::runSlashCommand);composerSurface.addView(slashSuggest,new LinearLayout.LayoutParams(-1,-2));
@@ -293,7 +297,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     if(!user||!hasPicture)return;
     Bitmap bitmap=Ui.thumbnail(picture,480);
     LinearLayout imageRow=new LinearLayout(this);ConversationMinimap.mark(imageRow,ConversationMinimap.IMAGE);imageRow.setGravity(Gravity.END);
-    if(bitmap!=null){ImageView image=new ImageView(this);image.setImageBitmap(bitmap);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setBackground(Ui.card(this,theme.surface,18,theme.line));image.setElevation(dp(3));image.setPadding(dp(4),dp(4),dp(4),dp(4));image.setClipToOutline(true);image.setContentDescription("本条消息附带的屏幕图片");imageRow.addView(image,new LinearLayout.LayoutParams(dp(180),dp(140)));}
+    if(bitmap!=null){ImageView image=new ImageView(this);image.setImageBitmap(bitmap);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setBackground(Ui.card(this,theme.surface,18,theme.line));image.setElevation(dp(3));image.setPadding(dp(4),dp(4),dp(4),dp(4));image.setClipToOutline(true);image.setContentDescription("打开本条消息的图片大图");image.setOnClickListener(v->ChatImages.openBitmap(this,picture));imageRow.addView(image,new LinearLayout.LayoutParams(dp(180),dp(140)));}
     else{TextView label=text("已附图片",13,theme.muted);label.setPadding(dp(12),dp(8),dp(12),dp(8));label.setBackground(Ui.shape(this,theme.field,12,0));imageRow.addView(label);}
     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(5);conversation.addView(imageRow,lp);minimap.changed();
   }
@@ -380,24 +384,38 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     }else{card.update(item);ToolGroupView group=toolGroups.get(id);if(group!=null)group.refresh();}minimap.changed();
   }
   void finishToolGroups(boolean cancelled){for(ToolGroupView group:new LinkedHashSet<>(toolGroups.values()))group.finish(cancelled);minimap.changed();}
+  void showInterruption(JSONObject item){
+    String id=item.optString("id");if(interruptionViews.containsKey(id))return;
+    if(intro.getParent()==conversation)conversation.removeView(intro);conversation.setGravity(Gravity.TOP);
+    InterruptionView card=new InterruptionView(this,item,this::toolDisclosureChanged);interruptionViews.put(id,card);
+    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=dp(8);conversation.addView(card,lp);minimap.changed();
+  }
+  void renderRetry(){if(retryLabel==null)return;String value=InterruptionView.retryText(runtime.retryStatus);retryLabel.setText(value);retryLabel.setVisibility(value.isEmpty()?View.GONE:View.VISIBLE);}
   void showHistory(JSONObject event){
     String session=event.optString("sessionId",runtime.sessionId);boolean same=displayedSessionId.equals(session);
     boolean follow=!same||conversation.getChildCount()==0||conversation.getChildAt(0)==intro||followsBottom();int position=scroll.getScrollY(),version=++followVersion;
-    Set<String> openGroups=new HashSet<>(),openCalls=new HashSet<>();
+    Set<String> openGroups=new HashSet<>(),openCalls=new HashSet<>(),openInterruptions=new HashSet<>();
+    List<JSONObject> transientInterruptions=new ArrayList<>();
+    if(same)for(Map.Entry<String,InterruptionView> card:interruptionViews.entrySet()){if(card.getValue().expanded)openInterruptions.add(card.getKey());if(card.getValue().record.optBoolean("runtimeOnly"))transientInterruptions.add(card.getValue().record);}
+    if(session.equals(runtime.sessionId))for(JSONObject item:runtime.lastInterruptions.values())if(item.optBoolean("runtimeOnly"))transientInterruptions.add(item);
     if(same){for(ToolGroupView group:toolGroups.values())if(group.expanded)openGroups.add(group.key);for(Map.Entry<String,ToolCallView> call:toolViews.entrySet())if(call.getValue().expanded)openCalls.add(call.getKey());}
     displayedSessionId=session;
     minimap.reset();
-    JSONArray items=event.optJSONArray("items");conversation.removeAllViews();toolViews.clear();toolGroups.clear();answer=null;response.setLength(0);
-    if(items==null||items.length()==0){conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);return;}
+    JSONArray items=event.optJSONArray("items");conversation.removeAllViews();toolViews.clear();toolGroups.clear();interruptionViews.clear();answer=null;response.setLength(0);
+    if(items==null)items=new JSONArray();
     conversation.setGravity(Gravity.TOP);
     for(int i=0;i<items.length();i++){
       JSONObject item=items.optJSONObject(i);if(item==null)continue;
       if("tool".equals(item.optString("role"))){showTool(item);answer=null;response.setLength(0);continue;}
+      if("interruption".equals(item.optString("role"))){showInterruption(item);answer=null;response.setLength(0);continue;}
       boolean user="user".equals(item.optString("role"));String picture=item.optString("image");
       if(!user&&item.optString("text").trim().isEmpty())continue;
       if(picture.isEmpty()&&user&&item.optString("text").equals(runtime.lastPromptText)&&runtime.lastPromptImage!=null)picture=runtime.lastPromptImage;
       bubble(item.optString("text"),user,picture,item.optBoolean("hasImage")||!picture.isEmpty());response.setLength(0);if(user)answer=null;else response.append(item.optString("text"));
     }
+    for(JSONObject item:transientInterruptions)showInterruption(item);
+    for(String id:openInterruptions){InterruptionView card=interruptionViews.get(id);if(card!=null)card.setExpanded(true);}
+    if(conversation.getChildCount()==0){conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);}
     for(ToolGroupView group:new LinkedHashSet<>(toolGroups.values()))group.setExpanded(openGroups.contains(group.key));
     for(String id:openCalls){ToolCallView call=toolViews.get(id);if(call!=null)call.setExpanded(true);}
     if(!event.optBoolean("busy",runtime.busy))finishToolGroups(false);
@@ -423,10 +441,13 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
         break;
       case "jev_status":break;
       case "jev_error":notice(event.optString("message"));break;
-      case "session_changed":followVersion++;displayedSessionId=event.optString("sessionId",runtime.sessionId);minimap.reset();conversation.removeAllViews();toolViews.clear();toolGroups.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");break;
-      case "history":showHistory(event);showStatus(runtime.busy?"正在处理…":idleStatus());break;
+      case "session_changed":followVersion++;displayedSessionId=event.optString("sessionId",runtime.sessionId);minimap.reset();conversation.removeAllViews();toolViews.clear();toolGroups.clear();interruptionViews.clear();conversation.setGravity(Gravity.CENTER_VERTICAL);conversation.addView(intro);answer=null;response.setLength(0);pendingTaskPrompt=null;showStatus("已切换会话");renderRetry();break;
+      case "history":showHistory(event);showStatus(runtime.busy?"正在处理…":idleStatus());renderRetry();break;
+      case "retry_status":renderRetry();break;
+      case "assistant_interruption":{boolean followInterruption=followsBottom();showInterruption(event);answer=null;response.setLength(0);followBottom(followInterruption);break;}
       case "turn_start":{
         displayedSessionId=runtime.sessionId;
+        renderRetry();
         if(intro.getParent()==conversation)conversation.removeView(intro);conversation.setGravity(Gravity.TOP);
         JSONArray files=event.optJSONArray("files");StringBuilder summary=new StringBuilder(runtime.lastPromptText);
         if(files!=null&&files.length()>0){if(summary.length()>0)summary.append('\n');summary.append("[本地文件：");for(int i=0;i<files.length();i++){if(i>0)summary.append('，');summary.append(files.optJSONObject(i)==null?"文件":files.optJSONObject(i).optString("name","文件"));}summary.append(']');}
@@ -436,6 +457,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       case "delta":boolean follow=followsBottom();String delta=event.optString("text");response.append(delta);if(answer==null){if(response.toString().trim().isEmpty())break;bubble("",false);}answer.setText(response.toString());followBottom(follow);break;
       case "tool_execution":boolean followTool=followsBottom(),newTool=!toolViews.containsKey(event.optString("id"));showTool(event);if(newTool)answer=null;showStatus("running".equals(event.optString("status"))?PhoneHud.action(event):"正在处理…");if("running".equals(event.optString("status"))&&!voice.listeningForInput())VoiceCallActivity.onControllerStatus(PhoneHud.action(event));followBottom(followTool);break;
       case "turn_end":{
+        renderRetry();
         showStatus(idleStatus());
         finishToolGroups(event.optBoolean("aborted"));
         if(event.optBoolean("aborted"))showStatus(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");
@@ -443,7 +465,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
         if(queued!=null&&!isFinishing())handler.postDelayed(()->{if(!isFinishing()){toggleVoice();sendText(queued);}},380);
         break;
       }
-      case "error":finishToolGroups(false);showStatus("当前任务出错，请检查待发队列");pendingTaskPrompt=null;notice(Ui.errorMessage(event.optString("message")));break;
+      case "error":{finishToolGroups(false);showStatus("当前任务出错，请查看中断详情");pendingTaskPrompt=null;boolean followError=followsBottom();JSONObject item=event.optJSONObject("interruption");if(item==null)item=runtime.errorInterruption(event);showInterruption(item);renderRetry();followBottom(followError);break;}
       case "probe":JSONObject d=event.optJSONObject("device");new AlertDialog.Builder(this).setTitle("本地运行正常").setMessage("Pi "+event.optString("pi")+"\nNode "+event.optString("node")+"\n架构 "+event.optString("arch")+"\n\n原生工具返回：\n"+(d==null?"":d.toString())).setPositiveButton("完成",null).show();break;
     }
     updateSend();updateModelChip();

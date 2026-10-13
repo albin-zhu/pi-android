@@ -15,7 +15,7 @@ function boot(root){
   return {events,send:command=>child.stdin.write(JSON.stringify(command)+'\n'),next(type,match=()=>true){const i=events.findIndex(e=>e.type===type&&match(e));if(i>=0)return Promise.resolve(events.splice(i,1)[0]);return new Promise((resolve,reject)=>{const w={type,match,resolve,reject};w.timer=setTimeout(()=>{waiters.splice(waiters.indexOf(w),1);reject(new Error('Timed out waiting for '+type+': '+JSON.stringify(events.filter(e=>e.type==='error'||e.type==='session_error'))));},10000);waiters.push(w);});},async close(){if(child.exitCode!==null||child.signalCode!==null)return;const exited=new Promise(resolve=>child.once('exit',resolve));child.kill('SIGKILL');await exited;}};
 }
 async function setup(t){
-  const root=fs.mkdtempSync(path.join(os.tmpdir(),'chengcheng-sessions-'));let release;
+  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'chengcheng-sessions-')));let release;
   const server=http.createServer(async(req,res)=>{
     let body='';for await(const part of req)body+=part;
     const messages=JSON.parse(body).messages,lastUser=messages.findLastIndex(m=>m.role==='user'),tail=messages.slice(lastUser+1),text=JSON.stringify(messages[lastUser]||{});

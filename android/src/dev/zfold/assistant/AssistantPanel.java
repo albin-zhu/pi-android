@@ -20,12 +20,14 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
   interface Host { void close(); void minimize(); void select(); void toggleExpansion(); }
   static final class Draft {String text,image,label;boolean sharedScreen;ArrayList<LocalFileAttachment> files;Draft(String t,String i,String l,boolean s,ArrayList<LocalFileAttachment> f){text=t;image=i;label=l;sharedScreen=s;files=f;}}
   final Host host;final PiRuntime runtime;final Ui.Theme theme;final Handler handler=new Handler(Looper.getMainLooper());
-  TextView state,attachmentTitle,attachmentHint,errorLabel,identityTitle,answerName;Ui.RichBlock replyBlock;
+  TextView state,attachmentTitle,attachmentHint,identityTitle,answerName;Ui.RichBlock replyBlock;
   Ui.Action mic,modelChip,select,fileButton,screenShare,sidebar,expandAction,primary,copy,retry,configure,overflow;EditText input;
   LinearLayout attachment,fileList,answerBlock,errorActions,answerMeta,sentCard,composerSurface,actionToolbar;android.view.View slashSuggest;ImageView thumbnail,preview,sentThumbnail,sentExpanded;TextView sentText;ScrollView resultArea;
   Ui.AgentAvatar identityBadge,answerBadge;
   ProgressBar progress;String image,imageLabel,lastSentText="",lastSentImage,lastSentImageLabel,rawReply="";
   LinearLayout toolList;final Map<String,ToolCallView> toolViews=new LinkedHashMap<>();
+  LinearLayout interruptionList;final Map<String,InterruptionView> interruptionViews=new LinkedHashMap<>();
+  TextView retryLabel;ScrollView contentArea;
   VoiceTurnController voice;Bitmap imagePreview,sentBitmap;
   boolean speakingMode,disposed,expandedImage,renderPending,compact,screenSharing,capturingScreen;
   boolean expanded;private int bottomInset;
@@ -49,12 +51,12 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     removeView(attachment);LinearLayout.LayoutParams attachmentParams=new LinearLayout.LayoutParams(-1,-2);attachmentParams.bottomMargin=dp(7);composerSurface.addView(attachment,0,attachmentParams);
     LinearLayout content=new LinearLayout(context);content.setOrientation(VERTICAL);
     for(int i=0;i<2;i++){View child=getChildAt(0);removeViewAt(0);content.addView(child);}
-    ScrollView contentScroll=new ScrollView(context);contentScroll.setFillViewport(false);contentScroll.setVerticalScrollBarEnabled(false);contentScroll.addView(content);
+    ScrollView contentScroll=new ScrollView(context);contentArea=contentScroll;contentScroll.setFillViewport(false);contentScroll.setVerticalScrollBarEnabled(false);contentScroll.addView(content);
     addView(contentScroll,0,new LayoutParams(-1,-2,1));
     if(!runtime.lastPromptText.isEmpty()||runtime.lastPromptHasImage){lastSentText=runtime.lastPromptText;lastSentImage=runtime.lastPromptImage;showSent(lastSentText,lastSentImage,runtime.lastPromptHasImage);}
     if(!runtime.lastResponse.isEmpty())showReply(runtime.lastResponse);
-    restoreTools();
-    runtime.listen(this);ScreenContext.listen(screenListener);screenListener.run();runtime.restoreConfiguration();updateControls();requestFocus();
+    restoreTools();restoreInterruptions();renderRetry();
+    runtime.listen(this);ScreenContext.listen(screenListener);screenListener.run();runtime.restoreConfiguration();if(runtime.configured)runtime.send(PiRuntime.json("type","history"));updateControls();requestFocus();
   }
   int dp(float n){return Ui.dp(getContext(),n);}
   void setBottomInset(int inset){bottomInset=Math.max(0,inset);int bottom=dp(compact?6:10)+bottomInset,top=dp(compact?6:14);if(getPaddingBottom()!=bottom||getPaddingTop()!=top)setPadding(dp(14),top,dp(14),bottom);}
@@ -110,12 +112,13 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     LinearLayout resultContent=new LinearLayout(getContext());resultContent.setOrientation(VERTICAL);
     toolList=new LinearLayout(getContext());toolList.setOrientation(VERTICAL);resultContent.addView(toolList);
     replyBlock=Ui.rich(getContext(),"",15,theme.ink);replyBlock.setPadding(dp(2),dp(8),dp(2),dp(8));resultContent.addView(replyBlock);resultArea.addView(resultContent);answerBlock.addView(resultArea);
-    errorLabel=text("",12,theme.error);errorLabel.setPadding(0,dp(8),0,dp(8));errorLabel.setVisibility(GONE);answerBlock.addView(errorLabel);
+    interruptionList=new LinearLayout(getContext());interruptionList.setOrientation(VERTICAL);answerBlock.addView(interruptionList,new LayoutParams(-1,-2));
     errorActions=row();retry=action(R.drawable.ic_arrow_clockwise,"重试","重试本次请求",theme.accent,theme.accentSoft,()->send(lastSentText));configure=action(R.drawable.ic_gear_six,"模型设置","打开模型设置",theme.muted,theme.field,this::setup);errorActions.addView(retry);LayoutParams cp=new LayoutParams(-2,-2);cp.leftMargin=dp(8);errorActions.addView(configure,cp);errorActions.setVisibility(GONE);answerBlock.addView(errorActions);
     LayoutParams lp=new LayoutParams(-1,-2);lp.topMargin=dp(4);addView(answerBlock,lp);
   }
   void buildComposer(){
     composerSurface=new LinearLayout(getContext());composerSurface.setOrientation(VERTICAL);composerSurface.setPadding(dp(7),dp(5),dp(7),dp(5));composerSurface.setBackground(Ui.shape(getContext(),theme.surface,24,0));
+    retryLabel=text("",12,theme.error);retryLabel.setPadding(dp(9),dp(5),dp(9),dp(5));retryLabel.setVisibility(GONE);composerSurface.addView(retryLabel,new LayoutParams(-1,-2));
     input=new EditText(getContext());input.setBackgroundColor(Color.TRANSPARENT);input.setTextSize(16);input.setTextColor(theme.ink);input.setHintTextColor(theme.muted);input.setHint("想问什么，或让我做什么？");input.setMinHeight(dp(46));input.setMinLines(1);input.setMaxLines(3);input.setPadding(dp(9),dp(9),dp(9),dp(3));input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);input.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI|android.view.inputmethod.EditorInfo.IME_FLAG_NO_FULLSCREEN);composerSurface.addView(input,new LayoutParams(-1,-2));
     input.setOnFocusChangeListener((v,focus)->composerSurface.setBackground(Ui.shape(getContext(),theme.surface,20,focus?theme.accent:theme.line)));
     input.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int count,int after){}public void onTextChanged(CharSequence s,int st,int before,int count){updateControls();}public void afterTextChanged(Editable s){}});
@@ -175,6 +178,16 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     answerBlock.setVisibility(VISIBLE);answerMeta.setVisibility(VISIBLE);resultArea.setVisibility(VISIBLE);
   }
   void restoreTools(){toolList.removeAllViews();toolViews.clear();for(JSONObject item:runtime.lastTools.values())showTool(item);}
+  void showInterruption(JSONObject item){
+    String id=item.optString("id");if(interruptionViews.containsKey(id))return;
+    InterruptionView card=new InterruptionView(getContext(),item,null);interruptionViews.put(id,card);
+    LayoutParams lp=new LayoutParams(-1,-2);lp.topMargin=dp(8);interruptionList.addView(card,lp);answerBlock.setVisibility(VISIBLE);
+  }
+  void restoreInterruptions(){
+    Set<String> open=new HashSet<>();for(Map.Entry<String,InterruptionView> card:interruptionViews.entrySet())if(card.getValue().expanded)open.add(card.getKey());
+    interruptionViews.clear();interruptionList.removeAllViews();for(JSONObject item:runtime.lastInterruptions.values()){showInterruption(item);if(open.contains(item.optString("id")))interruptionViews.get(item.optString("id")).setExpanded(true);}
+  }
+  void renderRetry(){if(retryLabel==null)return;String value=InterruptionView.retryText(runtime.retryStatus);retryLabel.setText(value);retryLabel.setVisibility(value.isEmpty()?GONE:VISIBLE);}
   void hideKeyboard(){input.clearFocus();requestFocus();((InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(getWindowToken(),0);}
   void setup(){voice.stopSession(false);host.close();getContext().startActivity(new Intent(getContext(),MainActivity.class).putExtra("open_models",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));}
   void send(String raw){
@@ -182,7 +195,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     if(text.equalsIgnoreCase("/goal")){runSlashCommand("goal","");input.setText("");return;}
     if(text.isEmpty()&&localFiles.isEmpty())return;
     if(!runtime.ready){state.setText("正在准备助手…");return;}
-    if(!runtime.configured){state.setText("需要连接模型");showReply("连接你自己的模型后，就能在这里开始对话。");errorLabel.setVisibility(GONE);errorActions.setVisibility(VISIBLE);retry.setVisibility(GONE);return;}
+    if(!runtime.configured){state.setText("需要连接模型");showReply("连接你自己的模型后，就能在这里开始对话。");errorActions.setVisibility(VISIBLE);retry.setVisibility(GONE);return;}
     if(runtime.busy){
       boolean stopOnly=isStopCommand(text);pendingTaskPrompt=stopOnly?null:text;
       state.setText(stopOnly?"收到停止指令 · 正在停止任务":"收到新指令 · 停止旧任务后执行");
@@ -205,7 +218,7 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
       }
       if(images.length()>0)command.put("images",images);if(files.length()>0)command.put("files",files);
     }catch(Exception ignored){}
-    showSent(text,image,image!=null);input.setText("");removeImage();localFiles.clear();renderFiles();hideKeyboard();errorActions.setVisibility(GONE);errorLabel.setVisibility(GONE);answerMeta.setVisibility(GONE);resultArea.setVisibility(GONE);rawReply="";state.setText("正在思考…");runtime.send(command);updateControls();
+    showSent(text,image,image!=null);input.setText("");removeImage();localFiles.clear();renderFiles();hideKeyboard();errorActions.setVisibility(GONE);answerMeta.setVisibility(GONE);resultArea.setVisibility(GONE);rawReply="";state.setText("正在思考…");runtime.send(command);updateControls();
   }
   void toggleScreenShare(){
     if(ScreenContext.enabled()){ScreenContext.setEnabled(false);if(imageLabel!=null&&imageLabel.startsWith("屏幕 ·"))removeImage();state.setText("看屏幕已关闭");return;}
@@ -263,20 +276,23 @@ public final class AssistantPanel extends LinearLayout implements PiRuntime.List
     switch(e.optString("type")){
       case "configured":voiceConfigWaits=0;state.setText(voice.sessionActive()?"语音连续对话中":"随时待命");break;
       case "agent_identity":updateAgentIdentity();break;
-      case "session_changed":restoreTools();lastSentText="";lastSentImage=null;lastSentImageLabel=null;rawReply="";sentCard.setVisibility(GONE);answerBlock.setVisibility(GONE);pendingTaskPrompt=null;localFiles.clear();renderFiles();state.setText("随时待命");break;
-      case "history":restoreTools();if(!runtime.lastPromptText.isEmpty()||runtime.lastPromptHasImage){lastSentText=runtime.lastPromptText;lastSentImage=runtime.lastPromptImage;showSent(lastSentText,lastSentImage,runtime.lastPromptHasImage);showReply(runtime.lastResponse);}else{sentCard.setVisibility(GONE);answerBlock.setVisibility(GONE);rawReply="";}break;
-      case "turn_start":restoreTools();lastSentText=runtime.lastPromptText;lastSentImage=runtime.lastPromptImage;showSent(lastSentText,lastSentImage,runtime.lastPromptHasImage);if(!lastSentFiles.isEmpty())sentText.append(lastSentFiles);showReply("");break;
+      case "session_changed":restoreTools();interruptionViews.clear();interruptionList.removeAllViews();renderRetry();lastSentText="";lastSentImage=null;lastSentImageLabel=null;rawReply="";sentCard.setVisibility(GONE);answerBlock.setVisibility(GONE);pendingTaskPrompt=null;localFiles.clear();renderFiles();state.setText("随时待命");break;
+      case "history":{int position=contentArea.getScrollY();restoreTools();if(!runtime.lastPromptText.isEmpty()||runtime.lastPromptHasImage){lastSentText=runtime.lastPromptText;lastSentImage=runtime.lastPromptImage;showSent(lastSentText,lastSentImage,runtime.lastPromptHasImage);showReply(runtime.lastResponse);}else{sentCard.setVisibility(GONE);showReply(runtime.lastResponse);answerBlock.setVisibility(runtime.lastResponse.isEmpty()?GONE:VISIBLE);}restoreInterruptions();renderRetry();contentArea.post(()->contentArea.scrollTo(0,position));break;}
+      case "turn_start":renderRetry();restoreTools();lastSentText=runtime.lastPromptText;lastSentImage=runtime.lastPromptImage;showSent(lastSentText,lastSentImage,runtime.lastPromptHasImage);if(!lastSentFiles.isEmpty())sentText.append(lastSentFiles);showReply("");break;
       case "assistant_start":break;
+      case "assistant_interruption":showInterruption(e);break;
+      case "retry_status":renderRetry();break;
       case "delta":if(!renderPending){renderPending=true;handler.postDelayed(()->{renderPending=false;if(!disposed)showReply(runtime.lastResponse);},32);}break;
       case "tool_execution":showTool(e);state.setText("running".equals(e.optString("status"))?PhoneHud.action(e):"正在处理…");
         break;
       case "turn_end":{
+        renderRetry();
         showReply(runtime.lastResponse);if(e.optBoolean("aborted"))state.setText(runtime.stopUnconfirmed?"停止尚未确认，请检查工具记录":"已停止");if(!e.optBoolean("aborted")&&!voice.sessionActive())state.setText(ScreenContext.enabled()?ScreenContext.label():"随时待命");
         String queued=pendingTaskPrompt;pendingTaskPrompt=null;
         if(queued!=null&&!disposed)handler.postDelayed(()->{if(!disposed){voice();send(queued);}},380);
         break;
       }
-      case "error":pendingTaskPrompt=null;state.setText("这次没有完成，排队的新指令已取消");showReply(runtime.lastResponse);errorLabel.setText(Ui.errorMessage(e.optString("message")));errorLabel.setVisibility(VISIBLE);errorActions.setVisibility(VISIBLE);retry.setVisibility(lastSentText.isEmpty()?GONE:VISIBLE);if(input.getText().length()==0&&!lastSentText.isEmpty()){input.setText(lastSentText);if(lastSentImage!=null)attachImage(lastSentImage,lastSentImageLabel==null?"圈选区域":lastSentImageLabel);}break;
+      case "error":pendingTaskPrompt=null;state.setText("这次没有完成，请查看中断详情");showReply(runtime.lastResponse);JSONObject interruption=e.optJSONObject("interruption");showInterruption(interruption==null?runtime.errorInterruption(e):interruption);renderRetry();errorActions.setVisibility(VISIBLE);retry.setVisibility(lastSentText.isEmpty()?GONE:VISIBLE);if(input.getText().length()==0&&!lastSentText.isEmpty()){input.setText(lastSentText);if(lastSentImage!=null)attachImage(lastSentImage,lastSentImageLabel==null?"圈选区域":lastSentImageLabel);}break;
     }updateControls();
   }
   void voice(){

@@ -61,7 +61,9 @@ Java_dev_zfold_assistant_PiRuntime_startNode(JNIEnv* env, jclass, jstring entry,
   setenv("ZFOLD_NODE_WRAPPER", (runtime + "/node-wrapper.sh").c_str(), 1);
   // Explicit application-owned paths; never borrow another app's runtime or home.
   chdir(root.c_str());
-  std::string values[] = {"node", "--max-old-space-size=192", script, input, output, root};
+  // Long JSONL histories and media can exceed the previous 192 MiB old-space cap.
+  // This is an allocation ceiling, not a reservation; Java/native memory is separate.
+  std::string values[] = {"node", "--max-old-space-size=768", script, input, output, root};
   char* argv[6]; for (int i=0;i<6;i++) argv[i]=values[i].data();
   return node::Start(6, argv);
 }
