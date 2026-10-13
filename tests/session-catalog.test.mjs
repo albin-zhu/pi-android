@@ -45,7 +45,9 @@ test('catalog rejects traversal and symlinks and does not erase corrupted metada
   fs.unlinkSync(catalog.file);fs.unlinkSync(item.path);
   catalog.status('__proto__',{deletedAt:1});assert.equal(Object.hasOwn(catalog.read(),'__proto__'),true);assert.equal({}.deletedAt,undefined);
   const other=path.join(root,'other');fs.mkdirSync(other);const otherManager=SessionManager.create(other,directory);new SessionCatalog(directory,other).persist(otherManager);
-  assert.equal((await catalog.list()).length,0,'Other workspace sessions must not be managed here');
+  const sharedItems=await catalog.list();
+  assert.deepEqual(sharedItems.map(item=>item.id),[otherManager.getSessionId()],'Shared catalog includes other workspaces');
+  assert.equal(catalog.open(sharedItems[0]).getCwd(),other,'Opening a shared session preserves its own workspace');
 });
 
 test('pin persists independently of archive, trash and restore',async t=>{
