@@ -30,10 +30,11 @@ public final class PhoneAccessibility extends AccessibilityService {
   public void onAccessibilityButtonClicked(android.view.Display display){CircleOverlay.beginOnCurrentScreen(this);}
   @Override public void onAccessibilityEvent(AccessibilityEvent event){
     if(event.getEventType()==AccessibilityEvent.TYPE_TOUCH_INTERACTION_START&&SystemClock.elapsedRealtime()>=injectedUntil&&PiRuntime.phoneBusy())
-      PiRuntime.takeoverPhone(this);
+      PiRuntime.takeoverPhone(this,event.getEventTime());
   }
   private void clearNodes(){for(AccessibilityNodeInfo node:nodes.values())node.recycle();nodes.clear();identities.clear();observedWindow=-1;observedPackage="";observedAt=0;generation++;}
   void execute(String name,JSONObject args,AndroidTools.Result result)throws Exception {
+    NativeToolExecution execution=NativeToolExecution.currentCall();
     if(args.has("expectedPackageName")&&!args.optString("expectedPackageName").equals(foregroundPackage()))throw new Exception("当前应用已离开本轮目标，已停止操作；请回到目标应用");
     if(name.equals("screen_read")) {
       clearNodes();AccessibilityNodeInfo root=readRoot(args);if(root==null)throw new Exception("目标窗口不可读取，请使用 screen_windows 检查可见窗口");
@@ -66,7 +67,11 @@ public final class PhoneAccessibility extends AccessibilityService {
     }
     if(name.equals("ui_input")){
       if(!args.has("nodeId")){
-        if(args.has("screenshotId"))visualGesture(args,false,(value,error)->{if(error!=null)result.done(null,error);else focusedInput.replace(args,result);});
+        if(args.has("screenshotId"))visualGesture(args,false,(value,error)->{
+          if(error!=null)result.done(null,error);
+          else if(execution!=null)execution.run(()->focusedInput.replace(args,result));
+          else focusedInput.replace(args,result);
+        });
         else focusedInput.replace(args,result);
         return;
       }
@@ -185,10 +190,12 @@ public final class PhoneAccessibility extends AccessibilityService {
     frame.consumed=true;injectedUntil=SystemClock.elapsedRealtime()+1200;gesture(x1,y1,x2,y2,swipe?400:args.optBoolean("longPress")?650:80,result);
   }
   private void captureTool(JSONObject args,AndroidTools.Result result){
+    NativeToolExecution execution=NativeToolExecution.currentCall();
     AccessibilityNodeInfo root=applicationRoot();String pkg=root==null?"":String.valueOf(root.getPackageName());int window=root==null?-1:root.getWindowId();if(root!=null)root.recycle();
     int rotation=currentDisplay().getRotation();
     capture((bitmap,error)->{
       if(error!=null){result.done(null,error);return;}
+      if(execution!=null&&execution.cancelled()){bitmap.recycle();result.done(null,"操作已停止");return;}
       int w=bitmap.getWidth(),h=bitmap.getHeight();float ratio=Math.min(1,1400f/Math.max(w,h));int iw=Math.round(w*ratio),ih=Math.round(h*ratio);
       Bitmap scaled=ratio<1?Bitmap.createScaledBitmap(bitmap,iw,ih,true):bitmap;
       ByteArrayOutputStream out=new ByteArrayOutputStream();scaled.compress(Bitmap.CompressFormat.JPEG,82,out);if(scaled!=bitmap)scaled.recycle();bitmap.recycle();
@@ -200,6 +207,7 @@ public final class PhoneAccessibility extends AccessibilityService {
       new Thread(()->{
         java.io.File file=null;
         try{
+          if(execution!=null&&execution.cancelled())throw new java.util.concurrent.CancellationException("操作已停止");
           java.io.File directory=new java.io.File(RuntimeEnvironment.workingDirectory(this,null),"screenshots");
           if(!directory.isDirectory()&&!directory.mkdirs())throw new java.io.IOException("无法建立截图目录");
           file=java.io.File.createTempFile("screen-",".jpg",directory);

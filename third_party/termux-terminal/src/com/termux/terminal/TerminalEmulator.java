@@ -2201,7 +2201,6 @@ public final class TerminalEmulator {
     }
 
     private void scrollDownOneLine() {
-        mScrollCounter++;
         long currentStyle = getStyle();
         if (mLeftMargin != 0 || mRightMargin != mColumns) {
             // Horizontal margin: Do not put anything into scroll history, just non-margin part of screen up.
@@ -2210,6 +2209,9 @@ public final class TerminalEmulator {
             mScreen.blockSet(mLeftMargin, mBottomMargin - 1, mRightMargin - mLeftMargin, 1, ' ', currentStyle);
         } else {
             mScreen.scrollDownOneLine(mTopMargin, mBottomMargin, currentStyle);
+            // Only a ring-buffer scroll changes history positions. Horizontal
+            // margin redraws above must not shift a manually scrolled viewport.
+            mScrollCounter++;
         }
     }
 

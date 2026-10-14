@@ -42,8 +42,13 @@ export class NativeToolBridge {
     else this.finish(entry,message.result,message.error?new Error(message.error):null);
     return true;
   }
-  unconfirmed(entry,message){
-    const error=new Error(message);error.code='NATIVE_UNCONFIRMED';
+  disconnect(cause){
+    for(const entry of this.pending.values())this.unconfirmed(entry,
+      `Android phone bridge disconnected before a terminal receipt for ${entry.name}; execution is uncertain, check the phone before retrying (${cause?.message||'connection closed'})`,cause);
+  }
+  unconfirmed(entry,message,cause){
+    const error=new Error(message,cause?{cause}:undefined);error.code='NATIVE_UNCONFIRMED';
+    error.toolId=entry.id;error.toolName=entry.name;
     try{this.send({type:'tool_uncertain',id:entry.id,turnId:entry.turnId,name:entry.name,message});}catch{}
     finally{this.finish(entry,null,error);}
   }

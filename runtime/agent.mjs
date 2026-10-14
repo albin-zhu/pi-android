@@ -23,6 +23,7 @@ import { defaultModelConfig, defaultModelOptions, defaultJevConfig } from './def
 import { runtimePackCatalog } from './runtime-packs.mjs';
 import { createPtyTool } from './pty.mjs';
 import { NativeToolBridge } from './native-tools.mjs';
+import { createPhoneToolDefinitions } from './phone-tool-definitions.mjs';
 import { resolveRuntimeCommand, shellWithEnvironment } from './command-environment.mjs';
 import { ConnectorManager } from './connectors.mjs';
 import { cameraWorkingContext, cameraPromptSuffix } from './camera-context.mjs';
@@ -466,26 +467,7 @@ const makeFileTools=cwd=>[
   createLsToolDefinition(cwd)
 ].map(workspaceFileTool);
 const fileTools=makeFileTools(workspace).map(tool=>({...tool,execute(...args){return makeFileTools(workspace).find(item=>item.name===tool.name).execute(...args);}}));
-const definitions = [
-  ['phone_capabilities','检查电话与相机能力','查看相机、电话、短信、联系人权限和默认短信 SIM 状态，不申请权限、不发起外部操作。',Type.Object({})],
-  ['phone_call','拨打电话','dial 打开指定号码的拨号页；call 在用户已明确授权拨打该号码时发起呼叫。首次使用按需申请电话权限。call_dispatched 只表示交给系统，connected:false 不代表已接通；未知结果不要重复拨号。联系人姓名先用 contact_search 消除歧义。',Type.Object({number:Type.String({minLength:3,maxLength:40}),action:Type.Union([Type.Literal('dial'),Type.Literal('call')])})],
-  ['camera_capture','拍照并获取图片','在可见的相机预览中按用户要求拍一张照片，返回压缩 JPEG 图片和当前工作区 photos 内的文件路径；可选 front/back。复用正在预览的同一镜头；没有预览时显示拍照页并按需申请权限。相机图片没有手机屏幕坐标，不可用于 ui_tap。',Type.Object({facing:Type.Optional(Type.Union([Type.Literal('front'),Type.Literal('back')]))})],
-  ['contact_search','查找联系人号码','按姓名或号码搜索系统通讯录，首次按需申请联系人权限。返回候选名称与号码；重名或多个号码不能随意挑选，不包含通话和消息记录。',Type.Object({query:Type.String({minLength:1,maxLength:100})})],
-  ['phone_sms','发送短信与查询回执','compose 填好短信草稿，不代表发送；send 仅用于用户已经明确指定收件号码、正文并要求发送的短信。status 用 operationId 查询发送回执；subscriptions 列出可用 SIM。send 必须提供稳定 operationId，重复相同 ID 不会重发；unknown/partial 不要自动重发。sent 只表示系统发送回执成功，不表示对方已收到或已读。微信等消息用其 App 的界面工具。',Type.Object({action:Type.Union([Type.Literal('compose'),Type.Literal('send'),Type.Literal('status'),Type.Literal('subscriptions')]),number:Type.Optional(Type.String({minLength:3,maxLength:40})),text:Type.Optional(Type.String({minLength:1,maxLength:2000})),operationId:Type.Optional(Type.String({minLength:1,maxLength:96})),subscriptionId:Type.Optional(Type.Integer({minimum:0}))})],
-  ['device_info','读取手机状态','读取真实手机型号、Android 版本、电量和当前授权能力。',Type.Object({})],
-  ['screen_read','读取当前界面','读取活动窗口节点；可指定 packageName 或 screen_windows 返回的 windowId。多窗口歧义时不会猜测。空树附截图。',Type.Object({packageName:Type.Optional(Type.String()),windowId:Type.Optional(Type.Integer())})],
-  ['screen_windows','查看可见窗口','列出无障碍可见窗口的包名、类型、层级、边界与 windowId，用于识别系统浮层、侧边栏及分屏目标。只读。',Type.Object({})],
-  ['ui_system','系统导航','list 查询系统支持动作；back/home/recents/notifications/quick_settings 执行用户授权的导航并返回截图。dispatched 不是界面验证成功。',Type.Object({action:Type.Union(['list','back','home','recents','notifications','quick_settings'].map(v=>Type.Literal(v)))})],
-  ['screen_capture','查看屏幕','返回截图、screenshotId、图片尺寸。save:true 可将同一 JPEG 保存到当前工作区 screenshots 并返回 path；默认不保存，不写相册。保存失败时 saved:false 和 saveError 不影响读屏。后续坐标必须使用图片像素；每帧只支持一次动作。',Type.Object({save:Type.Optional(Type.Boolean())})],
-  ['ui_tap','点击界面','点击新节点或截图位置。longPress:true 为长按，不是拖拽。视觉操作返回新截图，失败不自动重试。',Type.Object({longPress:Type.Optional(Type.Boolean()),nodeId:Type.Optional(Type.String()),screenshotId:Type.Optional(Type.String()),packageName:Type.Optional(Type.String()),x:Type.Optional(Type.Number()),y:Type.Optional(Type.Number())})],
-  ['ui_input','输入文字','替换节点文本；无节点时提供 packageName，使用 Android 13+ 当前焦点输入连接。可同时给 screenshotId+x+y，一次完成点输入框、中文输入、回读和返回截图。不会切换键盘、使用剪贴板或发送消息。',Type.Object({nodeId:Type.Optional(Type.String()),text:Type.String({maxLength:4000}),packageName:Type.Optional(Type.String()),screenshotId:Type.Optional(Type.String()),x:Type.Optional(Type.Number()),y:Type.Optional(Type.Number())})],
-  ['ui_swipe','滑动界面','提供最近 screenshotId，按截图像素坐标滑动；起终点不能相同。执行后自动返回新截图。',Type.Object({screenshotId:Type.String(),x1:Type.Number(),y1:Type.Number(),x2:Type.Number(),y2:Type.Number()})],
-  ['ui_back','返回上一页','执行 Android 返回操作。',Type.Object({})],
-  ['app_open','打开应用','使用包名打开应用；可通过 app_list 获取包名。',Type.Object({packageName:Type.String()})],
-  ['open','打开 URL/文件/目录','Android 原生打开工具：URL 用系统 handler，文件/目录用 DocumentsProvider；文件没有专用 handler 时回退到包含目录。target 可以是 https/mailto 等 URI，或 /storage/pi 下的文件、目录。',Type.Object({target:Type.String({minLength:1,maxLength:4096}),mime:Type.Optional(Type.String({maxLength:160})),chooser:Type.Optional(Type.Boolean())})],
-  ['app_list','列出可打开的应用','列出手机具有启动入口的应用名称与包名。',Type.Object({})],
-  ['split_screen','控制折叠屏分屏','state 读取窗口几何推断；launch 仅尝试多窗口启动，三星可能打开浮窗，position 不保证真实左右位置。必须复查目标包、边界和截图；toggle 可能被系统拒绝。',Type.Object({action:Type.Union([Type.Literal('state'),Type.Literal('toggle'),Type.Literal('launch')]),packageName:Type.Optional(Type.String()),position:Type.Optional(Type.Union([Type.Literal('left'),Type.Literal('right'),Type.Literal('primary'),Type.Literal('secondary')]))})],
-];
+const definitions=createPhoneToolDefinitions(Type);
 const selectTool = {
   name:'ui_select',label:'按名称选择界面目标',
   description:'一次完成读屏、唯一匹配明确的可见标签、点击并复查新界面。没有匹配或存在歧义时不会点击；可给最多 6 个同义标签。只用于用户已经明确授权的操作。',

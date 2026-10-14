@@ -456,6 +456,7 @@ public final class TerminalView extends View {
                 // .. unless we're hitting the end of history transcript, in which
                 // case we abort text selection and scroll to end.
                 stopTextSelectionMode();
+                mTopRow = 0;
             } else {
                 skipScrolling = true;
                 mTopRow -= rowShift;
@@ -464,14 +465,10 @@ public final class TerminalView extends View {
         }
 
         if (!skipScrolling && mTopRow != 0) {
-            // Scroll down if not already there.
-            if (mTopRow < -3) {
-                // Awaken scroll bars only if scrolling a noticeable amount
-                // - we do not want visible scroll bars during normal typing
-                // of one row at a time.
-                awakenScrollBars();
-            }
-            mTopRow = 0;
+            // A user browsing history is not following live output. Repaints do
+            // not move the viewport; newly archived rows move the same content
+            // further above the live screen. Clamp only when old history expires.
+            mTopRow = Math.max(-rowsInHistory, mTopRow - mEmulator.getScrollCounter());
         }
 
         mEmulator.clearScrollCounter();

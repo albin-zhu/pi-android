@@ -596,6 +596,18 @@ adb reverse --remove tcp:18868
 - 快照/截图 ID、目标校验和输入回读已有基础；第三方 App 整任务结果、音频路由、长时后台与所有 OEM 行为不能只凭工具回执或 UI 测试宣称通过。
 - 测试 instrumentation 随调试 APK 打包，需进一步统一隔离、拒绝错误设备与清理规则，并拆分测试包。实测范围和失败记录见 VERIFICATION.md。
 
+## Ubuntu / omp 实验分支
+
+`feat/omp-termux-app` 已接入同 App UID 的独立手机工具桥：Ubuntu 内 omp 通过工具扩展调用 Android，权限、按次确认、取消和用户接管仍由 App 执行。实验安装器与任意目录可用的 `ubuntu` 入口见 [架构与验收记录](docs/TERMUX_OMP_ASSESSMENT.md)。
+
+已在隔离 Android ARM64 模拟器完成读屏/拍照回合，并在 Zfold 真机完成安装及 guest 手机状态调用。本轮不迁移凭据、不切换 GUI，也不更改内嵌 Pi 1.0.4 / Node 24.21.0。
+
+### 终端历史滚动
+
+普通缓冲区中，上滑查看历史后，新输出和 TUI 重绘不再强制回到底部；新增历史行会保持可见内容的锚点，手动滑回底部后恢复跟随。备用屏幕和鼠标跟踪仍由 TUI 接收滚动事件，不伪造其历史。清空历史、切换终端或调整终端尺寸不保证旧视口保留。
+
+`TerminalScrollInstrumentation` 使用真实 PTY 和终端视图验证重绘、追加输出及恢复跟随；修复前可复现自动回底，修复后三项通过。已覆盖安装到 Zfold，保留 Ubuntu 与供应商数据；用户实际 omp 会话的手势复测仍由真机确认。
+
 ## 结构
 
 - `runtime/agent.mjs`：真正的 Pi SDK 会话、自定义模型和 Android 工具定义。

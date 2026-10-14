@@ -51,6 +51,7 @@
   </activity>
   <activity android:name=".MicrophonePermissionActivity" android:exported="false" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" />
   <activity android:name=".PhonePermissionActivity" android:exported="false" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" />
+  <activity android:name=".PhoneToolApprovalActivity" android:exported="false" android:theme="@style/TransparentTheme" android:taskAffinity="" android:excludeFromRecents="true" />
   <activity android:name=".CameraCaptureActivity" android:exported="false" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
   <receiver android:name=".SmsSentReceiver" android:exported="false" />
   <activity android:name=".PhoneTaskFixtureActivity" android:exported="false" />
@@ -93,6 +94,7 @@
   </service>
   <provider android:name=".ArtifactProvider" android:authorities="dev.zfold.assistant.artifacts" android:exported="false" android:grantUriPermissions="true" />
  </application>
+ <instrumentation android:name=".PhoneToolInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold same-UID phone socket and Android consent (no model requests)" />
  <instrumentation android:name=".PackageCliInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold package CLI check (emulator only)" />
  <instrumentation android:name=".WindowEntryInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold direct system window entry (emulator only)" />
  <instrumentation android:name=".SpeechProviderInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng speech providers (emulator only)" />
@@ -143,4 +145,5 @@
     <instrumentation android:name=".OpenToolInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold native open tool check" />
  <instrumentation android:name=".SystemWindowInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold system window acceptance" />
  <instrumentation android:name=".SwipeNavigationInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold swipe and Back navigation acceptance" />
+ <instrumentation android:name=".TerminalScrollInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Terminal history under live TUI repaint (emulator only)" />
 </manifest>

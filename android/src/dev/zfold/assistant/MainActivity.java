@@ -609,7 +609,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   }
   void permissions(){
     boolean defaultAssistant=android.service.voice.VoiceInteractionService.isActiveService(this,new ComponentName(this,AssistantVoiceService.class));
-    String[] items={"默认助手 · "+(defaultAssistant?"已设置":"未设置"),"读屏与操作 · "+(PhoneAccessibility.instance!=null?"已连接":"未连接"),"兼容浮层权限 · "+(Settings.canDrawOverlays(this)?"已允许":"未允许"),"系统小窗与分屏","查看运行状态","唤起手势 · 从底角向内划","圈选提问 · "+(CircleAskPrefs.assistInvokesCircle(this)?"助手唤起即圈选":"打开聊天"),"本机语音 · 检测与下载","Jev 手机操作 · "+(runtime.jevEnabled&&runtime.jevConfigured?"已启用":"未配置"),"storage/pi 文件 · "+(Environment.isExternalStorageManager()?"已授权":"未授权"),"Runtime Packs","软件包管理"};
+    String[] items={"默认助手 · "+(defaultAssistant?"已设置":"未设置"),"读屏与操作 · "+(PhoneAccessibility.instance!=null?"已连接":"未连接"),"兼容浮层权限 · "+(Settings.canDrawOverlays(this)?"已允许":"未允许"),"系统小窗与分屏","查看运行状态","唤起手势 · 从底角向内划","圈选提问 · "+(CircleAskPrefs.assistInvokesCircle(this)?"助手唤起即圈选":"打开聊天"),"本机语音 · 检测与下载","Jev 手机操作 · "+(runtime.jevEnabled&&runtime.jevConfigured?"已启用":"未配置"),"storage/pi 文件 · "+(Environment.isExternalStorageManager()?"已授权":"未授权"),"Runtime Packs","软件包管理","独立客户端手机工具 · "+(PhoneToolPolicy.alwaysAllow(this)?"始终允许":"每次确认")};
     new AlertDialog.Builder(this).setTitle("手机能力").setItems(items,(d,i)->{
       if(i==4){runtime.send(PiRuntime.json("type","probe"));return;}
       if(i==5){new AlertDialog.Builder(this).setTitle("从当前应用唤起").setMessage("将橙橙设为默认助手后，侧键/关机键若绑定「数字助理」，以及底角向内划，会按「圈选提问」设置唤起。\n\n三星导航条正中长按的「圈选即搜」是系统功能，普通应用不能改绑。可用无障碍快捷键（音量键）作为可设置的圈选开关。").setPositiveButton("知道了",null).show();return;}
@@ -619,6 +619,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       if(i==9){requestStorageAccess();return;}
       if(i==10){runtimePacksSettings();return;}
       if(i==11){startActivity(new Intent(this,RuntimePackageManagerActivity.class));return;}
+      if(i==12){PhoneToolPolicy.show(this);return;}
       if(i==0)startActivity(new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS));
       if(i==1)startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
       if(i==2)startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+getPackageName())));
