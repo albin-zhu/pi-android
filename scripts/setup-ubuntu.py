@@ -160,6 +160,7 @@ def main():
         device.write(rootfs + '/usr/local/bin/bun', executable, '700')
     device.write(rootfs + '/etc/resolv.conf', ('nameserver ' + dns + '\n').encode())
     device.write(rootfs + '/usr/local/bin/phone', b'#!/bin/sh\nexec /usr/local/bin/bun /opt/pi-phone/phone-cli.mjs "$@"\n', '700')
+    device.write(rootfs + '/usr/local/bin/xdg-open', b'#!/bin/sh\nexec /usr/local/bin/bun /opt/pi-phone/phone-open.mjs -- "$@"\n', '700')
     host_env = ['/system/bin/env', *[key + '=' + str(value) for key, value in environment.items()]]
     launch = [*host_env, runtime + '/bin/ubuntu']
     for command in (['/bin/cat', '/etc/os-release'], ['bun', '--version'], ['phone', 'call', 'device_info', '{}']):

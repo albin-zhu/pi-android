@@ -28,7 +28,7 @@ fs.copyFileSync('runtime/skills/skill-creator/SKILL.md',`${out}/skill-creator.SK
 // Only this dependency-free directory is exposed inside the Ubuntu guest.
 const phoneOut=`${out}/phone-tools`;
 fs.mkdirSync(phoneOut,{recursive:true});
-for(const name of ['phone-cli','phone-tools','phone-socket-client','phone-frames','phone-paths','phone-tool-definitions','phone-turn-guard','native-tools'])fs.copyFileSync(`runtime/${name}.mjs`,`${phoneOut}/${name}.mjs`);
+for(const name of ['phone-cli','phone-open','phone-tools','phone-socket-client','phone-frames','phone-paths','phone-tool-definitions','phone-turn-guard','native-tools'])fs.copyFileSync(`runtime/${name}.mjs`,`${phoneOut}/${name}.mjs`);
 await build({entryPoints:['runtime/omp-phone-extension.mjs'],outfile:`${phoneOut}/omp-phone-extension.mjs`,
   bundle:true,platform:'node',format:'esm',target:'node24',external:['@oh-my-pi/*'],logLevel:'info'});
 fs.copyFileSync('runtime/ubuntu.sh',`${out}/ubuntu.sh`);

@@ -75,6 +75,22 @@ omp
 - 安装器等待当前 App PID 对应的运行环境就绪，避免读到上一进程留下的 socket 配置。
 - `omp` guest 入口自动加载 `/opt/pi-phone/omp-phone-extension.mjs`。初次安装不迁移授权；后续按用户明确要求，已通过官方 auth export/import 合并本机 openai-codex OAuth、xai/Grok OAuth、litellm API key，并合并 LiteLLM provider 配置。没有覆盖 agent.db、迁移旧会话或修改内嵌 Pi 凭据。
 
+### Ubuntu 链接交给 Android 打开
+
+安装器在 guest 的 `/usr/local/bin/xdg-open` 安装原生打开入口，调用 `/opt/pi-phone/phone-open.mjs`，复用同 UID 手机工具桥的 `open`。无需 Linux 桌面、浏览器或新增 HTTP 服务。调用 `xdg-open` 的终端链接立即走 Android 系统 handler；不改终端鼠标/链接识别逻辑。
+
+```sh
+xdg-open 'https://example.com/'
+xdg-open '/workspace/workspace/artifacts/report.pdf'
+xdg-open './包含 空格的图片.png'
+```
+
+- URL 交给 Android；相对文件路径按调用进程 cwd 解析，`file://` URI 先解码，再复用 `ZFOLD_PHONE_PATH_MAP`。只有实际绑定的工作区可打开；`/root`、`/tmp` 等未映射路径明确失败，不复制到公共目录，也不上传文件。
+- 保留手机工具确认与系统权限。APK 仍需 Android 确认安装，不把“已弹确认框”当作“已安装”。无文件 handler 而回退到目录时返回非零，避免错误报告文件已打开。
+- 退出码：0 为 Android 接收打开操作或弹出 APK 确认；1 为参数/路径/连接/拒绝等失败；2 为执行结果不确定；130 为取消。连接中断不会重放操作。
+- 已热部署到当前 Ubuntu：新增 opener 模块及 guest 命令，未重装 APK、重启 App 或终端。opener 是独立新增文件，旧 APK 启动时复制既有资源不会覆盖它；源码 bundle 与安装器也已纳入后续构建。
+- 真机通过实际 `xdg-open` 命令验证 Chrome 打开带 query/fragment 的 HTTPS 地址，工作区 PNG 由三星相册显示。截图保存在工作区 `artifacts/android-xdg-open/`；不将命令回执单独视为画面成功。Bun 执行 opener 与 socket 回归共 8 项通过；尚未逐个验证所有 Android URI scheme 或第三方应用。
+
 
 ## 终端字形与内联图片
 
