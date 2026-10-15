@@ -608,6 +608,13 @@ adb reverse --remove tcp:18868
 
 `TerminalScrollInstrumentation` 使用真实 PTY 和终端视图验证重绘、追加输出及恢复跟随；修复前可复现自动回底，修复后三项通过。已覆盖安装到 Zfold，保留 Ubuntu 与供应商数据；用户实际 omp 会话的手势复测仍由真机确认。
 
+### 终端键盘仅显式打开
+
+移除 `TerminalActivity.onSingleTapUp()` 中无条件弹出输入法的动作。点击终端内容仍由 TerminalView 获取焦点、处理 TUI 鼠标事件或退出文本选择，但不会因此请求键盘；底部「键盘」按钮继续切换显示/隐藏，终端菜单「显示键盘」继续显式打开输入法。
+
+修复提交 `e9fcfee` 的 compat28 / modern APK 已构建并通过原签名证书校验，另核对 compat28 APK 中单击回调仅返回、不再调用输入法。为避免终止当前 Ubuntu/omp 进程，未覆盖安装、未运行真机 instrumentation；安装后的触摸与显式键盘按钮验收尚待进行。CI 运行时测试 176 项通过，既有 `session-catalog.test.mjs` 工作区隔离检查仍有 1 项失败。
+
+
 ### 终端字形与图片
 
 宽度不匹配的 Android fallback 字形改为等比缩小、居中，不再只压缩横轴；单格宽图标可能更小，但保持原始比例，不拉伸整行文字。字符背景和光标保持完整字格。
