@@ -62,6 +62,7 @@ final class TerminalSessions implements TerminalSessionClient {
           if(!useBash&&!useFish)environment.putIfAbsent("ENV",new File(environment.get("HOME"),".mkshrc").getPath());
           environment.put("TERM","xterm-256color");environment.put("COLORTERM","truecolor");
           environment.put("PI_FORCE_IMAGE_PROTOCOL","iterm2");
+          environment.put("PI_FORCE_HYPERLINKS","1");
           if(!useFish)environment.put("PS1",useBash?"\\[\\e[38;5;114m\\]\\W\\[\\e[0m\\] $ ":"$ ");
           cwd=RuntimeEnvironment.workingDirectory(owner.context,null).getPath();
           id=PiRuntime.ptyOpen(argv,cwd,environment.entrySet().stream().map(entry->entry.getKey()+"="+entry.getValue()).toArray(String[]::new),rows,columns);

@@ -39,9 +39,15 @@ final class ChatImages {
     ImageView image=new ImageView(c);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setAdjustViewBounds(true);image.setMaxHeight(Ui.dp(c,300));image.setMinimumHeight(Ui.dp(c,48));image.setContentDescription("打开图片大图");image.setFocusable(true);box.addView(image,new LinearLayout.LayoutParams(-1,-2));
     loader.execute(()->{Bitmap bitmap=null;try{bitmap=decode(checked(c,path),1024);}catch(Exception ignored){}final Bitmap result=bitmap;image.post(()->{if(result==null){state.setText("图片无法读取或已移除");image.setVisibility(View.GONE);}else{state.setVisibility(View.GONE);image.setImageBitmap(result);image.setOnClickListener(v->open(c,path));}});});return box;
   }
-  static void open(Context c,String path){show(c,path,null);}
-  static void openBitmap(Context c,String encoded){show(c,null,encoded);}
-  private static void show(Context c,String path,String encoded){
+  static void open(Context c,String path){show(c,path,null,null);}
+  static void openBitmap(Context c,String encoded){show(c,null,encoded,null);}
+  static void openTerminalImage(Context c,Bitmap source){
+    // The terminal can evict/recycle its bitmap while this dialog remains open.
+    Bitmap snapshot=source.copy(Bitmap.Config.ARGB_8888,false);
+    if(snapshot==null){Toast.makeText(c,"无法打开图片",Toast.LENGTH_SHORT).show();return;}
+    show(c,null,null,snapshot);
+  }
+  private static void show(Context c,String path,String encoded,Bitmap snapshot){
     Dialog dialog=new Dialog(c,android.R.style.Theme_Material_NoActionBar);
     LinearLayout root=new LinearLayout(c);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(Color.BLACK);
     LinearLayout toolbar=new LinearLayout(c);root.addView(toolbar,new LinearLayout.LayoutParams(-1,-2));
@@ -49,6 +55,11 @@ final class ChatImages {
     Button save=new Button(c);save.setText("保存到本地");save.setEnabled(false);toolbar.addView(save,new LinearLayout.LayoutParams(0,Ui.dp(c,56),2));
     if(path!=null){Button external=new Button(c);external.setText("外部打开");toolbar.addView(external,new LinearLayout.LayoutParams(0,Ui.dp(c,56),2));external.setOnClickListener(v->{try{OpenTargets.open(c,checked(c,path).getPath(),"",true);}catch(Exception error){Toast.makeText(c,"无法打开："+error.getMessage(),Toast.LENGTH_LONG).show();}});}
     ImageView image=new ImageView(c);image.setScaleType(ImageView.ScaleType.FIT_CENTER);image.setContentDescription("图片大图");root.addView(image,new LinearLayout.LayoutParams(-1,0,1));dialog.setContentView(root);dialog.show();dialog.getWindow().setLayout(-1,-1);
+    if(snapshot!=null){
+      save.setVisibility(View.GONE);image.setImageBitmap(snapshot);
+      dialog.setOnDismissListener(ignored->{image.setImageDrawable(null);snapshot.recycle();});
+      return;
+    }
     save.setOnClickListener(v->{save.setEnabled(false);save.setText("正在保存…");loader.execute(()->{
       String message;try{ImageDownloads.save(c.getApplicationContext(),path,encoded);message="已保存到相册 Pictures/橙橙";}catch(Exception error){message="保存失败："+error.getMessage();}
       final String receipt=message;save.post(()->{Toast.makeText(c,receipt,Toast.LENGTH_LONG).show();if(dialog.isShowing()){save.setText("保存到本地");save.setEnabled(true);}});

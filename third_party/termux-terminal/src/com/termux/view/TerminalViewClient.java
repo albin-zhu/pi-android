@@ -2,6 +2,7 @@ package com.termux.view;
 
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.graphics.Bitmap;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 
@@ -27,6 +28,12 @@ public interface TerminalViewClient {
      * On a single tap on the terminal if terminal mouse reporting not enabled.
      */
     void onSingleTapUp(MotionEvent e);
+
+    /** A user activated terminal content; never implies showing the software keyboard. */
+    void onOpenLink(String target);
+
+    /** Bitmap is borrowed for this callback; the terminal may recycle it afterward. */
+    void onOpenImage(Bitmap bitmap);
 
     boolean shouldBackButtonBeMappedToEscape();
 

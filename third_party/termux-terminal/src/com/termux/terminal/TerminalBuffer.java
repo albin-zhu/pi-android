@@ -299,6 +299,11 @@ public final class TerminalBuffer {
                     lastNonSpaceIndex = oldLine.getSpaceUsed();
                     justToCursor = false;
                 }
+                int lastHyperlinkColumn = oldLine.getLastHyperlinkColumn();
+                if (lastHyperlinkColumn >= 0) {
+                    lastNonSpaceIndex = Math.max(lastNonSpaceIndex, oldLine.findStartOfColumn(lastHyperlinkColumn + 1));
+                    justToCursor = false;
+                }
 
                 int currentOldCol = 0;
                 long styleAtCol = 0;
@@ -330,6 +335,8 @@ public final class TerminalBuffer {
                         for (int x = 0; x < displayWidth; x++) {
                             TerminalImage image = oldLine.getImage(currentOldCol + x);
                             if (image != null) output.setImage(outputColumn + x, image, oldLine.getImageX(currentOldCol + x), oldLine.getImageY(currentOldCol + x));
+                            String hyperlink = oldLine.getHyperlink(currentOldCol + x);
+                            if (hyperlink != null) output.setHyperlink(outputColumn + x, hyperlink);
                         }
                     }
 
@@ -461,14 +468,36 @@ public final class TerminalBuffer {
     }
 
     public void setChar(int column, int row, int codePoint, long style) {
+        setChar(column, row, codePoint, style, null);
+    }
+
+    void setChar(int column, int row, int codePoint, long style, String hyperlink) {
         if (row  < 0 || row >= mScreenRows || column < 0 || column >= mColumns)
             throw new IllegalArgumentException("TerminalBuffer.setChar(): row=" + row + ", column=" + column + ", mScreenRows=" + mScreenRows + ", mColumns=" + mColumns);
         row = externalToInternalRow(row);
-        allocateFullLineIfNecessary(row).setChar(column, codePoint, style);
+        allocateFullLineIfNecessary(row).setChar(column, codePoint, style, hyperlink);
     }
 
     public long getStyleAt(int externalRow, int column) {
         return allocateFullLineIfNecessary(externalToInternalRow(externalRow)).getStyle(column);
+    }
+
+    /** Get an OSC 8 target at a visual cell, including negative transcript rows, without allocating a row. */
+    public String getHyperlink(int column, int externalRow) {
+        if (column < 0 || column >= mColumns || externalRow < -mActiveTranscriptRows || externalRow >= mScreenRows) return null;
+        TerminalRow line = mLines[externalToInternalRow(externalRow)];
+        return line == null ? null : line.getHyperlink(column);
+    }
+
+    /** Get an inline image at the same visual coordinates as text and hyperlinks. */
+    public TerminalImage getImage(int column, int externalRow) {
+        if (column < 0 || column >= mColumns || externalRow < -mActiveTranscriptRows || externalRow >= mScreenRows) return null;
+        TerminalRow line = mLines[externalToInternalRow(externalRow)];
+        return line == null ? null : line.getImage(column);
+    }
+
+    void clearHyperlinks() {
+        for (TerminalRow line : mLines) if (line != null) line.clearHyperlinks();
     }
 
     /** Support for http://vt100.net/docs/vt510-rm/DECCARA and http://vt100.net/docs/vt510-rm/DECCARA */

@@ -17,6 +17,7 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.hasExtra("from_overlay"))fromOverlay=intent.getBooleanExtra("from_overlay",false);}
   private TerminalSessions sessions;private TerminalSessions.Job current;
   private TerminalView terminal;private TextView title,status,control;private boolean ctrl;
+  private TerminalTabs tabs;
   private float fontSize=14;private LinearLayout root,setup,header,compactActions;private boolean compactChrome,imeVisible;private boolean installing;private Ui.Action setupAction;
   private static final int INK=0xffe5e9ed,MUTED=0xff95a1ad,BG=0xff0c1117,SURFACE=0xff17212c;
 
@@ -39,8 +40,8 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     title=Ui.text(this,"终端",18,INK);title.setTypeface(Typeface.create("sans-serif-medium",0));title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);labels.addView(title);
     status=Ui.text(this,"正在连接…",11,MUTED);status.setSingleLine(true);status.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);labels.addView(status);
     head.addView(labels,new LinearLayout.LayoutParams(0,-2,1));
-    head.addView(icon(R.drawable.ic_sidebar,"切换终端会话",this::showSessions),new LinearLayout.LayoutParams(dp(48),dp(48)));
     head.addView(icon(R.drawable.ic_dots_three,"终端选项",this::showOptions),new LinearLayout.LayoutParams(dp(48),dp(48)));root.addView(head);
+    tabs=new TerminalTabs(this,sessions,this::attach,this::newSession);root.addView(tabs);
     setup=new LinearLayout(this);setup.setGravity(Gravity.CENTER_VERTICAL);setup.setPadding(dp(16),dp(4),dp(12),dp(4));setup.setBackgroundColor(SURFACE);setup.setVisibility(View.GONE);
     TextView hint=Ui.text(this,getApplicationInfo().targetSdkVersion==28?"系统 Shell 已可使用\n安装 Bash，获得完整脚本环境":"系统 Shell · 受限运行时版本",12,MUTED);setup.addView(hint,new LinearLayout.LayoutParams(0,-2,1));
     setupAction=new Ui.Action(this,R.drawable.ic_arrow_up,"安装 Bash","安装 Bash 并打开新终端",INK,0xff284739,this::installBash);setup.addView(setupAction);root.addView(setup);
@@ -55,13 +56,14 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     keys.addView(key("⌃C","中断当前命令",()->{if(current!=null)current.session.writeCodePoint(false,3);clearCtrl();}));
     keys.addView(key("Esc","发送 Escape",()->sendKey(KeyEvent.KEYCODE_ESCAPE)));
     keys.addView(key("Tab","Tab 补全",()->sendKey(KeyEvent.KEYCODE_TAB)));
+    keys.addView(key("回车","回车 / 执行当前输入",()->sendKey(KeyEvent.KEYCODE_ENTER)));
     keys.addView(key("↑","上一条命令或向上",()->sendKey(KeyEvent.KEYCODE_DPAD_UP)));
     keys.addView(key("↓","下一条命令或向下",()->sendKey(KeyEvent.KEYCODE_DPAD_DOWN)));
     keys.addView(key("←","光标向左",()->sendKey(KeyEvent.KEYCODE_DPAD_LEFT)));
     keys.addView(key("→","光标向右",()->sendKey(KeyEvent.KEYCODE_DPAD_RIGHT)));
     keys.addView(key("粘贴","粘贴到终端",()->{if(current!=null)paste(current);}));
     keys.addView(key("键盘","显示或隐藏键盘",this::toggleKeyboard));
-    compactActions=new LinearLayout(this);compactActions.setVisibility(View.GONE);compactActions.addView(key("会话","切换终端会话",this::showSessions));compactActions.addView(key("选项","终端选项",this::showOptions));compactActions.addView(key("收起","收起终端，保留会话",this::finish));keys.addView(compactActions);
+    compactActions=new LinearLayout(this);compactActions.setVisibility(View.GONE);compactActions.addView(key("选项","终端选项",this::showOptions));compactActions.addView(key("收起","收起终端，保留会话",this::finish));keys.addView(compactActions);
     rail.addView(keys);root.addView(rail,new LinearLayout.LayoutParams(-1,dp(48)));
     root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->updateChrome());setContentView(root);
   }
@@ -72,15 +74,8 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     value.setPadding(dp(12),0,dp(12),0);value.setBackground(Ui.ripple(this,Color.TRANSPARENT,10,INK));
     value.setOnClickListener(v->{Ui.click(v);action.run();});return value;
   }
-  private void attach(TerminalSessions.Job job){current=job;sessions.select(job);terminal.attachSession(job.session);terminal.requestFocus();changed(job);}
+  private void attach(TerminalSessions.Job job){current=job;sessions.select(job);terminal.attachSession(job.session);terminal.requestFocus();tabs.sync(current);changed(job);}
   private void newSession(){try{attach(sessions.create());}catch(Exception error){Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();}}
-  private void showSessions(){
-    java.util.ArrayList<TerminalSessions.Job> entries=new java.util.ArrayList<>(sessions.jobs.values());
-    String[] labels=new String[entries.size()+1];
-    for(int i=0;i<entries.size();i++){TerminalSessions.Job job=entries.get(i);labels[i]=(job==current?"✓ ":"")+job.name+" · "+(job.session.isRunning()?job.shell.isEmpty()?"准备中":job.shell:"已结束");}
-    labels[labels.length-1]="＋ 新建终端";
-    new AlertDialog.Builder(this).setTitle("终端会话").setItems(labels,(dialog,which)->{if(which==entries.size())newSession();else attach(entries.get(which));}).setNegativeButton("返回",null).show();
-  }
   private void showOptions(){
     String[] items={"显示键盘","复制当前终端记录","放大文字","缩小文字","安装 / 更新 Bash","结束当前会话及进程"};
     new AlertDialog.Builder(this).setTitle("终端选项").setItems(items,(dialog,which)->{
@@ -111,9 +106,9 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   private void changeFont(float delta){fontSize=Math.max(10,Math.min(24,fontSize+delta));terminal.setTextSize(sp(fontSize));getPreferences(MODE_PRIVATE).edit().putFloat("fontSize",fontSize).apply();}
   private int dp(float value){return Ui.dp(this,value);}private int sp(float value){return Math.round(value*getResources().getDisplayMetrics().scaledDensity);}
 
-  @Override public void changed(TerminalSessions.Job job){if(isFinishing()||job!=current)return;title.setText(job.session.getTitle()==null||job.session.getTitle().isBlank()?job.name:job.session.getTitle());status.setText(installing?"正在安装 Bash…":job.status+(job.cwd.isEmpty()?"":" · "+job.cwd.replace(PiRuntime.agentRoot(this).getPath(),"项目")));updateChrome();terminal.onScreenUpdated();}
+  @Override public void changed(TerminalSessions.Job job){if(isFinishing())return;tabs.update(job,current);if(job!=current)return;title.setText(job.session.getTitle()==null||job.session.getTitle().isBlank()?job.name:job.session.getTitle());status.setText(installing?"正在安装 Bash…":job.status+(job.cwd.isEmpty()?"":" · "+job.cwd.replace(PiRuntime.agentRoot(this).getPath(),"项目")));updateChrome();terminal.onScreenUpdated();}
   @Override public void paste(TerminalSessions.Job job){ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(clipboard.hasPrimaryClip()&&clipboard.getPrimaryClip().getItemCount()>0&&job.session.getEmulator()!=null)job.session.getEmulator().paste(clipboard.getPrimaryClip().getItemAt(0).coerceToText(this).toString());}
-  @Override protected void onResume(){super.onResume();if(sessions!=null)sessions.observe(this);if(terminal!=null)terminal.setTerminalCursorBlinkerState(true,true);}
+  @Override protected void onResume(){super.onResume();if(sessions!=null)sessions.observe(this);if(tabs!=null)tabs.sync(current);if(terminal!=null)terminal.setTerminalCursorBlinkerState(true,true);}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);if(terminal!=null)terminal.setTerminalCursorBlinkerState(false,false);super.onPause();}
   @Override protected void onDestroy(){if(sessions!=null)sessions.detach(this);if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
   @Override public void onBackPressed(){finish();}
@@ -121,6 +116,11 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   public void onSingleTapUp(MotionEvent event){
     // TerminalView already focuses and dispatches the tap. Only explicit keyboard controls open the IME.
   }
+  public void onOpenLink(String target){
+    try{OpenTargets.open(this,TerminalLinkTargets.androidTarget(target,ArtifactProvider.root(this).getPath()),"",false);}
+    catch(Exception error){Toast.makeText(this,"无法打开："+error.getMessage(),Toast.LENGTH_LONG).show();}
+  }
+  public void onOpenImage(android.graphics.Bitmap bitmap){ChatImages.openTerminalImage(this,bitmap);}
   public boolean shouldBackButtonBeMappedToEscape(){return false;}
   public boolean shouldEnforceCharBasedInput(){return false;}
   public boolean shouldUseCtrlSpaceWorkaround(){return true;}

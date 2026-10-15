@@ -39,6 +39,7 @@ import android.widget.Scroller;
 
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
+import com.termux.terminal.TerminalImage;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.textselection.TextSelectionCursorController;
 
@@ -78,6 +79,9 @@ public final class TerminalView extends View {
     private int mMouseScrollStartX = -1, mMouseScrollStartY = -1;
     /** Keep track of the time when a touch event leading to sending mouse scroll events started. */
     private long mMouseStartDownTime = -1;
+    private long mContentDownTime = -1;
+    private String mTouchedLink;
+    private TerminalImage mTouchedImage;
 
     final Scroller mScroller;
 
@@ -135,7 +139,7 @@ public final class TerminalView extends View {
             @Override
             public boolean onUp(MotionEvent event) {
                 mScrollRemainder = 0.0f;
-                if (mEmulator != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !scrolledWithFinger) {
+                if (mEmulator != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !scrolledWithFinger && !hasTappedContent(event)) {
                     // Quick event processing when mouse tracking is active - do not wait for check of double tapping
                     // for zooming.
                     sendMouseEventCode(event, TerminalEmulator.MOUSE_LEFT_BUTTON, true);
@@ -155,7 +159,7 @@ public final class TerminalView extends View {
                     return true;
                 }
                 requestFocus();
-                mClient.onSingleTapUp(event);
+                if (!openTappedContent(event)) mClient.onSingleTapUp(event);
                 return true;
             }
 
@@ -283,6 +287,9 @@ public final class TerminalView extends View {
     public boolean attachSession(TerminalSession session) {
         if (session == mTermSession) return false;
         mTopRow = 0;
+        mContentDownTime = -1;
+        mTouchedLink = null;
+        mTouchedImage = null;
 
         mTermSession = session;
         mEmulator = null;
@@ -532,6 +539,28 @@ public final class TerminalView extends View {
         return new int[] { column, row };
     }
 
+    private void captureTappedContent(MotionEvent event) {
+        mContentDownTime = event.getDownTime();
+        mTouchedLink = null;
+        mTouchedImage = null;
+        if (isSelectingText() || event.getX() < 0 || event.getY() < mRenderer.mFontLineSpacingAndAscent) return;
+        int[] cell = getColumnAndRow(event, true);
+        mTouchedLink = mEmulator.getScreen().getHyperlink(cell[0], cell[1]);
+        if (mTouchedLink == null) mTouchedImage = mEmulator.getScreen().getImage(cell[0], cell[1]);
+    }
+
+    private boolean hasTappedContent(MotionEvent event) {
+        return event.getDownTime() == mContentDownTime && (mTouchedLink != null || mTouchedImage != null);
+    }
+
+    private boolean openTappedContent(MotionEvent event) {
+        if (!hasTappedContent(event)) return false;
+        // Use the touched content, not whatever a streaming redraw put under the pointer later.
+        if (mTouchedLink != null) mClient.onOpenLink(mTouchedLink);
+        else if (mTouchedImage.bitmap != null && !mTouchedImage.bitmap.isRecycled()) mClient.onOpenImage(mTouchedImage.bitmap);
+        return true;
+    }
+
     /** Send a single mouse event code to the terminal. */
     void sendMouseEventCode(MotionEvent e, int button, boolean pressed) {
         int[] columnAndRow = getColumnAndRow(e, false);
@@ -586,6 +615,7 @@ public final class TerminalView extends View {
     public boolean onTouchEvent(MotionEvent event) {
         if (mEmulator == null) return true;
         final int action = event.getAction();
+        if (action == MotionEvent.ACTION_DOWN) captureTappedContent(event);
 
         if (isSelectingText()) {
             updateFloatingToolbarVisibility(event);
@@ -605,7 +635,7 @@ public final class TerminalView extends View {
                         if (!TextUtils.isEmpty(text)) mEmulator.paste(text.toString());
                     }
                 }
-            } else if (mEmulator.isMouseTrackingActive()) { // BUTTON_PRIMARY.
+            } else if (mEmulator.isMouseTrackingActive() && !hasTappedContent(event)) { // BUTTON_PRIMARY.
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
                     case MotionEvent.ACTION_UP:

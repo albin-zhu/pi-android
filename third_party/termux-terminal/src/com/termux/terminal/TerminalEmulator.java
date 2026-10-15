@@ -93,6 +93,7 @@ public final class TerminalEmulator {
 
     /** Needs to be large enough to contain reasonable OSC 52 pastes. */
     private static final int MAX_OSC_STRING_LENGTH = 8192;
+    private static final int MAX_HYPERLINK_LENGTH = 4096;
 
     /** DECSET 1 - application cursor keys. */
     private static final int DECSET_BIT_APPLICATION_CURSOR_KEYS = 1;
@@ -192,6 +193,7 @@ public final class TerminalEmulator {
     private final TerminalImage.Store mImages = new TerminalImage.Store();
     private InlineImageDecoder mInlineImage;
     private boolean mDiscardOsc;
+    private String mCurrentHyperlink;
 
     /**
      * True if the current escape sequence should continue, false if the current escape sequence should be terminated.
@@ -533,6 +535,9 @@ public final class TerminalEmulator {
                         // on binary input. XTerm does not allow them in utf-8:
                         // "It is not possible to use a C1 control obtained from decoding the
                         // UTF-8 text" - http://invisible-island.net/xterm/ctlseqs/ctlseqs.html
+                        // Do not silently remove controls from an OSC 8 target and accept a different URI.
+                        if ((mEscapeState == ESC_OSC || mEscapeState == ESC_OSC_ESC) && isOscHyperlink())
+                            processCodePoint(codePoint);
                     } else {
                         switch (Character.getType(codePoint)) {
                             case Character.UNASSIGNED:
@@ -588,6 +593,8 @@ public final class TerminalEmulator {
             if (b == 24 || b == 26) {
                 mInlineImage = null;
                 mDiscardOsc = false;
+                if (isOscHyperlink()) mCurrentHyperlink = null;
+                mOSCOrDeviceControlArgs.setLength(0);
                 finishSequence();
             } else if (mEscapeState == ESC_OSC) doOsc(b);
             else doOscEsc(b);
@@ -2039,7 +2046,7 @@ public final class TerminalEmulator {
                 for (int y = 0; y < height; y++) {
                     if (y > 0) doLinefeed();
                     for (int x = 0; x < width; x++) {
-                        mScreen.setChar(startColumn + x, mCursorRow, ' ', getStyle());
+                        mScreen.setChar(startColumn + x, mCursorRow, ' ', getStyle(), mCurrentHyperlink);
                         mScreen.setImage(startColumn + x, mCursorRow, image, x, y);
                     }
                 }
@@ -2051,6 +2058,27 @@ public final class TerminalEmulator {
         else doOscSetTextParameters(terminator);
         mDiscardOsc = false;
         mOSCOrDeviceControlArgs.setLength(0);
+    }
+
+    private boolean isOscHyperlink() {
+        int index = 0;
+        while (index < mOSCOrDeviceControlArgs.length() && mOSCOrDeviceControlArgs.charAt(index) == '0') index++;
+        return index + 1 < mOSCOrDeviceControlArgs.length()
+            && mOSCOrDeviceControlArgs.charAt(index) == '8' && mOSCOrDeviceControlArgs.charAt(index + 1) == ';';
+    }
+
+    private void setHyperlink(String parametersAndUri) {
+        // Ignore optional colon-separated params (including id); only the URI is needed for hit testing.
+        // Invalid openings close the previous link rather than letting unrelated output inherit it.
+        mCurrentHyperlink = null;
+        int separator = parametersAndUri.indexOf(';');
+        if (separator < 0) return;
+        int uriStart = separator + 1;
+        int uriLength = parametersAndUri.length() - uriStart;
+        if (uriLength == 0 || uriLength > MAX_HYPERLINK_LENGTH) return;
+        for (int i = 0; i < parametersAndUri.length(); i++)
+            if (Character.isISOControl(parametersAndUri.charAt(i))) return;
+        mCurrentHyperlink = parametersAndUri.substring(uriStart);
     }
 
 
@@ -2077,6 +2105,9 @@ public final class TerminalEmulator {
             case 1: // Change icon name to T.
             case 2: // Change window title to T.
                 setTitle(textParameter);
+                break;
+            case 8: // OSC 8 ; params ; URI ST (an empty URI closes the current hyperlink).
+                setHyperlink(textParameter);
                 break;
             case 4:
                 // P s = 4 ; c ; spec → Change Color Number c to the color specified by spec. This can be a name or RGB
@@ -2340,6 +2371,7 @@ public final class TerminalEmulator {
                 }
             } else {
                 mDiscardOsc = true;
+                if (isOscHyperlink()) mCurrentHyperlink = null;
                 mOSCOrDeviceControlArgs.setLength(0);
             }
         }
@@ -2542,7 +2574,7 @@ public final class TerminalEmulator {
         // so was mCursorCol changed after the offsetDueToCombiningChar conditional by another thread?
         // TODO: Check if there are thread synchronization issues with mCursorCol and mCursorRow, possibly causing others bugs too.
         if (column < 0) column = 0;
-        mScreen.setChar(column, mCursorRow, codePoint, getStyle());
+        mScreen.setChar(column, mCursorRow, codePoint, getStyle(), mCurrentHyperlink);
 
         if (autoWrap && displayWidth > 0)
             mAboutToAutoWrap = (mCursorCol == mRightMargin - displayWidth);
@@ -2584,6 +2616,10 @@ public final class TerminalEmulator {
     public void reset() {
         mInlineImage = null;
         mDiscardOsc = false;
+        mCurrentHyperlink = null;
+        mOSCOrDeviceControlArgs.setLength(0);
+        mMainBuffer.clearHyperlinks();
+        mAltBuffer.clearHyperlinks();
         mMainBuffer.clearImages();
         mAltBuffer.clearImages();
         mImages.clear();
