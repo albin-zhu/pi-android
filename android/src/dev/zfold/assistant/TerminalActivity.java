@@ -118,7 +118,9 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   @Override protected void onDestroy(){if(sessions!=null)sessions.detach(this);if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
   @Override public void onBackPressed(){finish();}
   public float onScale(float scale){if(scale>1.1f){changeFont(1);return 1;}if(scale<.9f){changeFont(-1);return 1;}return scale;}
-  public void onSingleTapUp(MotionEvent event){showKeyboard();}
+  public void onSingleTapUp(MotionEvent event){
+    // TerminalView already focuses and dispatches the tap. Only explicit keyboard controls open the IME.
+  }
   public boolean shouldBackButtonBeMappedToEscape(){return false;}
   public boolean shouldEnforceCharBasedInput(){return false;}
   public boolean shouldUseCtrlSpaceWorkaround(){return true;}
