@@ -54,6 +54,7 @@ public final class TerminalView extends View {
     public TerminalEmulator mEmulator;
 
     public TerminalRenderer mRenderer;
+    private final TerminalImageRenderer mImageRenderer = new TerminalImageRenderer();
 
     public TerminalViewClient mClient;
 
@@ -956,8 +957,8 @@ public final class TerminalView extends View {
 
     /** Check if the terminal size in rows and columns should be updated. */
     public void updateSize() {
-        int viewWidth = getWidth();
-        int viewHeight = getHeight();
+        int viewWidth = getWidth() - getPaddingLeft() - getPaddingRight();
+        int viewHeight = getHeight() - getPaddingTop() - getPaddingBottom();
         if (viewWidth == 0 || viewHeight == 0 || mTermSession == null) return;
 
         // Set to 80 and 24 if you want to enable vttest.
@@ -965,7 +966,9 @@ public final class TerminalView extends View {
         // A phone keyboard can leave only two visible lines; keep the cursor in that viewport.
         int newRows = Math.max(2, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
 
-        if (mEmulator == null || (newColumns != mEmulator.mColumns || newRows != mEmulator.mRows)) {
+        if (mEmulator == null || newColumns != mEmulator.mColumns || newRows != mEmulator.mRows
+                || (int) mRenderer.getFontWidth() != mEmulator.getCellWidthPixels()
+                || mRenderer.getFontLineSpacing() != mEmulator.getCellHeightPixels()) {
             mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(), mRenderer.getFontLineSpacing());
             mEmulator = mTermSession.getEmulator();
             mClient.onEmulatorSet();
@@ -992,6 +995,7 @@ public final class TerminalView extends View {
             }
 
             mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3]);
+            mImageRenderer.render(mEmulator, canvas, mTopRow, mRenderer);
 
             // render the text selection handles
             renderTextSelection();

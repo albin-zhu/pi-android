@@ -23,6 +23,7 @@ exec "$proot" --link2symlink --kill-on-exit -0 -r "$rootfs" \
   -b "$ZFOLD_AGENT_ROOT:/workspace" -w /workspace \
   /usr/bin/env -i HOME=/root TMPDIR=/tmp PATH=/usr/local/bin:/usr/bin:/bin \
   LANG=C.UTF-8 TERM="${TERM:-xterm-256color}" COLORTERM=truecolor \
+  PI_FORCE_IMAGE_PROTOCOL="${PI_FORCE_IMAGE_PROTOCOL:-}" \
   ZFOLD_PHONE_SOCKET="$ZFOLD_PHONE_SOCKET" \
   ZFOLD_PHONE_PATH_MAP="{\"hostRoot\":\"$ZFOLD_AGENT_ROOT\",\"guestRoot\":\"/workspace\"}" \
   "$@"

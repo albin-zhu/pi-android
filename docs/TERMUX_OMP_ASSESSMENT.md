@@ -76,6 +76,32 @@ omp
 - `omp` guest 入口自动加载 `/opt/pi-phone/omp-phone-extension.mjs`。初次安装不迁移授权；后续按用户明确要求，已通过官方 auth export/import 合并本机 openai-codex OAuth、xai/Grok OAuth、litellm API key，并合并 LiteLLM provider 配置。没有覆盖 agent.db、迁移旧会话或修改内嵌 Pi 凭据。
 
 
+## 终端字形与内联图片
+
+Ubuntu 不改变 Android 终端的绘制能力。本轮直接修复 App 的终端实现，不迁移 GUI，不更改 Pi / Node / omp 版本或供应商配置。
+
+- **字形比例**：旧 `TerminalRenderer` 对宽度不匹配的 fallback 字形只缩放 X，导致圆形变窄。现在只对该字形等比缩小、居中，保留字格布局和原始纵横比；宽图标被限定为一格时会更小。背景及 block / underline / bar 光标不参与缩放，测量 Paint 不继承上一段粗体/斜体绘制状态。
+- **图片协议**：实现 iTerm2 `OSC 1337;File=inline=1;...:BASE64` 的 PNG/JPEG，支持 BEL / ST 结束和分段 PTY 输入。支持正整数列/行、`Npx`、百分比、`auto` 尺寸与 `preserveAspectRatio`；名称仅为元数据，不读取本地路径、URL 或触发下载。不支持 Kitty、Sixel、GIF 动画和 iTerm2 分块文件传输。
+- **布局与生命周期**：图片所属字符格随普通历史、行复制和重排移动；字符覆盖、清行、清历史、reset 释放对应图片引用，主/备用屏幕分离。图片绘制遵循手动历史视口；超过内存/数量预算会淘汰旧图，不能承诺无限图片历史。改变字格像素尺寸时清除旧图片，等待应用重新绘制。
+- **资源预算**：单个压缩图片最多 8 MiB、头部 1024 字符；解码前限制为 4,194,304 像素、任一边不超过 8192 像素。主/备用缓冲区合计保留最多 32 MiB bitmap、64 张图；单次放置不超过 65,536 字格。相同内容和尺寸的存活图片复用解码结果，普通文字行跳过图片逐格扫描。
+- **能力声明**：仅交互 `TerminalSessions` 默认导出 `PI_FORCE_IMAGE_PROTOCOL=iterm2`，`ubuntu.sh` 透传；`TERM` 仍是 `xterm-256color`。没有给嵌入 agent 和一次性执行环境强制开启图片。新环境只对新终端及其新启动的 omp 生效；可在该 shell 中用 `export PI_FORCE_IMAGE_PROTOCOL=off` 后重启 omp 禁用。
+
+验收使用最终 compat28 APK 和 ARM64 模拟器 `emulator-5580`：
+
+```sh
+adb -s emulator-5580 shell am instrument -w dev.zfold.assistant/.TerminalGlyphInstrumentation
+adb -s emulator-5580 shell am instrument -w dev.zfold.assistant/.TerminalImageInstrumentation
+adb -s emulator-5580 shell am instrument -w dev.zfold.assistant/.TerminalScrollInstrumentation
+```
+
+三项 instrumentation 均返回 `INSTRUMENTATION_CODE: -1`。字形检查覆盖 12/18/24/32/48px 的四种圆形、实际像素比例、完整背景/光标及粗斜体 ASCII/CJK/组合字符；旧 X-only 绘制与新绘制对比图为 `artifacts/terminal-render/terminal-glyphs-24.png`。图片检查经真实 shell PTY 传输超过普通 OSC 长度的 PNG，覆盖分段输入、ST、JPEG 精确像素尺寸、历史视口、擦除、主/备用分离、reset 和畸形/超限输入；截图为 `artifacts/terminal-render/terminal-image-checker.png`。既有历史重绘、追加输出锚点、恢复底部跟随检查仍通过。
+
+另以本机已安装的 **omp 18.10.0 `Image.render()`** 生成相机 JPEG 的实际输出序列，通过真实 Android PTY 回放，并从 App 正常导航进入终端执行 `cat` 显示该序列；照片、图标及中英文在实际屏幕绘制，完整截图为 `artifacts/terminal-render/terminal-image-screen.png`。这证明 omp 图片组件与终端协议兼容，不是一次真实 provider 推理回合；未调用付费模型或读取/迁移凭据。
+
+正常交互终端执行 `printenv PI_FORCE_IMAGE_PROTOCOL` 实际输出 `iterm2`，截图为 `artifacts/terminal-render/terminal-capability.png`。本次加载的模拟器快照缺少 PRoot，因此未在这个快照中重跑 Ubuntu 内完整 omp 会话；不能把上述图片回放宣称为 guest 会话验收，也不表示真机已有 Ubuntu 缺失或被改动。
+
+本轮真机未连接：`adb devices -l` 仅列出模拟器，`adb mdns services` 无发现。APK 已生成 `artifacts/Zfold-0.2.87-compat28-debug.apk`，但这些渲染修复尚未覆盖安装至 Zfold，三星实际字形与图片显示仍需真机验收。
+
 ## 已有证据与未验证项
 
 - 实现入口：`PhoneToolServer.java`、`PhoneToolDispatcher.java`、`PhoneToolApproval.java`、`PhoneToolApprovalActivity.java`、`runtime/phone-socket-client.mjs`、`runtime/omp-phone-extension.mjs`、`runtime/ubuntu.sh`、`scripts/setup-ubuntu.py`。

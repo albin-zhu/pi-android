@@ -608,6 +608,14 @@ adb reverse --remove tcp:18868
 
 `TerminalScrollInstrumentation` 使用真实 PTY 和终端视图验证重绘、追加输出及恢复跟随；修复前可复现自动回底，修复后三项通过。已覆盖安装到 Zfold，保留 Ubuntu 与供应商数据；用户实际 omp 会话的手势复测仍由真机确认。
 
+### 终端字形与图片
+
+宽度不匹配的 Android fallback 字形改为等比缩小、居中，不再只压缩横轴；单格宽图标可能更小，但保持原始比例，不拉伸整行文字。字符背景和光标保持完整字格。
+
+App 终端已接入 **iTerm2 OSC 1337 内联 PNG/JPEG**，图片随所属字符格滚动、擦除和切换缓冲区。交互终端向 omp 声明 `PI_FORCE_IMAGE_PROTOCOL=iterm2`，`ubuntu` 透传该能力；不伪装 Kitty，也不强制非交互运行环境使用图片。更新后需新开终端、重新启动 omp，已有进程不会自动获得新环境变量。
+
+`TerminalGlyphInstrumentation`、`TerminalImageInstrumentation` 和 `TerminalScrollInstrumentation` 已在 ARM64 模拟器通过；实际 omp 18.10 图片组件输出的相机 JPEG 已在终端绘制。协议范围、内存限制与截图见 [架构与验收记录](docs/TERMUX_OMP_ASSESSMENT.md)。本次验证时 Zfold 未连接 ADB，尚未覆盖安装这一轮渲染修复。
+
 ## 结构
 
 - `runtime/agent.mjs`：真正的 Pi SDK 会话、自定义模型和 Android 工具定义。

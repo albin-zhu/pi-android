@@ -292,8 +292,12 @@ public final class TerminalBuffer {
                 } else {
                     for (int i = 0; i < oldLine.getSpaceUsed(); i++)
                         // NEWLY INTRODUCED BUG! Should not index oldLine.mStyle with char indices
-                        if (oldLine.mText[i] != ' '/* || oldLine.mStyle[i] != currentStyle */)
+                        if (oldLine.mText[i] != ' ')
                             lastNonSpaceIndex = i + 1;
+                }
+                if (oldLine.hasImages()) {
+                    lastNonSpaceIndex = oldLine.getSpaceUsed();
+                    justToCursor = false;
                 }
 
                 int currentOldCol = 0;
@@ -321,6 +325,13 @@ public final class TerminalBuffer {
                     int offsetDueToCombiningChar = ((displayWidth <= 0 && currentOutputExternalColumn > 0) ? 1 : 0);
                     int outputColumn = currentOutputExternalColumn - offsetDueToCombiningChar;
                     setChar(outputColumn, currentOutputExternalRow, codePoint, styleAtCol);
+                    if (displayWidth > 0) {
+                        TerminalRow output = allocateFullLineIfNecessary(externalToInternalRow(currentOutputExternalRow));
+                        for (int x = 0; x < displayWidth; x++) {
+                            TerminalImage image = oldLine.getImage(currentOldCol + x);
+                            if (image != null) output.setImage(outputColumn + x, image, oldLine.getImageX(currentOldCol + x), oldLine.getImageY(currentOldCol + x));
+                        }
+                    }
 
                     if (displayWidth > 0) {
                         if (oldCursorRow == externalOldRow && oldCursorColumn == currentOldCol) {
@@ -344,6 +355,7 @@ public final class TerminalBuffer {
                     currentOutputExternalColumn = 0;
                 }
             }
+            for (TerminalRow oldLine : oldLines) if (oldLine != null) oldLine.clearImages();
 
             cursor[0] = newCursorColumn;
             cursor[1] = newCursorRow;
@@ -484,7 +496,20 @@ public final class TerminalBuffer {
         }
     }
 
+    /** Attach to the same row/cell objects as text, so ring scrolling and block operations carry images. */
+    void setImage(int column, int row, TerminalImage image, int imageX, int imageY) {
+        allocateFullLineIfNecessary(externalToInternalRow(row)).setImage(column, image, imageX, imageY);
+    }
+
+    void clearImages() {
+        for (TerminalRow line : mLines) if (line != null) line.clearImages();
+    }
+
     public void clearTranscript() {
+        for (int row = -mActiveTranscriptRows; row < 0; row++) {
+            TerminalRow line = mLines[externalToInternalRow(row)];
+            if (line != null) line.clearImages();
+        }
         if (mScreenFirstRow < mActiveTranscriptRows) {
             Arrays.fill(mLines, mTotalRows + mScreenFirstRow - mActiveTranscriptRows, mTotalRows, null);
             Arrays.fill(mLines, 0, mScreenFirstRow, null);

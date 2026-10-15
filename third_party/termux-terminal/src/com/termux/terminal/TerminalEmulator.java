@@ -143,6 +143,8 @@ public final class TerminalEmulator {
     /** Size of a terminal cell in pixels. */
     private int mCellWidthPixels, mCellHeightPixels;
 
+    public int getCellWidthPixels() { return mCellWidthPixels; }
+    public int getCellHeightPixels() { return mCellHeightPixels; }
     /** The number of terminal transcript rows that can be scrolled back to. */
     public static final int TERMINAL_TRANSCRIPT_ROWS_MIN = 100;
     public static final int TERMINAL_TRANSCRIPT_ROWS_MAX = 50000;
@@ -187,6 +189,9 @@ public final class TerminalEmulator {
 
     /** Holds OSC and device control arguments, which can be strings. */
     private final StringBuilder mOSCOrDeviceControlArgs = new StringBuilder();
+    private final TerminalImage.Store mImages = new TerminalImage.Store();
+    private InlineImageDecoder mInlineImage;
+    private boolean mDiscardOsc;
 
     /**
      * True if the current escape sequence should continue, false if the current escape sequence should be terminated.
@@ -381,6 +386,11 @@ public final class TerminalEmulator {
     }
 
     public void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels) {
+        if (mCellWidthPixels != cellWidthPixels || mCellHeightPixels != cellHeightPixels) {
+            mMainBuffer.clearImages();
+            mAltBuffer.clearImages();
+            mImages.clear();
+        }
         this.mCellWidthPixels = cellWidthPixels;
         this.mCellHeightPixels = cellHeightPixels;
 
@@ -571,6 +581,16 @@ public final class TerminalEmulator {
             return;
         } else if (mEscapeState == ESC_APC_ESCAPE) {
             doApcEscape(b);
+            return;
+        }
+        // OSC payloads must not execute embedded controls, even after malformed/oversized input.
+        if (mEscapeState == ESC_OSC || mEscapeState == ESC_OSC_ESC) {
+            if (b == 24 || b == 26) {
+                mInlineImage = null;
+                mDiscardOsc = false;
+                finishSequence();
+            } else if (mEscapeState == ESC_OSC) doOsc(b);
+            else doOscEsc(b);
             return;
         }
 
@@ -1480,6 +1500,8 @@ public final class TerminalEmulator {
                 break;
             case ']': // OSC
                 mOSCOrDeviceControlArgs.setLength(0);
+                mInlineImage = null;
+                mDiscardOsc = false;
                 continueSequence(ESC_OSC);
                 break;
             case '>': // DECKPNM
@@ -1981,7 +2003,7 @@ public final class TerminalEmulator {
     private void doOsc(int b) {
         switch (b) {
             case 7: // Bell.
-                doOscSetTextParameters("\007");
+                finishOsc("\007");
                 break;
             case 27: // Escape.
                 continueSequence(ESC_OSC_ESC);
@@ -1995,7 +2017,7 @@ public final class TerminalEmulator {
     private void doOscEsc(int b) {
         switch (b) {
             case '\\':
-                doOscSetTextParameters("\033\\");
+                finishOsc("\033\\");
                 break;
             default:
                 // The ESC character was not followed by a \, so insert the ESC and
@@ -2006,6 +2028,31 @@ public final class TerminalEmulator {
                 break;
         }
     }
+    private void finishOsc(String terminator) {
+        if (mInlineImage != null) {
+            TerminalImage image = mInlineImage.finish(mImages, mColumns, mRows, mCellWidthPixels, mCellHeightPixels);
+            mInlineImage = null;
+            if (image != null) {
+                int startColumn = mCursorCol;
+                int width = Math.min(mColumns - startColumn, (int) Math.ceil(image.width / image.cellWidth));
+                int height = (int) Math.ceil(image.height / image.cellHeight);
+                for (int y = 0; y < height; y++) {
+                    if (y > 0) doLinefeed();
+                    for (int x = 0; x < width; x++) {
+                        mScreen.setChar(startColumn + x, mCursorRow, ' ', getStyle());
+                        mScreen.setImage(startColumn + x, mCursorRow, image, x, y);
+                    }
+                }
+                mAboutToAutoWrap = false;
+                image.release();
+            }
+            finishSequence();
+        } else if (mDiscardOsc) finishSequence();
+        else doOscSetTextParameters(terminator);
+        mDiscardOsc = false;
+        mOSCOrDeviceControlArgs.setLength(0);
+    }
+
 
     /** An Operating System Controls (OSC) Set Text Parameters. May come here from BEL or ST. */
     private void doOscSetTextParameters(String bellOrStringTerminator) {
@@ -2282,12 +2329,21 @@ public final class TerminalEmulator {
     }
 
     private void collectOSCArgs(int b) {
-        if (mOSCOrDeviceControlArgs.length() < MAX_OSC_STRING_LENGTH) {
-            mOSCOrDeviceControlArgs.appendCodePoint(b);
-            continueSequence(mEscapeState);
-        } else {
-            unknownSequence(b);
+        if (mInlineImage != null) {
+            mInlineImage.accept(b);
+        } else if (!mDiscardOsc) {
+            if (mOSCOrDeviceControlArgs.length() < MAX_OSC_STRING_LENGTH) {
+                mOSCOrDeviceControlArgs.appendCodePoint(b);
+                if (mOSCOrDeviceControlArgs.length() == 10 && mOSCOrDeviceControlArgs.toString().equals("1337;File=")) {
+                    mInlineImage = new InlineImageDecoder();
+                    mOSCOrDeviceControlArgs.setLength(0);
+                }
+            } else {
+                mDiscardOsc = true;
+                mOSCOrDeviceControlArgs.setLength(0);
+            }
         }
+        continueSequence(mEscapeState);
     }
 
     private void unimplementedSequence(int b) {
@@ -2526,6 +2582,11 @@ public final class TerminalEmulator {
 
     /** Reset terminal state so user can interact with it regardless of present state. */
     public void reset() {
+        mInlineImage = null;
+        mDiscardOsc = false;
+        mMainBuffer.clearImages();
+        mAltBuffer.clearImages();
+        mImages.clear();
         setCursorStyle();
         mArgIndex = 0;
         mContinueSequence = false;

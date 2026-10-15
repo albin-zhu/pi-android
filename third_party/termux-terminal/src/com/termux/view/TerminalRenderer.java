@@ -21,6 +21,8 @@ public final class TerminalRenderer {
     final int mTextSize;
     final Typeface mTypeface;
     private final Paint mTextPaint = new Paint();
+    /** Unstyled metrics must not depend on the last run's bold/italic drawing state. */
+    private final Paint mMeasurePaint = new Paint();
 
     /** The width of a single mono spaced character obtained by {@link Paint#measureText(String)} on a single 'X'. */
     final float mFontWidth;
@@ -40,6 +42,7 @@ public final class TerminalRenderer {
         mTextPaint.setTypeface(typeface);
         mTextPaint.setAntiAlias(true);
         mTextPaint.setTextSize(textSize);
+        mMeasurePaint.set(mTextPaint);
 
         mFontLineSpacing = (int) Math.ceil(mTextPaint.getFontSpacing());
         mFontAscent = (int) Math.ceil(mTextPaint.ascent());
@@ -49,7 +52,7 @@ public final class TerminalRenderer {
         StringBuilder sb = new StringBuilder(" ");
         for (int i = 0; i < asciiMeasures.length; i++) {
             sb.setCharAt(0, (char) i);
-            asciiMeasures[i] = mTextPaint.measureText(sb, 0, 1);
+            asciiMeasures[i] = mMeasurePaint.measureText(sb, 0, 1);
         }
     }
 
@@ -106,8 +109,8 @@ public final class TerminalRenderer {
                 // Check if the measured text width for this code point is not the same as that expected by wcwidth().
                 // This could happen for some fonts which are not truly monospace, or for more exotic characters such as
                 // smileys which android font renders as wide.
-                // If this is detected, we draw this code point scaled to match what wcwidth() expects.
-                final float measuredCodePointWidth = (codePoint < asciiMeasures.length) ? asciiMeasures[codePoint] : mTextPaint.measureText(line,
+                // Isolate mismatches so a fallback glyph can be fitted without moving adjacent cells.
+                final float measuredCodePointWidth = (codePoint < asciiMeasures.length) ? asciiMeasures[codePoint] : mMeasurePaint.measureText(line,
                     currentCharIndex, charsForCodePoint);
                 final boolean fontWidthMismatch = Math.abs(measuredCodePointWidth / mFontWidth - codePointWcWidth) > 0.01;
 
@@ -186,18 +189,8 @@ public final class TerminalRenderer {
             backColor = tmp;
         }
 
-        float left = startColumn * mFontWidth;
-        float right = left + runWidthColumns * mFontWidth;
-
-        mes = mes / mFontWidth;
-        boolean savedMatrix = false;
-        if (Math.abs(mes - runWidthColumns) > 0.01) {
-            canvas.save();
-            canvas.scale(runWidthColumns / mes, 1.f);
-            left *= mes / runWidthColumns;
-            right *= mes / runWidthColumns;
-            savedMatrix = true;
-        }
+        final float left = startColumn * mFontWidth;
+        final float right = left + runWidthColumns * mFontWidth;
 
         if (backColor != palette[TextStyle.COLOR_INDEX_BACKGROUND]) {
             // Only draw non-default background.
@@ -209,8 +202,9 @@ public final class TerminalRenderer {
             mTextPaint.setColor(cursor);
             float cursorHeight = mFontLineSpacingAndAscent - mFontAscent;
             if (cursorStyle == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE) cursorHeight /= 4.;
-            else if (cursorStyle == TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR) right -= ((right - left) * 3) / 4.;
-            canvas.drawRect(left, y - cursorHeight, right, y, mTextPaint);
+            final float cursorRight = cursorStyle == TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR
+                ? left + (right - left) / 4.f : right;
+            canvas.drawRect(left, y - cursorHeight, cursorRight, y, mTextPaint);
         }
 
         if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) == 0) {
@@ -232,11 +226,23 @@ public final class TerminalRenderer {
             mTextPaint.setStrikeThruText(strikeThrough);
             mTextPaint.setColor(foreColor);
 
-            // The text alignment is the default Paint.Align.LEFT.
-            canvas.drawTextRun(text, startCharIndex, runWidthChars, startCharIndex, runWidthChars, left, y - mFontLineSpacingAndAscent, false, mTextPaint);
+            // Keep background and cursor in terminal coordinates. Only fit the glyph, uniformly:
+            // one-cell fallback symbols become smaller, rather than horizontally squeezed.
+            // Never enlarge a narrow glyph. Center mismatched advances in their allocated cells,
+            // retaining the normal baseline for runs whose font already matches the cell grid.
+            final float cellWidth = runWidthColumns * mFontWidth;
+            final boolean fit = mes > 0.f && Math.abs(mes - cellWidth) > 0.01f * mFontWidth;
+            final float scale = fit ? Math.min(1.f, cellWidth / mes) : 1.f;
+            final float textLeft = fit ? left + (cellWidth - mes * scale) / 2.f : left;
+            if (scale < 1.f) {
+                canvas.save();
+                canvas.scale(scale, scale, textLeft, y - mFontLineSpacing / 2.f);
+            }
+            // Combining marks stay in the same shaped run and receive the same uniform transform.
+            canvas.drawTextRun(text, startCharIndex, runWidthChars, startCharIndex, runWidthChars,
+                textLeft, y - mFontLineSpacingAndAscent, false, mTextPaint);
+            if (scale < 1.f) canvas.restore();
         }
-
-        if (savedMatrix) canvas.restore();
     }
 
     public float getFontWidth() {
