@@ -38,6 +38,8 @@ jobs:
           javac -d .build/design-check android/src/dev/zfold/assistant/UsageMath.java tests/UsageMathCheck.java
           java -cp .build/design-check dev.zfold.assistant.UsageMathCheck
   android:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 35
     strategy:
@@ -96,8 +98,19 @@ jobs:
               print(f'{apk.name}: installed app signing certificate verified')
           PY
       - uses: actions/upload-artifact@v4
+        id: apk-artifact
+        continue-on-error: ${{ github.event_name == 'workflow_dispatch' }}
         with:
           name: debug-apk-target-${{ matrix.target }}${{ github.event_name == 'pull_request' && '-pr-test' || '' }}
           path: artifacts/*.apk
           if-no-files-found: error
           retention-days: 7
+      - name: Save signed APK to a draft release when artifact storage is full
+        if: github.event_name == 'workflow_dispatch' && steps.apk-artifact.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_TARGET: ${{ matrix.target }}
+        run: |
+          tag="phone-update-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-target-${APK_TARGET}"
+          printf 'Source commit: %s\nCI run: %s/%s/actions/runs/%s\nSigned device-update package; kept as a draft.\n' "$GITHUB_SHA" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > .build/device-update-notes.txt
+          gh release create "$tag" artifacts/*.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title "Device update target $APK_TARGET ($GITHUB_RUN_ID)" --notes-file .build/device-update-notes.txt
