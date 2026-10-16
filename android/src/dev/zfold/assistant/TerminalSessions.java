@@ -13,7 +13,7 @@ import java.util.concurrent.*;
 
 /** Process-owned terminal sessions; activities are replaceable viewers. */
 final class TerminalSessions implements TerminalSessionClient {
-  interface Listener {void changed(Job job);void paste(Job job);}
+  interface Listener {void changed(Job job);void removed(Job job,Job selected);void paste(Job job);}
   private static TerminalSessions instance;
   final Context context;
   final Handler main=new Handler(Looper.getMainLooper());
@@ -25,16 +25,30 @@ final class TerminalSessions implements TerminalSessionClient {
   private TerminalSessions(Context context){this.context=context;}
   void observe(Listener value){listener=new WeakReference<>(value);}
   void detach(Listener value){if(listener.get()==value)listener.clear();}
-  Job current(){Job job=jobs.get(selected);if(job==null||!job.session.isRunning())for(Job candidate:jobs.values())if(candidate.session.isRunning())job=candidate;return job!=null&&job.session.isRunning()?job:create();}
+  Job current(){Job job=jobs.get(selected);return job!=null?job:create();}
   Job create(){
     if(liveCount()>=4)throw new IllegalStateException("已有 4 个运行中的终端，请先结束一个会话");
-    while(jobs.size()>=8){String oldest=jobs.entrySet().stream().filter(entry->!entry.getValue().session.isRunning()).map(Map.Entry::getKey).findFirst().orElse(null);if(oldest==null)break;jobs.remove(oldest);}
     Job job=new Job(this,nextOrdinal++);jobs.put(job.session.mHandle,job);selected=job.session.mHandle;return job;
   }
-  void select(Job job){selected=job.session.mHandle;}
+  void select(Job job){if(jobs.get(job.session.mHandle)==job)selected=job.session.mHandle;}
   int liveCount(){int count=0;for(Job job:jobs.values())if(job.session.isRunning())count++;return count;}
   Job find(TerminalSession session){return jobs.get(session.mHandle);}
   void changed(Job job){Listener target=listener.get();if(target!=null)target.changed(job);}
+  void rename(Job job,String name){
+    if(find(job.session)!=job)return;
+    job.name=name;job.session.mSessionName=name;changed(job);
+  }
+  private void remove(Job job){
+    if(find(job.session)!=job)return;
+    Job neighbor=null;boolean found=false;
+    for(Job candidate:jobs.values()){
+      if(candidate==job){found=true;continue;}
+      neighbor=candidate;if(found)break;
+    }
+    jobs.remove(job.session.mHandle);
+    if(job.session.mHandle.equals(selected))selected=neighbor==null?null:neighbor.session.mHandle;
+    Listener target=listener.get();if(target!=null)target.removed(job,jobs.get(selected));
+  }
   void closeAll(){for(Job job:new ArrayList<>(jobs.values()))job.close();}
 
   static final class Job implements TerminalSession.Transport {
@@ -92,14 +106,15 @@ final class TerminalSessions implements TerminalSessionClient {
       try{writer.execute(()->{if(!closing&&id>0)try{PiRuntime.ptyResize(id,rows,columns);}catch(Throwable ignored){}});}catch(RejectedExecutionException ignored){}
     }
     public void close(){
-      if(closing)return;closing=true;status="正在结束…";owner.changed(this);
+      owner.remove(this);
+      if(closing)return;closing=true;status="正在结束…";
       if(id>0)new Thread(()->{try{PiRuntime.ptyClose(id);}catch(Throwable ignored){}finally{session.finish(143);writer.shutdown();}},"terminal-close").start();
       else if(session.getEmulator()==null){session.finish(143);writer.shutdown();}
     }
   }
   public void onTextChanged(TerminalSession session){Job job=find(session);if(job!=null)changed(job);}
   public void onTitleChanged(TerminalSession session){onTextChanged(session);}
-  public void onSessionFinished(TerminalSession session){Job job=find(session);if(job!=null){job.status="已结束 · 退出码 "+session.getExitStatus();changed(job);}TerminalKeepAliveService.refresh(context);}
+  public void onSessionFinished(TerminalSession session){Job job=find(session);if(job!=null){job.status="已结束 · 退出码 "+session.getExitStatus();remove(job);}TerminalKeepAliveService.refresh(context);}
   public void onCopyTextToClipboard(TerminalSession session,String text){((ClipboardManager)context.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("终端",text));}
   public void onPasteTextFromClipboard(TerminalSession session){Job job=find(session);Listener target=listener.get();if(job!=null&&target!=null)target.paste(job);}
   public void onBell(TerminalSession session){}

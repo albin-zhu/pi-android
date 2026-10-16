@@ -16,35 +16,28 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   static void open(Context context){boolean overlay=FloatingNavigation.suspend(context);SystemWindowNavigation.open(context,TerminalActivity.class,overlay);}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.hasExtra("from_overlay"))fromOverlay=intent.getBooleanExtra("from_overlay",false);}
   private TerminalSessions sessions;private TerminalSessions.Job current;
-  private TerminalView terminal;private TextView title,status,control;private boolean ctrl;
+  private TerminalView terminal;private TextView control,installStatus;private boolean ctrl;
   private TerminalTabs tabs;
-  private float fontSize=14;private LinearLayout root,setup,header,compactActions;private boolean compactChrome,imeVisible;private boolean installing;private Ui.Action setupAction;
+  private float fontSize=14;private LinearLayout root;private boolean installing;
   private static final int INK=0xffe5e9ed,MUTED=0xff95a1ad,BG=0xff0c1117,SURFACE=0xff17212c;
 
   @Override protected void onCreate(Bundle state){
     super.onCreate(state);fromOverlay=getIntent().getBooleanExtra("from_overlay",false);getWindow().setDecorFitsSystemWindows(false);
-    getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);getWindow().getDecorView().setSystemUiVisibility(0);
+    getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
+    WindowManager.LayoutParams attributes=getWindow().getAttributes();attributes.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;getWindow().setAttributes(attributes);
     fontSize=getPreferences(MODE_PRIVATE).getFloat("fontSize",14);
     sessions=TerminalSessions.get(this);sessions.observe(this);build();
-    try{attach(sessions.current());}catch(Exception error){status.setText(error.getMessage());}
+    try{attach(sessions.current());}catch(Exception error){Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();}
   }
   private void build(){
     root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(BG);
     root.setOnApplyWindowInsetsListener((view,insets)->{
-      Insets bars=insets.getInsets(WindowInsets.Type.systemBars()),ime=insets.getInsets(WindowInsets.Type.ime());
-      root.setPadding(bars.left,bars.top,bars.right,Math.max(bars.bottom,ime.bottom));imeVisible=insets.isVisible(WindowInsets.Type.ime());updateChrome();return insets;
+      Insets safe=insets.getInsets(WindowInsets.Type.displayCutout()),ime=insets.getInsets(WindowInsets.Type.ime());
+      // Fill the top edge, including the camera area; transient system bars overlay rather than resize.
+      root.setPadding(safe.left,0,safe.right,Math.max(safe.bottom,ime.bottom));return insets;
     });
-    LinearLayout head=new LinearLayout(this);header=head;head.setGravity(Gravity.CENTER_VERTICAL);head.setPadding(dp(8),dp(4),dp(8),0);
-    head.addView(icon(R.drawable.ic_caret_down,"收起终端，保留会话",this::finish),new LinearLayout.LayoutParams(dp(48),dp(48)));
-    LinearLayout labels=new LinearLayout(this);labels.setOrientation(LinearLayout.VERTICAL);
-    title=Ui.text(this,"终端",18,INK);title.setTypeface(Typeface.create("sans-serif-medium",0));title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);labels.addView(title);
-    status=Ui.text(this,"正在连接…",11,MUTED);status.setSingleLine(true);status.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);labels.addView(status);
-    head.addView(labels,new LinearLayout.LayoutParams(0,-2,1));
-    head.addView(icon(R.drawable.ic_dots_three,"终端选项",this::showOptions),new LinearLayout.LayoutParams(dp(48),dp(48)));root.addView(head);
-    tabs=new TerminalTabs(this,sessions,this::attach,this::newSession);root.addView(tabs);
-    setup=new LinearLayout(this);setup.setGravity(Gravity.CENTER_VERTICAL);setup.setPadding(dp(16),dp(4),dp(12),dp(4));setup.setBackgroundColor(SURFACE);setup.setVisibility(View.GONE);
-    TextView hint=Ui.text(this,getApplicationInfo().targetSdkVersion==28?"系统 Shell 已可使用\n安装 Bash，获得完整脚本环境":"系统 Shell · 受限运行时版本",12,MUTED);setup.addView(hint,new LinearLayout.LayoutParams(0,-2,1));
-    setupAction=new Ui.Action(this,R.drawable.ic_arrow_up,"安装 Bash","安装 Bash 并打开新终端",INK,0xff284739,this::installBash);setup.addView(setupAction);root.addView(setup);
+    tabs=new TerminalTabs(this,sessions,this::attach,this::showTabOptions,this::newSession,this::showOptions);root.addView(tabs);
+    installStatus=Ui.text(this,"",12,MUTED);installStatus.setPadding(dp(16),dp(8),dp(16),dp(8));installStatus.setBackgroundColor(SURFACE);installStatus.setVisibility(View.GONE);root.addView(installStatus);
     terminal=new TerminalView(this,null);terminal.setTerminalViewClient(this);terminal.setTextSize(sp(fontSize));terminal.setTypeface(Typeface.MONOSPACE);
     terminal.setFocusable(true);terminal.setFocusableInTouchMode(true);
     terminal.setBackgroundColor(BG);terminal.setVerticalScrollBarEnabled(true);terminal.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
@@ -63,12 +56,16 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     keys.addView(key("→","光标向右",()->sendKey(KeyEvent.KEYCODE_DPAD_RIGHT)));
     keys.addView(key("粘贴","粘贴到终端",()->{if(current!=null)paste(current);}));
     keys.addView(key("键盘","显示或隐藏键盘",this::toggleKeyboard));
-    compactActions=new LinearLayout(this);compactActions.setVisibility(View.GONE);compactActions.addView(key("选项","终端选项",this::showOptions));compactActions.addView(key("收起","收起终端，保留会话",this::finish));keys.addView(compactActions);
     rail.addView(keys);root.addView(rail,new LinearLayout.LayoutParams(-1,dp(48)));
-    root.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->updateChrome());setContentView(root);
+    setContentView(root);
   }
-  private void updateChrome(){if(header==null||compactActions==null||root.getHeight()==0)return;boolean compact=imeVisible&&root.getHeight()-root.getPaddingTop()-root.getPaddingBottom()<dp(220);if(compact!=compactChrome){compactChrome=compact;header.setVisibility(compact?View.GONE:View.VISIBLE);compactActions.setVisibility(compact?View.VISIBLE:View.GONE);}if(setup!=null)setup.setVisibility(current!=null&&current.shell.equals("系统 Shell")&&!compactChrome?View.VISIBLE:View.GONE);}
-  private View icon(int resource,String label,Runnable action){return new Ui.Action(this,resource,"",label,INK,Color.TRANSPARENT,action);}
+  private void enterFullscreen(){
+    WindowInsetsController controller=getWindow().getInsetsController();
+    if(controller==null)return;
+    controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+    controller.setSystemBarsAppearance(0,WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+    controller.hide(WindowInsets.Type.systemBars());
+  }
   private TextView key(String label,String description,Runnable action){
     TextView value=Ui.text(this,label,13,INK);value.setGravity(Gravity.CENTER);value.setContentDescription(description);value.setFocusable(true);value.setMinimumWidth(dp(48));value.setMinimumHeight(dp(48));
     value.setPadding(dp(12),0,dp(12),0);value.setBackground(Ui.ripple(this,Color.TRANSPARENT,10,INK));
@@ -76,9 +73,22 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   }
   private void attach(TerminalSessions.Job job){current=job;sessions.select(job);terminal.attachSession(job.session);terminal.requestFocus();tabs.sync(current);changed(job);}
   private void newSession(){try{attach(sessions.create());}catch(Exception error){Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();}}
+  private void showTabOptions(TerminalSessions.Job job){
+    if(sessions.find(job.session)!=job)return;
+    new AlertDialog.Builder(this).setTitle(job.name).setItems(new String[]{"重命名","关闭会话及进程"},(dialog,which)->{
+      if(which==0)renameSession(job);else job.close();
+    }).setNegativeButton("返回",null).show();
+  }
+  private void renameSession(TerminalSessions.Job job){
+    EditText name=new EditText(this);name.setSingleLine(true);name.setText(job.name);name.setSelectAllOnFocus(true);name.setContentDescription("会话名称");
+    LinearLayout body=new LinearLayout(this);body.setPadding(dp(20),0,dp(20),0);body.addView(name,new LinearLayout.LayoutParams(-1,-2));
+    AlertDialog dialog=new AlertDialog.Builder(this).setTitle("重命名会话").setView(body).setPositiveButton("保存",null).setNegativeButton("取消",null).create();dialog.show();
+    dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{String value=name.getText().toString().trim();if(value.isEmpty()||value.codePointCount(0,value.length())>80){name.setError("请输入 1–80 个字符");return;}sessions.rename(job,value);dialog.dismiss();});
+    name.requestFocus();dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+  }
   private void showOptions(){
-    String[] items={"显示键盘","复制当前终端记录","放大文字","缩小文字","安装 / 更新 Bash","结束当前会话及进程"};
-    new AlertDialog.Builder(this).setTitle("终端选项").setItems(items,(dialog,which)->{
+    String[] items={"显示键盘","复制当前终端记录","放大文字","缩小文字","安装 / 更新 Bash","结束当前会话及进程","收起终端，保留会话"};
+    new AlertDialog.Builder(this).setTitle(current==null?"终端选项":current.name+" · "+current.status+(current.cwd.isEmpty()?"":"\n"+current.cwd)).setItems(items,(dialog,which)->{
       switch(which){
         case 0:showKeyboard();break;
         case 1:if(current!=null&&current.session.getEmulator()!=null){sessions.onCopyTextToClipboard(current.session,current.session.getEmulator().getScreen().getTranscriptText());Toast.makeText(this,"已复制终端记录",Toast.LENGTH_SHORT).show();}break;
@@ -86,16 +96,17 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
         case 3:changeFont(-1);break;
         case 4:installBash();break;
         case 5:if(current!=null)current.close();break;
+        case 6:finish();break;
       }
     }).setNegativeButton("返回",null).show();
   }
   private void installBash(){
     if(installing)return;
     if(getApplicationInfo().targetSdkVersion!=28){new AlertDialog.Builder(this).setTitle("当前是受限运行时").setMessage("安装的本地程序需要 compat28 运行时版本。当前仍可使用系统 Shell。").setPositiveButton("知道了",null).show();return;}
-    installing=true;setupAction.setEnabled(false);status.setText("正在安装 Bash…");
+    installing=true;installStatus.setText("正在安装 Bash…");installStatus.setVisibility(View.VISIBLE);
     new Thread(()->{
-      try{PiPackageManager.install(this,"bash",message->runOnUiThread(()->{if(!isFinishing()&&installing)status.setText(message);}));runOnUiThread(()->{installing=false;setupAction.setEnabled(true);if(isFinishing())return;Toast.makeText(this,"Bash 已就绪，正在打开新会话",Toast.LENGTH_SHORT).show();newSession();});}
-      catch(Exception error){runOnUiThread(()->{installing=false;setupAction.setEnabled(true);if(!isFinishing())new AlertDialog.Builder(this).setTitle("Bash 安装未完成").setMessage(error.getMessage()).setPositiveButton("重试",(d,w)->installBash()).setNegativeButton("返回",null).show();});}
+      try{PiPackageManager.install(this,"bash",message->runOnUiThread(()->{if(!isFinishing()&&installing)installStatus.setText(message);}));runOnUiThread(()->{installing=false;installStatus.setVisibility(View.GONE);if(isFinishing())return;Toast.makeText(this,"Bash 已就绪，正在打开新会话",Toast.LENGTH_SHORT).show();newSession();});}
+      catch(Exception error){runOnUiThread(()->{installing=false;installStatus.setVisibility(View.GONE);if(!isFinishing())new AlertDialog.Builder(this).setTitle("Bash 安装未完成").setMessage(error.getMessage()).setPositiveButton("重试",(d,w)->installBash()).setNegativeButton("返回",null).show();});}
     },"terminal-install-bash").start();
   }
   private void sendKey(int code){terminal.onKeyDown(code,new KeyEvent(0,0,KeyEvent.ACTION_DOWN,code,0,ctrl?KeyEvent.META_CTRL_ON:0));clearCtrl();}
@@ -106,11 +117,18 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   private void changeFont(float delta){fontSize=Math.max(10,Math.min(24,fontSize+delta));terminal.setTextSize(sp(fontSize));getPreferences(MODE_PRIVATE).edit().putFloat("fontSize",fontSize).apply();}
   private int dp(float value){return Ui.dp(this,value);}private int sp(float value){return Math.round(value*getResources().getDisplayMetrics().scaledDensity);}
 
-  @Override public void changed(TerminalSessions.Job job){if(isFinishing())return;tabs.update(job,current);if(job!=current)return;title.setText(job.session.getTitle()==null||job.session.getTitle().isBlank()?job.name:job.session.getTitle());status.setText(installing?"正在安装 Bash…":job.status+(job.cwd.isEmpty()?"":" · "+job.cwd.replace(PiRuntime.agentRoot(this).getPath(),"项目")));updateChrome();terminal.onScreenUpdated();}
+  @Override public void changed(TerminalSessions.Job job){if(isFinishing())return;tabs.update(job,current);if(job==current)terminal.onScreenUpdated();}
+  @Override public void removed(TerminalSessions.Job job,TerminalSessions.Job selected){
+    if(isFinishing())return;
+    if(!job.session.isRunning()&&job.session.getExitStatus()!=0)Toast.makeText(this,job.name+" · "+job.status,Toast.LENGTH_LONG).show();
+    if(job==current){current=null;if(selected==null){tabs.sync(null);finish();}else attach(selected);}
+    else tabs.sync(current);
+  }
   @Override public void paste(TerminalSessions.Job job){ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(clipboard.hasPrimaryClip()&&clipboard.getPrimaryClip().getItemCount()>0&&job.session.getEmulator()!=null)job.session.getEmulator().paste(clipboard.getPrimaryClip().getItemAt(0).coerceToText(this).toString());}
-  @Override protected void onResume(){super.onResume();if(sessions!=null)sessions.observe(this);if(tabs!=null)tabs.sync(current);if(terminal!=null)terminal.setTerminalCursorBlinkerState(true,true);}
+  @Override protected void onResume(){super.onResume();enterFullscreen();if(sessions!=null)sessions.observe(this);if(tabs!=null)tabs.sync(current);if(terminal!=null)terminal.setTerminalCursorBlinkerState(true,true);}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);if(terminal!=null)terminal.setTerminalCursorBlinkerState(false,false);super.onPause();}
   @Override protected void onDestroy(){if(sessions!=null)sessions.detach(this);if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
+  @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(focused)enterFullscreen();}
   @Override public void onBackPressed(){finish();}
   public float onScale(float scale){if(scale>1.1f){changeFont(1);return 1;}if(scale<.9f){changeFont(-1);return 1;}return scale;}
   public void onSingleTapUp(MotionEvent event){
