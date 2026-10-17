@@ -49,6 +49,13 @@
 - Ubuntu 原先没有 Node/npm；在忽略的 `.build/toolchains` 中安装官方 Linux ARM64 Node 24.22.0，归档 SHA-256 与 Node 官方清单一致。按 package-lock 执行 `npm ci --ignore-scripts`，未改依赖锁定版本。`npm test` 为 **176/177 通过**：`tests/session-catalog.test.mjs:48` 的其他工作区隔离断言失败；该测试和 `runtime/session-catalog.mjs` 与合并前远端 main 完全相同，本次未修改该既有行为或测试。
 - 两个收录的 War3 脚本与手机已验证版本逐字节一致；shell 语法检查、Python 编译检查通过，直接执行仓库 `runtime/windows.py status` 返回已安装 Wine 和本机 X11 配置。此次仅整理、授权和发布工程，未重新安装 APK、重启游戏或声称完成全量 NDK 冷构建。
 
+### 全部剩余修改合入 main · 2026-10-17
+
+- 用户进一步要求全部合入主分支。纳入之前保留的终端点击弹键盘开关，以及 `runtime/agent.mjs`、`runtime/custom-model-limits.mjs`、模型参数说明和行为测试；不纳入游戏、凭据或构建缓存。删除从同一常量读取预期值的自证测试，保留字段保全、网关边界与未知模型参数保留测试；移除对象中的冗余 `id` 初始化，仍由最终赋值保证选定模型 ID。
+- 在已安装主应用新建独立 Shell，真实点击验证关闭开关后不弹输入法、开启后显示输入法、系统返回隐藏后再次点击可重新显示。已目视截图，并关闭仅本轮创建的终端，恢复原会话和原开关状态；未重启应用或结束既有会话。
+- 合并后 bundle 成功，无重复对象键警告。`custom-model-limits`、`thinking-level`、`runtime` 定向回归 **13/13 通过**。另以真实 bundled agent 和隔离临时配置执行两次 configure/save：指定网关模型更新为 1000000 / 128000，同时保留 API、名称、推理、输入类型、compat 与 cost；切换到其他地址的未知模型后，其 900000 / 32000 参数及其他条目保持不变。未发送模型生成请求，未触碰手机真实凭据。
+- 未重跑上一节已确认的既有 `session-catalog.test.mjs:48` 失败，也未修改该无关逻辑；本轮没有重新构建或安装 APK。
+
 ## 0.2.87 中断可观察性与 SDK 降级纠正 · 2026-10-12
 
 - 原会话 JSONL 记录 44 次模型失败尝试，涉及 17 组用户消息；其中 6 组随后恢复正常回答。33 条为 `fetch failed`，另有响应头超时、连接/流终止和两条超过 52428800 bytes 的 HTTP 413。失败尝试数不等于整轮任务中断数；历史 `fetch failed` 不能单独归因于账号过期、VPN或进程被系统杀死。
