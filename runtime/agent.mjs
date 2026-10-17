@@ -676,12 +676,15 @@ function writeModelsDocument(document){
   fs.renameSync(modelsPath+'.tmp',modelsPath);
 }
 
+import {selectedModelEntry} from './custom-model-limits.mjs';
+
 function persistProviderSelection(selection){
   if(!selection.baseUrl)return;
   const document=readModelsDocument();document.providers??={};
   const previous=document.providers[selection.provider]||{};
+  const existing=Array.isArray(previous.models)?previous.models.find(model=>model?.id===selection.model):undefined;
   const models=Array.isArray(previous.models)?previous.models.filter(model=>model?.id!==selection.model):[];
-  models.push({id:selection.model,name:selection.model,reasoning:false,input:['text','image'],contextWindow:128000,maxTokens:4096,cost:{input:0,output:0,cacheRead:0,cacheWrite:0}});
+  models.push(selectedModelEntry(selection,existing));
   document.providers[selection.provider]={
     ...previous,
     baseUrl:selection.baseUrl,
