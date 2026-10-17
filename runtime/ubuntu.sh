@@ -16,12 +16,21 @@ case "$ZFOLD_AGENT_ROOT" in *\"*|*\\*) fail '工作区路径不能包含 JSON �
 export PROOT_TMP_DIR="$TMPDIR"
 export PROOT_LOADER="$PREFIX/libexec/proot/loader"
 export PROOT_LOADER_32="$PREFIX/libexec/proot/loader32"
+# Share only the X11 runtime/socket, never the entire Android private prefix.
+x11="$runtime/x11"
+mkdir -p "$x11/tmp/.X11-unix"
+chmod 700 "$x11" "$x11/tmp" "$x11/tmp/.X11-unix"
+# Android asset extraction does not preserve executable bits.
+[ ! -f "$runtime/phone-tools/bin/windows" ] || chmod 700 "$runtime/phone-tools/bin/windows"
 [ "$#" -gt 0 ] || set -- /bin/bash -l
 exec "$proot" --link2symlink --kill-on-exit -0 -r "$rootfs" \
   -b /dev -b /proc \
   -b "$runtime/phone-tools:/opt/pi-phone" \
+  -b "$x11:/run/zfold-x11" \
+  -b "$x11/tmp/.X11-unix:/tmp/.X11-unix" \
   -b "$ZFOLD_AGENT_ROOT:/workspace" -w /workspace \
-  /usr/bin/env -i HOME=/root TMPDIR=/tmp PATH=/usr/local/bin:/usr/bin:/bin \
+  /usr/bin/env -i HOME=/root TMPDIR=/tmp PATH=/opt/pi-phone/bin:/usr/local/bin:/usr/bin:/bin \
+  DISPLAY=:9 XAUTHORITY=/run/zfold-x11/Xauthority \
   LANG=C.UTF-8 TERM="${TERM:-xterm-256color}" COLORTERM=truecolor \
   PI_FORCE_IMAGE_PROTOCOL="${PI_FORCE_IMAGE_PROTOCOL:-}" \
   PI_FORCE_HYPERLINKS="${PI_FORCE_HYPERLINKS:-}" PI_NO_HYPERLINKS="${PI_NO_HYPERLINKS:-}" \

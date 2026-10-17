@@ -30,6 +30,10 @@ final class TerminalSessions implements TerminalSessionClient {
     if(liveCount()>=4)throw new IllegalStateException("已有 4 个运行中的终端，请先结束一个会话");
     Job job=new Job(this,nextOrdinal++);jobs.put(job.session.mHandle,job);selected=job.session.mHandle;return job;
   }
+  Job createCommand(String[] arguments,String title){
+    if(arguments==null||arguments.length==0)throw new IllegalArgumentException("缺少终端命令");
+    Job job=create();job.command=arguments.clone();rename(job,title);return job;
+  }
   void select(Job job){if(jobs.get(job.session.mHandle)==job)selected=job.session.mHandle;}
   int liveCount(){int count=0;for(Job job:jobs.values())if(job.session.isRunning())count++;return count;}
   Job find(TerminalSession session){return jobs.get(session.mHandle);}
@@ -55,6 +59,7 @@ final class TerminalSessions implements TerminalSessionClient {
     final TerminalSessions owner;final TerminalSession session;
     final ExecutorService writer=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"terminal-input");t.setDaemon(true);return t;});
     volatile int id;volatile boolean closing;String name,status="正在启动…",cwd="",shell="";
+    String[] command;
     Job(TerminalSessions owner,int ordinal){this.owner=owner;name="终端 "+ordinal;session=new TerminalSession(this,owner);session.mSessionName=name;}
     public void start(TerminalSession ignored,int columns,int rows){
       if(closing){session.finish(143);return;}
@@ -71,6 +76,7 @@ final class TerminalSessions implements TerminalSessionClient {
           File executable=useFish?fish:useBash?bash:new File("/system/bin/sh");
           shell=useFish?"Fish":useBash?"Bash":"系统 Shell";
           String[] argv=useBash?new String[]{executable.getPath(),"--noprofile"}:new String[]{executable.getPath()};
+          if(command!=null){argv=command;shell=name;}
           Map<String,String> environment=new ProcessBuilder("true").environment();
           RuntimeEnvironment.apply(environment,RuntimeEnvironment.forExecutable(owner.context,executable),null);
           if(!useBash&&!useFish)environment.putIfAbsent("ENV",new File(environment.get("HOME"),".mkshrc").getPath());

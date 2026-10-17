@@ -61,6 +61,11 @@
  <activity android:name=".TerminalActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.terminal" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
  <activity android:name=".ConnectorActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.connectors" android:windowSoftInputMode="adjustResize" />
  <activity android:name=".WorkbenchActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.workbench" />
+ <activity android:name=".GraphicsRuntimeActivity" android:exported="false" android:theme="@style/WorkScreenTheme" />
+ <activity android:name="com.termux.x11.MainActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.x11" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+ <service android:name="com.termux.x11.X11Service" android:process=":x11server" android:exported="false" android:foregroundServiceType="specialUse">
+   <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-started local X11 display for Linux and Windows applications" />
+ </service>
  <activity android:name=".ConnectorOAuthActivity" android:exported="true">
    <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="dev.zfold.assistant" android:host="connector-oauth"/></intent-filter>
  </activity>

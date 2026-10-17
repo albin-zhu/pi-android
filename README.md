@@ -2,6 +2,14 @@
 
 独立 Android APK。Pi 1.0.4 依赖嵌入式 Node 引擎并在应用进程中运行，界面与系统权限使用原生 Android API，通过匿名管道/JNI 连接 Pi。用户侧 `node/npm/npx` 不再内置；需要时通过 Runtime 包管理安装。没有本机 HTTP 控制端口，不依赖 Termux App、Office、电脑端 Agent 或 root。电脑只用于构建和测试。
 
+## 许可证与对应源码
+
+Copyright (C) 2026 pi-android contributors. 本项目及集成 X11 后的组合应用按 **GNU GPL 第 3 版**发布，完整条款见 [LICENSE](LICENSE)；允许依照该许可证使用、修改和再分发，不提供任何担保。第三方组件保留各自的版权声明和许可，见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+
+2026-10-17 修改说明：集成 Termux:X11 的 Android 前端、独立显示服务、Unix-only 网络限制、Ubuntu 挂载和可选 Wine 启动，并加入 War3 软件／硬件 OpenGL 启动辅助脚本。游戏及手机私有配置不属于源码分发内容。
+
+对应应用源码位于 [albin-zhu/pi-android](https://github.com/albin-zhu/pi-android)，应检出所下载 APK 对应 CI run 或 release 标明的提交。X11 原生引擎的固定源码版本、完整递归子模块获取步骤及构建说明见 [SOURCE.txt](third_party/termux-x11/SOURCE.txt) 与 [sources.json](third_party/termux-x11/sources.json)；构建使用的其他组件来源和校验值保留在构建脚本及第三方声明中。再分发 APK 时必须向接收者提供完整对应源码的等价获取途径，并履行 GPLv3 的其他适用义务。
+
 ## 产品基线
 
 [产品与系统策划案](PRODUCT_PLAN.md)规定目标、状态归属、入口矩阵与验收门槛；[现状核对清单](PRODUCT_AUDIT.md)保留 0.2.72 源码基线。0.2.74 已接入视频对话与单一语音所有者；旧文本聊天入口下线、直接系统小窗、“橙橙”唤醒与接通音仍有待实施部分。
@@ -601,6 +609,37 @@ adb reverse --remove tcp:18868
 `feat/omp-termux-app` 已接入同 App UID 的独立手机工具桥：Ubuntu 内 omp 通过工具扩展调用 Android，权限、按次确认、取消和用户接管仍由 App 执行。实验安装器与任意目录可用的 `ubuntu` 入口见 [架构与验收记录](docs/TERMUX_OMP_ASSESSMENT.md)。
 
 已在隔离 Android ARM64 模拟器完成读屏/拍照回合，并在 Zfold 真机完成安装及 guest 手机状态调用。本轮不迁移凭据、不切换 GUI，也不更改内嵌 Pi 1.0.4 / Node 24.21.0。
+
+### 通用图形应用：X11 / Wine
+
+工作台和工具中心新增「图形应用」，不依赖 Pi 或 omp 会话。先打开 X11，再进入**新的** `ubuntu` 终端；旧终端不会自动获得新增挂载和命令。
+
+```sh
+ubuntu
+windows install             # 显示下载来源与系统依赖，确认后安装
+windows winecfg
+windows run notepad.exe
+windows run '/workspace/workspace/My App/app.exe'
+windows --prefix /root/my-prefix run app.exe
+windows stop                # 只结束所选 prefix 内的 Windows 程序
+```
+
+Linux 图形程序直接使用 `DISPLAY=:9`。显示页面支持触摸、鼠标、键盘和输入法；离开页面保留 X11，点「Stop X11」会断开其全部图形客户端，但不结束聊天或普通终端。需要桌面窗口管理时，可自行在 Ubuntu 安装并启动 Openbox 等窗口管理器；X11 本身不是完整桌面。
+
+X11 引擎随 APK 提供，独立服务进程运行；使用私有 Unix socket 和每次启动重新生成的 Xauthority cookie，不开放 TCP 显示或上游重连端口。Wine 为可选的固定版本 Wine 10.0 WoW64 + Box64 下载，不注册系统 binfmt、不替换系统 Wine。首次创建 prefix 可能弹出 Mono 安装窗口，应回到 X11 处理。
+
+Ubuntu/Wine 执行需要 compat28；PRoot 和 Wine **不是安全沙箱**。已在 Fold7 显示 Linux 时钟、Wine 设置和记事本，并通过 Android 键盘输入保存文件；后续在主应用验证了冰封王座 1.27b 主菜单和 Adreno 830 硬件 OpenGL。早期 32 位命令曾异常退出，不代表所有 Windows 程序均稳定兼容。未验证 Direct3D/Vulkan、游戏帧率或硬件模式完整对局；游戏音频仍初始化失败。详细过程与限制见 [验证记录](VERIFICATION.md)，上游组件与再分发要求见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+
+#### 已配置手机上的 War3 启动脚本
+
+仓库仅包含启动脚本，不分发游戏、Wine prefix 或 GPU 驱动。使用前先启动 X11、安装可选 Wine，并将自己的冰封王座放到默认 prefix 的 `/root/.local/share/zfold/wineprefixes/default/drive_c/WarcraftIII`；已验证的版本为繁体中文 1.27b。影片解码需要 Ubuntu 的 `gstreamer1.0-plugins-good` 和 `gstreamer1.0-libav`。
+
+```sh
+sh scripts/war3.sh       # 默认系统 Mesa；本机为软件渲染
+sh scripts/war3-gpu.sh   # 隔离的 Freedreno/KGSL 硬件 OpenGL
+```
+
+GPU 脚本要求已按 [Adreno 830 验证记录](VERIFICATION.md#android-gpu-verification) 将对应 Ubuntu Noble ARM64 Mesa 解包到 `/root/.local/share/zfold/gpu/mesa-26.3.0-devel-20260824`；它只设置当前进程的驱动环境，不自动下载驱动或覆盖系统 Mesa。两个脚本使用 1024×768 Wine 虚拟桌面，避免该游戏直接窗口启动时的显示模式等待。
 
 ### 终端历史滚动
 

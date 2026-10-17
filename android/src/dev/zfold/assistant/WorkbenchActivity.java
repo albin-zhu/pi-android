@@ -48,6 +48,7 @@ public final class WorkbenchActivity extends Activity implements PiRuntime.Liste
     LinearLayout local=section("本机工作");
     row(local,R.drawable.ic_terminal,"终端","直接输入命令，离开后保留会话",()->TerminalActivity.open(this));
     row(local,R.drawable.ic_file,"软件包","安装 Bash、Node.js、Python 等工具",()->startActivity(new Intent(this,RuntimePackageManagerActivity.class)));
+    row(local,R.drawable.ic_screen_share,"图形应用","X11 显示、Linux 图形程序与可选 Wine",()->startActivity(new Intent(this,GraphicsRuntimeActivity.class)));
     LinearLayout extend=section("连接与扩展");
     row(extend,R.drawable.ic_arrows_out_simple,"连接 · MCP","添加远程服务、本机命令，导入配置",()->ConnectorActivity.open(this));
     row(extend,R.drawable.ic_file,"Skills","管理 Agent 的操作说明与项目技能",()->whenReady(()->SkillManager.show(content,runtime)));

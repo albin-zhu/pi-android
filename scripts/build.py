@@ -2,6 +2,7 @@
 """Build a standalone arm64 APK with a pinned embedded Node/Pi runtime."""
 import hashlib, io, json, os, pathlib, shutil, subprocess, sys, urllib.request, zipfile
 import tarfile
+from x11_assets import prepare as prepare_x11
 ROOT=pathlib.Path(__file__).resolve().parent.parent
 SDK=pathlib.Path(os.environ.get('ANDROID_SDK_ROOT') or os.environ.get('ANDROID_HOME') or pathlib.Path.home()/'Library/Android/sdk')
 JAVA=pathlib.Path(os.environ['JAVA_HOME'])/'bin' if os.environ.get('JAVA_HOME') else pathlib.Path('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin')
@@ -85,6 +86,7 @@ def main():
     if native.exists():shutil.rmtree(native)
     native.mkdir(parents=True)
     bootstrap_xz(native)
+    prepare_x11(native, BUILD/'assets', VENDOR)
     staleRuntime=BUILD/'assets/runtime'
     if staleRuntime.exists():
       shutil.rmtree(staleRuntime/'npm',ignore_errors=True)
@@ -108,6 +110,7 @@ def main():
     ndk=SDK/'ndk/28.0.13004108/toolchains/llvm/prebuilt'/host
     run(ndk/'bin/aarch64-linux-android30-clang++','-std=c++17','-fPIC','-shared',ROOT/'native/bridge.cpp','-L'+str(native),'-lnode','-llog','-Wl,-z,max-page-size=16384','-Wl,-soname,libzfold.so','-o',native/'libzfold.so')
     run(ndk/'bin/aarch64-linux-android30-clang','-std=c11','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-fPIE','-pie',ROOT/'native/package_cli.c','-Wl,-z,max-page-size=16384','-o',native/'libzfold_pkg.so')
+    run(ndk/'bin/aarch64-linux-android30-clang','-std=c11','-O2','-Wall','-Wextra','-Werror','-fPIC','-shared','-nostdlib',ROOT/'native/x11-network.c','-Wl,-z,max-page-size=16384','-Wl,-soname,libzfold_x11_guard.so','-o',native/'libzfold_x11_guard.so')
     shutil.copy2(ndk/'sysroot/usr/lib/aarch64-linux-android/libc++_shared.so',native/'libc++_shared.so')
     run('npm','run','bundle')
     channelAsset=BUILD/'assets/runtime/runtime-channel.json';channelAsset.parent.mkdir(parents=True,exist_ok=True)

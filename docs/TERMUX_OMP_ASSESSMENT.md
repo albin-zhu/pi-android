@@ -40,7 +40,7 @@
 - 授权设置验收：模拟器真实 SMS 状态查询免确认、已有连接撤销后恢复确认、白名单不被绕过均通过；真机已通过设置界面开启并验证重启后保留，guest 的 SMS 状态查询和 screen_windows 无逐次确认即可返回。未拨号或发送短信，CALL_PHONE 系统权限仍为未授予。重启验证暂停的既有无障碍服务配置已恢复，读屏调用已重新成功。
 - `NativeToolExecution` 的取消与心跳继续复用；服务端为连接和请求生成独立 ID，返回客户端原始 ID。断开后取消在途调用，客户端没有终态回执时返回执行不确定，而非成功或自动重试。
 - `PhoneActions` 已有权限请求和相机 Activity。拍照可能切换到 Android 界面；无障碍读屏/点击仍需要用户启用服务。Ubuntu 不免除这些条件。
-- `ubuntu.sh` 只 bind 工作区数据根到 `/workspace`、无密钥的 `runtime/phone-tools` 到 `/opt/pi-phone`。`ZFOLD_PHONE_PATH_MAP` 显式转换路径，图片只进入工具的 image content，不塞入文本或 details。没有映射的路径明确标记为 Android 主机路径。不要绑定整个 App 私有目录或通过公共存储传凭据。
+- `ubuntu.sh` bind 工作区数据根到 `/workspace`、无密钥的 `runtime/phone-tools` 到 `/opt/pi-phone`，以及专用 `runtime/x11` 到 `/run/zfold-x11`、其 socket 目录到 `/tmp/.X11-unix`。X11 的 cookie 只在 App 私有目录和该 guest 挂载内共享，不经公共存储传递。`ZFOLD_PHONE_PATH_MAP` 显式转换工作区路径，图片只进入工具的 image content，不塞入文本或 details。没有映射的路径明确标记为 Android 主机路径。不要绑定整个 App 私有目录或通过公共存储传凭据。
 - 若后续需要定位等现有工具未覆盖的能力，仍需在 Android 侧实现和授权；socket 本身不会生成新能力。
 
 ### 实施与验收顺序
