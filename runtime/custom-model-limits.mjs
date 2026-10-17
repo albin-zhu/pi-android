@@ -14,6 +14,6 @@ export function gatewayLimits(baseUrl,id){
   const limits=auditedLimits[id];return limits?{contextWindow:limits[0],maxTokens:limits[1]}:{};
 }
 export function selectedModelEntry(selection,existing){
-  return {id:selection.model,name:selection.model,reasoning:false,input:['text','image'],contextWindow:128000,maxTokens:4096,cost:{input:0,output:0,cacheRead:0,cacheWrite:0},
+  return {name:selection.model,reasoning:false,input:['text','image'],contextWindow:128000,maxTokens:4096,cost:{input:0,output:0,cacheRead:0,cacheWrite:0},
     ...existing,...gatewayLimits(selection.baseUrl,selection.model),id:selection.model};
 }

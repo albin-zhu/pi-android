@@ -16,7 +16,7 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   static void open(Context context){boolean overlay=FloatingNavigation.suspend(context);SystemWindowNavigation.open(context,TerminalActivity.class,overlay);}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.hasExtra("from_overlay"))fromOverlay=intent.getBooleanExtra("from_overlay",false);}
   private TerminalSessions sessions;private TerminalSessions.Job current;
-  private TerminalView terminal;private TextView control,installStatus;private boolean ctrl;
+  private TerminalView terminal;private TextView control,keyboard,installStatus;private boolean ctrl,tapToShowKeyboard;
   private TerminalTabs tabs;
   private float fontSize=14;private LinearLayout root;private boolean installing;
   private static final int INK=0xffe5e9ed,MUTED=0xff95a1ad,BG=0xff0c1117,SURFACE=0xff17212c;
@@ -26,6 +26,7 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);
     WindowManager.LayoutParams attributes=getWindow().getAttributes();attributes.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;getWindow().setAttributes(attributes);
     fontSize=getPreferences(MODE_PRIVATE).getFloat("fontSize",14);
+    tapToShowKeyboard=getPreferences(MODE_PRIVATE).getBoolean("tapToShowKeyboard",false);
     sessions=TerminalSessions.get(this);sessions.observe(this);build();
     try{attach(sessions.current());}catch(Exception error){Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();}
   }
@@ -55,7 +56,7 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     keys.addView(key("←","光标向左",()->sendKey(KeyEvent.KEYCODE_DPAD_LEFT)));
     keys.addView(key("→","光标向右",()->sendKey(KeyEvent.KEYCODE_DPAD_RIGHT)));
     keys.addView(key("粘贴","粘贴到终端",()->{if(current!=null)paste(current);}));
-    keys.addView(key("键盘","显示或隐藏键盘",this::toggleKeyboard));
+    keyboard=key("键盘","点击终端弹出键盘",this::toggleKeyboardMode);updateKeyboardMode();keys.addView(keyboard);
     rail.addView(keys);root.addView(rail,new LinearLayout.LayoutParams(-1,dp(48)));
     setContentView(root);
   }
@@ -87,10 +88,10 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     name.requestFocus();dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
   }
   private void showOptions(){
-    String[] items={"显示键盘","复制当前终端记录","放大文字","缩小文字","安装 / 更新 Bash","结束当前会话及进程","收起终端，保留会话"};
+    String[] items={tapToShowKeyboard?"关闭点击弹键盘":"开启点击弹键盘","复制当前终端记录","放大文字","缩小文字","安装 / 更新 Bash","结束当前会话及进程","收起终端，保留会话"};
     new AlertDialog.Builder(this).setTitle(current==null?"终端选项":current.name+" · "+current.status+(current.cwd.isEmpty()?"":"\n"+current.cwd)).setItems(items,(dialog,which)->{
       switch(which){
-        case 0:showKeyboard();break;
+        case 0:dialog.dismiss();terminal.post(this::toggleKeyboardMode);break;
         case 1:if(current!=null&&current.session.getEmulator()!=null){sessions.onCopyTextToClipboard(current.session,current.session.getEmulator().getScreen().getTranscriptText());Toast.makeText(this,"已复制终端记录",Toast.LENGTH_SHORT).show();}break;
         case 2:changeFont(1);break;
         case 3:changeFont(-1);break;
@@ -113,7 +114,14 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   private void clearCtrl(){ctrl=false;updateControl();}
   private void updateControl(){control.setTextColor(ctrl?0xffa5e1b4:INK);control.setBackground(Ui.ripple(this,ctrl?0xff294437:Color.TRANSPARENT,10,INK));control.setSelected(ctrl);}
   private void showKeyboard(){terminal.requestFocus();((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(terminal,InputMethodManager.SHOW_IMPLICIT);}
-  private void toggleKeyboard(){if(root.getRootWindowInsets()!=null&&root.getRootWindowInsets().isVisible(WindowInsets.Type.ime()))((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(terminal.getWindowToken(),0);else showKeyboard();}
+  private void toggleKeyboardMode(){
+    tapToShowKeyboard=!tapToShowKeyboard;getPreferences(MODE_PRIVATE).edit().putBoolean("tapToShowKeyboard",tapToShowKeyboard).apply();updateKeyboardMode();
+    if(tapToShowKeyboard)showKeyboard();else ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(terminal.getWindowToken(),0);
+  }
+  private void updateKeyboardMode(){
+    keyboard.setSelected(tapToShowKeyboard);keyboard.setStateDescription(tapToShowKeyboard?"已开启":"已关闭");
+    keyboard.setTextColor(tapToShowKeyboard?0xffa5e1b4:INK);keyboard.setBackground(Ui.ripple(this,tapToShowKeyboard?0xff294437:Color.TRANSPARENT,10,INK));
+  }
   private void changeFont(float delta){fontSize=Math.max(10,Math.min(24,fontSize+delta));terminal.setTextSize(sp(fontSize));getPreferences(MODE_PRIVATE).edit().putFloat("fontSize",fontSize).apply();}
   private int dp(float value){return Ui.dp(this,value);}private int sp(float value){return Math.round(value*getResources().getDisplayMetrics().scaledDensity);}
 
@@ -132,7 +140,7 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   @Override public void onBackPressed(){finish();}
   public float onScale(float scale){if(scale>1.1f){changeFont(1);return 1;}if(scale<.9f){changeFont(-1);return 1;}return scale;}
   public void onSingleTapUp(MotionEvent event){
-    // TerminalView already focuses and dispatches the tap. Only explicit keyboard controls open the IME.
+    if(tapToShowKeyboard)showKeyboard();
   }
   public void onOpenLink(String target){
     try{OpenTargets.open(this,TerminalLinkTargets.androidTarget(target,ArtifactProvider.root(this).getPath()),"",false);}
