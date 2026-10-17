@@ -28,7 +28,7 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     fontSize=getPreferences(MODE_PRIVATE).getFloat("fontSize",14);
     tapToShowKeyboard=getPreferences(MODE_PRIVATE).getBoolean("tapToShowKeyboard",false);
     sessions=TerminalSessions.get(this);sessions.observe(this);build();
-    try{attach(sessions.current());}catch(Exception error){Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();}
+    try{attach(sessions.current());}catch(Exception error){showStartError(error);}
   }
   private void build(){
     root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(BG);
@@ -73,7 +73,10 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     value.setOnClickListener(v->{Ui.click(v);action.run();});return value;
   }
   private void attach(TerminalSessions.Job job){current=job;sessions.select(job);terminal.attachSession(job.session);terminal.requestFocus();tabs.sync(current);changed(job);}
-  private void newSession(){try{attach(sessions.create());}catch(Exception error){Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();}}
+  private void newSession(){try{attach(sessions.create());}catch(Exception error){showStartError(error);}}
+  private void showStartError(Exception error){
+    new AlertDialog.Builder(this).setTitle("无法启动新终端").setMessage(error.getMessage()).setPositiveButton("启动设置",(dialog,which)->StartupPreferences.show(this)).setNegativeButton("返回",null).show();
+  }
   private void showTabOptions(TerminalSessions.Job job){
     if(sessions.find(job.session)!=job)return;
     new AlertDialog.Builder(this).setTitle(job.name).setItems(new String[]{"重命名","关闭会话及进程"},(dialog,which)->{
@@ -88,7 +91,7 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     name.requestFocus();dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE|WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
   }
   private void showOptions(){
-    String[] items={tapToShowKeyboard?"关闭点击弹键盘":"开启点击弹键盘","复制当前终端记录","放大文字","缩小文字","安装 / 更新 Bash","结束当前会话及进程","收起终端，保留会话"};
+    String[] items={tapToShowKeyboard?"关闭点击弹键盘":"开启点击弹键盘","复制当前终端记录","放大文字","缩小文字","安装 / 更新 Bash","结束当前会话及进程","收起终端，保留会话","启动设置","打开 GUI 聊天"};
     new AlertDialog.Builder(this).setTitle(current==null?"终端选项":current.name+" · "+current.status+(current.cwd.isEmpty()?"":"\n"+current.cwd)).setItems(items,(dialog,which)->{
       switch(which){
         case 0:dialog.dismiss();terminal.post(this::toggleKeyboardMode);break;
@@ -98,6 +101,8 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
         case 4:installBash();break;
         case 5:if(current!=null)current.close();break;
         case 6:finish();break;
+        case 7:StartupPreferences.show(this);break;
+        case 8:startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP));break;
       }
     }).setNegativeButton("返回",null).show();
   }
@@ -133,7 +138,7 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     else tabs.sync(current);
   }
   @Override public void paste(TerminalSessions.Job job){ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(clipboard.hasPrimaryClip()&&clipboard.getPrimaryClip().getItemCount()>0&&job.session.getEmulator()!=null)job.session.getEmulator().paste(clipboard.getPrimaryClip().getItemAt(0).coerceToText(this).toString());}
-  @Override protected void onResume(){super.onResume();enterFullscreen();if(sessions!=null)sessions.observe(this);if(tabs!=null)tabs.sync(current);if(terminal!=null)terminal.setTerminalCursorBlinkerState(true,true);}
+  @Override protected void onResume(){super.onResume();StartupPreferences.rememberPage(this,StartupPreferences.TERMINAL);enterFullscreen();if(sessions!=null)sessions.observe(this);if(tabs!=null)tabs.sync(current);if(terminal!=null)terminal.setTerminalCursorBlinkerState(true,true);}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);if(terminal!=null)terminal.setTerminalCursorBlinkerState(false,false);super.onPause();}
   @Override protected void onDestroy(){if(sessions!=null)sessions.detach(this);if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
   @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(focused)enterFullscreen();}

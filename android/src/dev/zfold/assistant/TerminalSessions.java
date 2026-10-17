@@ -26,13 +26,15 @@ final class TerminalSessions implements TerminalSessionClient {
   void observe(Listener value){listener=new WeakReference<>(value);}
   void detach(Listener value){if(listener.get()==value)listener.clear();}
   Job current(){Job job=jobs.get(selected);return job!=null?job:create();}
-  Job create(){
+  Job create(){return create(null,StartupPreferences.ubuntu(context));}
+  private Job create(String[] command,boolean ubuntu){
     if(liveCount()>=4)throw new IllegalStateException("已有 4 个运行中的终端，请先结束一个会话");
-    Job job=new Job(this,nextOrdinal++);jobs.put(job.session.mHandle,job);selected=job.session.mHandle;return job;
+    if(ubuntu){String reason=StartupPreferences.ubuntuUnavailable(context);if(reason!=null)throw new IllegalStateException(reason);}
+    Job job=new Job(this,nextOrdinal++,command,ubuntu);jobs.put(job.session.mHandle,job);selected=job.session.mHandle;return job;
   }
   Job createCommand(String[] arguments,String title){
     if(arguments==null||arguments.length==0)throw new IllegalArgumentException("缺少终端命令");
-    Job job=create();job.command=arguments.clone();rename(job,title);return job;
+    Job job=create(arguments.clone(),false);rename(job,title);return job;
   }
   void select(Job job){if(jobs.get(job.session.mHandle)==job)selected=job.session.mHandle;}
   int liveCount(){int count=0;for(Job job:jobs.values())if(job.session.isRunning())count++;return count;}
@@ -59,31 +61,35 @@ final class TerminalSessions implements TerminalSessionClient {
     final TerminalSessions owner;final TerminalSession session;
     final ExecutorService writer=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"terminal-input");t.setDaemon(true);return t;});
     volatile int id;volatile boolean closing;String name,status="正在启动…",cwd="",shell="";
-    String[] command;
-    Job(TerminalSessions owner,int ordinal){this.owner=owner;name="终端 "+ordinal;session=new TerminalSession(this,owner);session.mSessionName=name;}
+    final String[] command;final boolean ubuntu;
+    Job(TerminalSessions owner,int ordinal,String[] command,boolean ubuntu){this.owner=owner;this.command=command;this.ubuntu=ubuntu;name="终端 "+ordinal;session=new TerminalSession(this,owner);session.mSessionName=name;}
     public void start(TerminalSession ignored,int columns,int rows){
       if(closing){session.finish(143);return;}
       try{owner.context.startForegroundService(new Intent(owner.context,TerminalKeepAliveService.class));}catch(RuntimeException error){Log.w("ZfoldTerminal","Foreground terminal service",error);}
       writer.execute(()->{
         try{
           System.loadLibrary("zfold");
-          File bash=PiPackageManager.prepareBash(owner.context);
-          File fish=null;
-          try{fish=PiPackageManager.executable(owner.context,"fish");}catch(IOException unreachable){fish=null;}
-          boolean modern=owner.context.getApplicationInfo().targetSdkVersion==28;
-          boolean useFish=modern&&fish!=null&&fish.canExecute();
-          boolean useBash=!useFish&&modern&&bash!=null&&bash.canExecute();
-          File executable=useFish?fish:useBash?bash:new File("/system/bin/sh");
-          shell=useFish?"Fish":useBash?"Bash":"系统 Shell";
-          String[] argv=useBash?new String[]{executable.getPath(),"--noprofile"}:new String[]{executable.getPath()};
-          if(command!=null){argv=command;shell=name;}
+          File executable;String[] argv;boolean useFish=false,useBash=false;
+          if(command!=null){executable=new File(command[0]);argv=command;shell=name;}
+          else if(ubuntu){executable=new File(owner.context.getFilesDir(),"runtime/bin/ubuntu");argv=new String[]{executable.getPath()};shell="Ubuntu";}
+          else{
+            File bash=PiPackageManager.prepareBash(owner.context);
+            File fish=null;
+            try{fish=PiPackageManager.executable(owner.context,"fish");}catch(IOException unreachable){fish=null;}
+            boolean modern=owner.context.getApplicationInfo().targetSdkVersion==28;
+            useFish=modern&&fish!=null&&fish.canExecute();
+            useBash=!useFish&&modern&&bash!=null&&bash.canExecute();
+            executable=useFish?fish:useBash?bash:new File("/system/bin/sh");
+            shell=useFish?"Fish":useBash?"Bash":"系统 Shell";
+            argv=useBash?new String[]{executable.getPath(),"--noprofile"}:new String[]{executable.getPath()};
+          }
           Map<String,String> environment=new ProcessBuilder("true").environment();
           RuntimeEnvironment.apply(environment,RuntimeEnvironment.forExecutable(owner.context,executable),null);
-          if(!useBash&&!useFish)environment.putIfAbsent("ENV",new File(environment.get("HOME"),".mkshrc").getPath());
+          if(command==null&&!ubuntu&&!useBash&&!useFish)environment.putIfAbsent("ENV",new File(environment.get("HOME"),".mkshrc").getPath());
           environment.put("TERM","xterm-256color");environment.put("COLORTERM","truecolor");
           environment.put("PI_FORCE_IMAGE_PROTOCOL","iterm2");
           environment.put("PI_FORCE_HYPERLINKS","1");
-          if(!useFish)environment.put("PS1",useBash?"\\[\\e[38;5;114m\\]\\W\\[\\e[0m\\] $ ":"$ ");
+          if(command==null&&!ubuntu&&!useFish)environment.put("PS1",useBash?"\\[\\e[38;5;114m\\]\\W\\[\\e[0m\\] $ ":"$ ");
           cwd=RuntimeEnvironment.workingDirectory(owner.context,null).getPath();
           id=PiRuntime.ptyOpen(argv,cwd,environment.entrySet().stream().map(entry->entry.getKey()+"="+entry.getValue()).toArray(String[]::new),rows,columns);
           if(closing){PiRuntime.ptyClose(id);session.finish(143);writer.shutdown();return;}

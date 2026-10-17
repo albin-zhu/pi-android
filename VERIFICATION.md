@@ -2,6 +2,17 @@
 
 当前交付状态（2026-10-12）：Fold7 已覆盖安装 0.2.87-compat28，实际 Pi SDK 为 1.0.4，`openai-codex/gpt-6.1-sol` 与原会话恢复；模型中断原因可从历史查看，自动重试/压缩进度可见。八份私有配置指纹保留已核对。本次只修复可观察性与构建版本校验，不宣称消除上游连接故障或完成 CLI/TUI 迁移。下面保留各版本原始记录。
 
+## 图标启动页与新终端默认环境
+
+- 新增独立 `LauncherActivity` 分发应用图标入口，默认终端，可选 GUI 或记住上次的终端／GUI；明确的聊天、语音、分享和设置 Intent 不经此分发。终端菜单与 GUI 工作台新增同一「启动设置」入口。
+- `TerminalSessions` 在创建新交互会话时固定 Shell／Ubuntu 选择；已有会话不改变，显式 Wine 等命令优先且不受默认 Ubuntu 的安装检查影响。Ubuntu 使用已有 `runtime/bin/ubuntu` 启动入口，缺少 PRoot、根文件系统或 compat28 通道时明确报错，不自动安装或隐藏回退。
+- 全部 Android／终端 Java 使用 API 35 编译、D8、资源链接及独立验证包签名检查通过；GUI 记忆条件调整后已增量编译并重新生成验证包。复用了缓存的 native 库，不是完整 NDK 冷构建。
+- 临时 JVM smoke 执行实际 `StartupPreferences` 策略，覆盖固定页／上次页优先级、无历史及无效存储值、环境选择、缺少 PRoot 与不支持的通道，输出 `STARTUP_POLICY_SMOKE_OK`。仅偏好存储和 Context 使用宿主适配；这不是 Android 生命周期、真实设置窗口或 PRoot 启动的验收。临时策略检查源码已移除。
+- 独立包 `dev.zfold.assistant.startupcheck` 已生成但未安装。用户随后改为只要求主 APK 并自行安装；新 ADB 连接仅用于私有签名进程，没有继续界面测试。**尚未执行真机冷／热启动、设置交互、PTY 保留及自动进入 Ubuntu 的验收**，不以编译通过代替这些结果。临时检查脚本已清理。
+- 保留用户现有文件预览等未提交改动。未安装验证包或主 APK，未修改手机启动偏好、终端配置或已有会话，未提交／推送。
+- 手动安装包：`/workspace/workspace/artifacts/Zfold-0.2.87-compat28-startup.apk`，52,070,933 bytes，SHA-256 `6773d0da5d195d990640eb45fce4c65091605f2c4d23f156369b78457b5908ca`。主包名 `dev.zfold.assistant`、versionCode 287、targetSdk 28、ARM64、`LauncherActivity` 图标入口及内嵌 Pi 1.0.4 已从 APK 核对；JS 使用当前源码重新 bundle，Java／D8／资源重新构建，native 复用既有主包。
+- 原签名验证通过，证书 SHA-256 为 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。私钥仅挂载到独立签名进程，未复制到共享目录；发布副本与签名产物 SHA-256 一致。没有执行 APK 安装。
+
 ## 通用 X11 / Wine 集成 · Fold7 真机
 
 - 活动源码为 `/root/pi-android-omp-termux` 的 `feat/omp-termux-app`；保留用户已有的 `TerminalActivity.java` 修改，未修改该文件。新增工作台/工具中心入口、独立 X11 服务与显示页面、Ubuntu 挂载和可选 `windows` 安装/启动命令。
