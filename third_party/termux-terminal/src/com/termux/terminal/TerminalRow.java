@@ -50,6 +50,84 @@ public final class TerminalRow {
     /** If this row might contain chars with width != 1, used for deactivating fast path */
     boolean mHasNonOneWidthOrSurrogateChars;
 
+    private TerminalImage[] mImages;
+    private short[] mImageX, mImageY;
+    private int mImageCells;
+
+    /** Allocated only for linked rows; all cells of one OSC 8 span share its target string. */
+    private String[] mHyperlinks;
+    private int mHyperlinkCells;
+
+    String getHyperlink(int column) { return mHyperlinks == null ? null : mHyperlinks[column]; }
+
+    void setHyperlink(int column, String hyperlink) {
+        String previous = getHyperlink(column);
+        if (previous == hyperlink) return;
+        if (hyperlink != null) {
+            if (mHyperlinks == null) mHyperlinks = new String[mColumns];
+            mHyperlinks[column] = hyperlink;
+            if (previous == null) mHyperlinkCells++;
+        } else {
+            mHyperlinks[column] = null;
+            if (--mHyperlinkCells == 0) mHyperlinks = null;
+        }
+    }
+
+    int getLastHyperlinkColumn() {
+        if (mHyperlinks != null)
+            for (int column = mColumns - 1; column >= 0; column--)
+                if (mHyperlinks[column] != null) return column;
+        return -1;
+    }
+
+    void clearHyperlinks() {
+        mHyperlinks = null;
+        mHyperlinkCells = 0;
+    }
+
+    public TerminalImage getImage(int column) { return mImages == null ? null : mImages[column]; }
+    public boolean hasImages() { return mImageCells > 0; }
+    public int getImageX(int column) { return mImageX[column]; }
+    public int getImageY(int column) { return mImageY[column]; }
+
+    void setImage(int column, TerminalImage image, int x, int y) {
+        if (image != null) { image.retain(); image.addOwner(this); }
+        if (mImages != null && mImages[column] != null) {
+            TerminalImage previous = mImages[column];
+            mImages[column] = null;
+            mImageCells--;
+            previous.removeOwner(this);
+            previous.release();
+        }
+        if (image != null) {
+            if (mImages == null) {
+                mImages = new TerminalImage[mColumns];
+                mImageX = new short[mColumns];
+                mImageY = new short[mColumns];
+            }
+            mImages[column] = image;
+            mImageX[column] = (short) x;
+            mImageY[column] = (short) y;
+            mImageCells++;
+        }
+        if (mImageCells == 0) { mImages = null; mImageX = mImageY = null; }
+    }
+
+    void clearImages() {
+        if (mImages == null) return;
+        TerminalImage[] images = mImages;
+        mImages = null;
+        mImageX = mImageY = null;
+        mImageCells = 0;
+        for (TerminalImage image : images) if (image != null) { image.removeOwner(this); image.release(); }
+    }
+
+    void clearImage(TerminalImage image) {
+        for (int x = 0; x < mColumns && mImages != null; x++) {
+            if (mImages[x] == image) setImage(x, null, 0, 0);
+        }
+    }
+
     /** Construct a blank row (containing only whitespace, ' ') with a specified style. */
     public TerminalRow(int columns, long style) {
         mColumns = columns;
@@ -60,6 +138,28 @@ public final class TerminalRow {
 
     /** NOTE: The sourceX2 is exclusive. */
     public void copyInterval(TerminalRow line, int sourceX1, int sourceX2, int destinationX) {
+        // Text writes clear overwritten cells, so preserve targets before an overlapping self-copy.
+        String[] hyperlinks = line == this && mHyperlinks != null
+            ? Arrays.copyOfRange(mHyperlinks, sourceX1, sourceX2) : null;
+        int hyperlinkSource = sourceX1;
+        TerminalImage[] images = null;
+        short[] imageX = null, imageY = null;
+        if (line == this && line.mImages != null) {
+            int count = sourceX2 - sourceX1;
+            images = new TerminalImage[count];
+            imageX = new short[count];
+            imageY = new short[count];
+            for (int x = 0; x < count; x++) {
+                TerminalImage image = images[x] = line.mImages[sourceX1 + x];
+                if (image != null) {
+                    image.retain();
+                    imageX[x] = line.mImageX[sourceX1 + x];
+                    imageY[x] = line.mImageY[sourceX1 + x];
+                }
+            }
+        }
+        int imageDestination = destinationX;
+        int imageSource = sourceX1;
         mHasNonOneWidthOrSurrogateChars |= line.mHasNonOneWidthOrSurrogateChars;
         final int x1 = line.findStartOfColumn(sourceX1);
         final int x2 = line.findStartOfColumn(sourceX2);
@@ -69,6 +169,7 @@ public final class TerminalRow {
         for (int i = x1; i < x2; i++) {
             char sourceChar = sourceChars[i];
             int codePoint = Character.isHighSurrogate(sourceChar) ? Character.toCodePoint(sourceChar, sourceChars[++i]) : sourceChar;
+            boolean copyingPartialWideChar = startingFromSecondHalfOfWideChar;
             if (startingFromSecondHalfOfWideChar) {
                 // Just treat copying second half of wide char as copying whitespace.
                 codePoint = ' ';
@@ -80,7 +181,20 @@ public final class TerminalRow {
                 sourceX1 += latestNonCombiningWidth;
                 latestNonCombiningWidth = w;
             }
-            setChar(destinationX, codePoint, line.getStyle(sourceX1));
+            String hyperlink = copyingPartialWideChar ? null
+                : hyperlinks == null ? line.getHyperlink(sourceX1) : hyperlinks[sourceX1 - hyperlinkSource];
+            setChar(destinationX, codePoint, line.getStyle(sourceX1), hyperlink);
+        }
+        if (images != null) {
+            for (int x = 0; x < images.length; x++) {
+                setImage(imageDestination + x, images[x], imageX[x], imageY[x]);
+                if (images[x] != null) images[x].release();
+            }
+        } else if (line.mImages != null) {
+            for (int x = imageSource; x < sourceX2; x++) {
+                TerminalImage image = line.getImage(x);
+                setImage(imageDestination + x - imageSource, image, image == null ? 0 : line.getImageX(x), image == null ? 0 : line.getImageY(x));
+            }
         }
     }
 
@@ -142,6 +256,8 @@ public final class TerminalRow {
     }
 
     public void clear(long style) {
+        clearImages();
+        clearHyperlinks();
         Arrays.fill(mText, ' ');
         Arrays.fill(mStyle, style);
         mSpaceUsed = (short) mColumns;
@@ -150,12 +266,20 @@ public final class TerminalRow {
 
     // https://github.com/steven676/Android-Terminal-Emulator/commit/9a47042620bec87617f0b4f5d50568535668fe26
     public void setChar(int columnToSet, int codePoint, long style) {
+        setChar(columnToSet, codePoint, style, null);
+    }
+
+    void setChar(int columnToSet, int codePoint, long style, String hyperlink) {
         if (columnToSet  < 0 || columnToSet >= mStyle.length)
             throw new IllegalArgumentException("TerminalRow.setChar(): columnToSet=" + columnToSet + ", codePoint=" + codePoint + ", style=" + style);
 
         mStyle[columnToSet] = style;
 
         final int newCodePointDisplayWidth = WcWidth.width(codePoint);
+        if (mImages != null) {
+            setImage(columnToSet, null, 0, 0);
+            if (newCodePointDisplayWidth == 2 && columnToSet + 1 < mColumns) setImage(columnToSet + 1, null, 0, 0);
+        }
 
         // Fast path when we don't have any chars with width != 1
         if (!mHasNonOneWidthOrSurrogateChars) {
@@ -163,6 +287,7 @@ public final class TerminalRow {
                 mHasNonOneWidthOrSurrogateChars = true;
             } else {
                 mText[columnToSet] = (char) codePoint;
+                setHyperlink(columnToSet, hyperlink);
                 return;
             }
         }
@@ -201,6 +326,13 @@ public final class TerminalRow {
             int combiningCharsCount = WcWidth.zeroWidthCharsCount(mText, oldStartOfColumnIndex, oldStartOfColumnIndex + oldCharactersUsedForColumn);
             if (combiningCharsCount >= MAX_COMBINING_CHARACTERS_PER_COLUMN)
                 return;
+        }
+
+        // Combining marks extend the base glyph rather than changing its hyperlink.
+        if (!newIsCombining) {
+            setHyperlink(columnToSet, hyperlink);
+            if (newCodePointDisplayWidth == 2 && columnToSet + 1 < mColumns) setHyperlink(columnToSet + 1, hyperlink);
+            else if (oldCodePointDisplayWidth == 2) setHyperlink(columnToSet + 1, null);
         }
 
         // Find how many chars this column will need
@@ -271,6 +403,7 @@ public final class TerminalRow {
     }
 
     boolean isBlank() {
+        if (mImageCells > 0 || mHyperlinkCells > 0) return false;
         for (int charIndex = 0, charLen = getSpaceUsed(); charIndex < charLen; charIndex++)
             if (mText[charIndex] != ' ') return false;
         return true;

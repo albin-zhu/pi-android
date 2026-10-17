@@ -2,6 +2,53 @@
 
 当前交付状态（2026-10-12）：Fold7 已覆盖安装 0.2.87-compat28，实际 Pi SDK 为 1.0.4，`openai-codex/gpt-6.1-sol` 与原会话恢复；模型中断原因可从历史查看，自动重试/压缩进度可见。八份私有配置指纹保留已核对。本次只修复可观察性与构建版本校验，不宣称消除上游连接故障或完成 CLI/TUI 迁移。下面保留各版本原始记录。
 
+## 通用 X11 / Wine 集成 · Fold7 真机
+
+- 活动源码为 `/root/pi-android-omp-termux` 的 `feat/omp-termux-app`；保留用户已有的 `TerminalActivity.java` 修改，未修改该文件。新增工作台/工具中心入口、独立 X11 服务与显示页面、Ubuntu 挂载和可选 `windows` 安装/启动命令。
+- 为避免中断承载开发会话的主应用，安装独立包 `dev.zfold.assistant.x11check`。重新安装返回 `Success`。全量 Android/终端 Java 编译、D8 和资源链接完成；新增 seccomp guard 以 Android ARM64 目标编译，Xlorie 使用校验过的官方二进制。未更改的 JS 运行时及原有 native 库复用已安装 APK，不将此声明为完整 NDK 冷构建。
+- 真实 smoke 暴露了错误的 `dalvik.system.optimization.CriticalNative` 导入，导致服务可连接但画面未附着；改为 SDK 提供的 `dalvik.annotation.optimization.CriticalNative` 并删除自定义声明。更新验证包后，X11 分辨率随显示页面变化，`xclock` 实际绘制，显示状态为 `display connected`。
+- X11 使用每次启动新建的 cookie；带授权的 `xdpyinfo` 成功，不带授权返回 `Authorization required`。Android logcat 确认上游 TCP knock listener 被 seccomp 拒绝（`Operation not permitted`）。验证包与既有 Ubuntu 属于不同 UID，烟测使用临时 ADB 本机转发和私有 cookie 副本连接；该转发不属于产品实现。最终同 App 路径使用 Unix socket 挂载。
+- 原 Android → PRoot 启动链实际执行新 `ubuntu.sh` 和 `/opt/pi-phone/bin/windows status`，退出 0，返回 `DISPLAY=:9`、`XAUTHORITY=/run/zfold-x11/Xauthority` 和已安装的固定运行时。Wine 安装中 `dpkg-deb -x` 在 PRoot 的目录元数据恢复失败，改用 `--fsys-tarfile` 与 Python 安全解包后实际安装成功。
+- Wine 64 位 `cmd.exe` 输出 `ZFOLD_WINE_SMOKE`、退出 0。新的 prefix 经可见 Mono 安装流程进入 Wine configuration；Windows Notepad 已在手机显示。先经 X11 输入保存 `ZFOLD_X11_WINE_SMOKE`，再通过 Android `input text` 和 Ctrl+A / Ctrl+S 保存，guest 文件回读为精确的 `zfoldandroidinput`。
+- 图形管理页真实按钮打开 X11，离开/返回后重新附着；Stop X11 后客户端连接失败而主应用 `device_info` 仍返回 SM-F9660。再次打开显示后授权 cookie 改变、认证连接恢复，未发现验证包 crash 记录。
+- 限制：初始 Wine 启动尝试出现过退出 148；32 位 `syswow64/cmd.exe` 虽输出 `ZFOLD_WIN32_SMOKE`，进程收到 SIGKILL（退出 -9），未判定稳定通过。未验证 War3、游戏帧率、Vulkan/Direct3D 加速、音频、所有输入法、长期后台存活或其他设备。验证包没有自己的 Ubuntu 安装，因此没有把其 Wine 按钮声称为该包内部的完整安装验收。
+- 主包 `Zfold-0.2.87-compat28-x11-wine.apk` 已生成，52,005,232 bytes，SHA-256 `bd6bf77b96b1cfe0342677d6705ce6580b5a30bcd96557fcf260dc65a1986fe2`。签名证书与现有主应用一致：`192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`；私钥仅在专用签名进程的私有挂载中读取，未复制到工作区。**未覆盖安装主应用**，避免杀死正在运行的终端；本轮安装的是独立验证包。
+
+### 用户更新主 APK 后的默认环境配置
+
+- 用户确认已更新主 APK 并启动 X11。本轮在主应用的 Ubuntu 内直接使用 `DISPLAY=:9` 和 `/run/zfold-x11/Xauthority`，未使用独立验证包或 ADB 转发。
+- 首次 `windows winecfg` 实际失败：默认 prefix 的父目录不存在，Wine 报 `chdir ... No such file or directory`。`runtime/windows.py` 和手机已部署的 `/opt/pi-phone/windows.py` 均增加非 stop 启动前创建父目录的步骤；不覆盖已有 prefix，也不让 stop 创建目录。再次运行后默认 prefix 初始化完成，Wine 配置窗口正常显示并以 0 退出。本次仅热更新脚本和源码，未重新生成上一节 APK。
+- 默认 prefix 为 `/root/.local/share/zfold/wineprefixes/default`。通过真实 `reg.exe` 设置并查询得到 `HKCU\Software\Wine\Version=win10` 和 `HKCU\Control Panel\Desktop\LogPixels=0xc0`（192 DPI，200%）。非 PTY 后台 shell 曾报告 `Stopped` / 148；在独立进程 session 中调用同一命令返回 0，未通过关闭错误日志掩盖该现象。
+- 安装并运行 Openbox，不安装完整桌面。主应用 X11 中的 Notepad 具有窗口边框，Wine 菜单按新缩放绘制；通过屏幕点击三星键盘输入 `ok `，随后保存并从 guest 文件精确回读，Notepad 正常退出 0。临时输入文件已删除。
+- Openbox 保持运行；Wine 设置窗口随后正常退出 0。未更改聊天或既有终端配置。X11 完全停止后需重新启动窗口管理器：在新 Ubuntu 终端执行 `openbox --sm-disable &`，再运行 `windows winecfg` 或 `windows run <程序>`。本轮未配置游戏驱动、声音或证明 War3 兼容性。
+
+### 冰封王座 1.27b 启动验证
+
+- 使用 Hive 存档的繁体中文整包；ZIP 全部 CRC 校验通过，`war3.exe` / `game.dll` 文件版本为 `1.27.1.7085`。游戏文件未加入仓库；运行副本位于默认 prefix 的 `drive_c/WarcraftIII`。
+- 普通窗口启动无主界面。WineDbg 主线程栈与游戏导入表确认，程序在 `ChangeDisplaySettingsA(NULL, 0)` 返回非零后的 `Sleep(50)` 循环等待；32 位 `syswow64/notepad.exe` 能实际显示。改用 Wine 虚拟桌面后进入后续启动阶段。
+- 首次虚拟桌面启动出现 BlizzardError 窗口，Wine 日志报告缺少 AVI 解码插件。安装 `gstreamer1.0-plugins-good` 和 `gstreamer1.0-libav` 后重新运行，手机截图确认繁体中文冰封王座主菜单；没有提交崩溃报告。
+- 启动命令：在 `drive_c/WarcraftIII` 下执行 `windows run explorer.exe /desktop=Warcraft,1024x768 'C:\WarcraftIII\war3.exe' -window -opengl -expansion`。游戏进程保持运行供用户操作。
+- 用户要求的简易启动脚本位于 `/workspace/workspace/war3/war3.sh`，已通过 `sh -n`；缺省补齐本应用的 DISPLAY/XAUTHORITY，切换游戏目录后执行上述命令。按用户要求停止了本次游戏运行，未为验证脚本而重新启动，也未配置硬件加速。
+- 限制：`glxinfo -B` 实测为 llvmpipe、`Accelerated: no`。游戏提示声音服务初始化失败并关闭声音；影片播放仍有 DirectShow blit 错误。手机截图确认主菜单，后续仅截取 X11 的画面还观察到对局中的资源栏、小地图和单位面板。未测完整对局稳定性、帧率、声音、联网或分屏适配；竖屏画面存在拉伸，不宣称完整游戏兼容。
+
+<a id="android-gpu-verification"></a>
+
+### Adreno 830 硬件 OpenGL 验证 · 2026-10-17
+
+- 使用 [Mesa for Android Container 26.3.0-devel-20260824](https://github.com/lfdevs/mesa-for-android-container/releases/tag/mesa-26.3.0-devel-20260824) 的 `ubuntu_noble_arm64` 归档；SHA-256 为 `06c31d6dd9a404d5f650cfe506521c3c64dc2022a82f12545d0acbcb4544e137`，与 release asset digest 一致。
+- 安全解包到 `/root/.local/share/zfold/gpu/mesa-26.3.0-devel-20260824`，未覆盖系统 Mesa、修改全局链接器配置或重打 APK。通过进程级 `LD_LIBRARY_PATH`、`LIBGL_DRIVERS_PATH` 和 `MESA_LOADER_DRIVER_OVERRIDE=kgsl` 使用 Freedreno/KGSL；本次不需要 Zink 或 DXVK。
+- 隔离环境中的 `glxinfo -B` 返回 `Adreno (TM) 830v1`、`Accelerated: yes`、OpenGL 4.6；`glxgears -info` 返回同一 renderer，X11 截图实际显示三色齿轮。探针已停止。不带这些环境变量再次运行 `glxinfo -B` 仍为系统 Mesa 25.2.8 / llvmpipe，确认原软件渲染路径保留。
+- 新脚本 `/workspace/workspace/war3/war3-gpu.sh` 设置上述环境后复用原 `war3.sh`；原脚本未修改。实际通过新脚本启动 War3，主菜单及音频提示确认正常绘制，确认提示后仍显示主菜单。证据：`/workspace/workspace/screenshots/war3-gpu-menu.png`。
+- War3 进程映射包含隔离目录中的 `libGLX_mesa.so.0.0.0`、`libgallium-26.3.0-devel.so` 和 KGSL GPU 内存；Wine 日志读取到 `GL_VENDOR "freedreno"`。不是仅安装驱动或只测试原生 Linux 程序。
+- 限制：保留 Mesa 设备信息读取 / fd 比较警告，Wine 对未知 freedreno vendor 使用 NVIDIA 兼容枚举；没有通过屏蔽日志隐藏它们。原音频初始化失败仍存在。本轮验证硬件渲染和游戏主菜单，未测硬件模式完整对局、帧率、长期稳定性、Vulkan 或其他设备。
+- 启动脚本已随工程收录为 `scripts/war3.sh` 和 `scripts/war3-gpu.sh`，与上述手机已验证版本一致；游戏与驱动二进制不纳入版本控制。
+
+### 合并发布检查 · 2026-10-17
+
+- 用户明确同意组合应用按 GPLv3 发布。新增根目录 `LICENSE`、整体授权及修改声明，并通过 `scripts/bundle.mjs` 将项目许可证和第三方声明放入 APK assets。实际重新执行 bundle 成功，生成的两份许可文件与源码逐字节一致。
+- Ubuntu 原先没有 Node/npm；在忽略的 `.build/toolchains` 中安装官方 Linux ARM64 Node 24.22.0，归档 SHA-256 与 Node 官方清单一致。按 package-lock 执行 `npm ci --ignore-scripts`，未改依赖锁定版本。`npm test` 为 **176/177 通过**：`tests/session-catalog.test.mjs:48` 的其他工作区隔离断言失败；该测试和 `runtime/session-catalog.mjs` 与合并前远端 main 完全相同，本次未修改该既有行为或测试。
+- 两个收录的 War3 脚本与手机已验证版本逐字节一致；shell 语法检查、Python 编译检查通过，直接执行仓库 `runtime/windows.py status` 返回已安装 Wine 和本机 X11 配置。此次仅整理、授权和发布工程，未重新安装 APK、重启游戏或声称完成全量 NDK 冷构建。
+
 ## 0.2.87 中断可观察性与 SDK 降级纠正 · 2026-10-12
 
 - 原会话 JSONL 记录 44 次模型失败尝试，涉及 17 组用户消息；其中 6 组随后恢复正常回答。33 条为 `fetch failed`，另有响应头超时、连接/流终止和两条超过 52428800 bytes 的 HTTP 413。失败尝试数不等于整轮任务中断数；历史 `fetch failed` 不能单独归因于账号过期、VPN或进程被系统杀死。

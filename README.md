@@ -2,6 +2,14 @@
 
 独立 Android APK。Pi 1.0.4 依赖嵌入式 Node 引擎并在应用进程中运行，界面与系统权限使用原生 Android API，通过匿名管道/JNI 连接 Pi。用户侧 `node/npm/npx` 不再内置；需要时通过 Runtime 包管理安装。没有本机 HTTP 控制端口，不依赖 Termux App、Office、电脑端 Agent 或 root。电脑只用于构建和测试。
 
+## 许可证与对应源码
+
+Copyright (C) 2026 pi-android contributors. 本项目及集成 X11 后的组合应用按 **GNU GPL 第 3 版**发布，完整条款见 [LICENSE](LICENSE)；允许依照该许可证使用、修改和再分发，不提供任何担保。第三方组件保留各自的版权声明和许可，见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+
+2026-10-17 修改说明：集成 Termux:X11 的 Android 前端、独立显示服务、Unix-only 网络限制、Ubuntu 挂载和可选 Wine 启动，并加入 War3 软件／硬件 OpenGL 启动辅助脚本。游戏及手机私有配置不属于源码分发内容。
+
+对应应用源码位于 [albin-zhu/pi-android](https://github.com/albin-zhu/pi-android)，应检出所下载 APK 对应 CI run 或 release 标明的提交。X11 原生引擎的固定源码版本、完整递归子模块获取步骤及构建说明见 [SOURCE.txt](third_party/termux-x11/SOURCE.txt) 与 [sources.json](third_party/termux-x11/sources.json)；构建使用的其他组件来源和校验值保留在构建脚本及第三方声明中。再分发 APK 时必须向接收者提供完整对应源码的等价获取途径，并履行 GPLv3 的其他适用义务。
+
 ## 产品基线
 
 [产品与系统策划案](PRODUCT_PLAN.md)规定目标、状态归属、入口矩阵与验收门槛；[现状核对清单](PRODUCT_AUDIT.md)保留 0.2.72 源码基线。0.2.74 已接入视频对话与单一语音所有者；旧文本聊天入口下线、直接系统小窗、“橙橙”唤醒与接通音仍有待实施部分。
@@ -595,6 +603,84 @@ adb reverse --remove tcp:18868
 - compat28 是当前自用侧载执行后端；modern 的可写二进制执行受限。用户代码共享 app UID，不等于完整不可信代码沙箱。
 - 快照/截图 ID、目标校验和输入回读已有基础；第三方 App 整任务结果、音频路由、长时后台与所有 OEM 行为不能只凭工具回执或 UI 测试宣称通过。
 - 测试 instrumentation 随调试 APK 打包，需进一步统一隔离、拒绝错误设备与清理规则，并拆分测试包。实测范围和失败记录见 VERIFICATION.md。
+
+## Ubuntu / omp 实验分支
+
+`feat/omp-termux-app` 已接入同 App UID 的独立手机工具桥：Ubuntu 内 omp 通过工具扩展调用 Android，权限、按次确认、取消和用户接管仍由 App 执行。实验安装器与任意目录可用的 `ubuntu` 入口见 [架构与验收记录](docs/TERMUX_OMP_ASSESSMENT.md)。
+
+已在隔离 Android ARM64 模拟器完成读屏/拍照回合，并在 Zfold 真机完成安装及 guest 手机状态调用。本轮不迁移凭据、不切换 GUI，也不更改内嵌 Pi 1.0.4 / Node 24.21.0。
+
+### 通用图形应用：X11 / Wine
+
+工作台和工具中心新增「图形应用」，不依赖 Pi 或 omp 会话。先打开 X11，再进入**新的** `ubuntu` 终端；旧终端不会自动获得新增挂载和命令。
+
+```sh
+ubuntu
+windows install             # 显示下载来源与系统依赖，确认后安装
+windows winecfg
+windows run notepad.exe
+windows run '/workspace/workspace/My App/app.exe'
+windows --prefix /root/my-prefix run app.exe
+windows stop                # 只结束所选 prefix 内的 Windows 程序
+```
+
+Linux 图形程序直接使用 `DISPLAY=:9`。显示页面支持触摸、鼠标、键盘和输入法；离开页面保留 X11，点「Stop X11」会断开其全部图形客户端，但不结束聊天或普通终端。需要桌面窗口管理时，可自行在 Ubuntu 安装并启动 Openbox 等窗口管理器；X11 本身不是完整桌面。
+
+X11 引擎随 APK 提供，独立服务进程运行；使用私有 Unix socket 和每次启动重新生成的 Xauthority cookie，不开放 TCP 显示或上游重连端口。Wine 为可选的固定版本 Wine 10.0 WoW64 + Box64 下载，不注册系统 binfmt、不替换系统 Wine。首次创建 prefix 可能弹出 Mono 安装窗口，应回到 X11 处理。
+
+Ubuntu/Wine 执行需要 compat28；PRoot 和 Wine **不是安全沙箱**。已在 Fold7 显示 Linux 时钟、Wine 设置和记事本，并通过 Android 键盘输入保存文件；后续在主应用验证了冰封王座 1.27b 主菜单和 Adreno 830 硬件 OpenGL。早期 32 位命令曾异常退出，不代表所有 Windows 程序均稳定兼容。未验证 Direct3D/Vulkan、游戏帧率或硬件模式完整对局；游戏音频仍初始化失败。详细过程与限制见 [验证记录](VERIFICATION.md)，上游组件与再分发要求见 [第三方声明](THIRD_PARTY_NOTICES.md)。
+
+#### 已配置手机上的 War3 启动脚本
+
+仓库仅包含启动脚本，不分发游戏、Wine prefix 或 GPU 驱动。使用前先启动 X11、安装可选 Wine，并将自己的冰封王座放到默认 prefix 的 `/root/.local/share/zfold/wineprefixes/default/drive_c/WarcraftIII`；已验证的版本为繁体中文 1.27b。影片解码需要 Ubuntu 的 `gstreamer1.0-plugins-good` 和 `gstreamer1.0-libav`。
+
+```sh
+sh scripts/war3.sh       # 默认系统 Mesa；本机为软件渲染
+sh scripts/war3-gpu.sh   # 隔离的 Freedreno/KGSL 硬件 OpenGL
+```
+
+GPU 脚本要求已按 [Adreno 830 验证记录](VERIFICATION.md#android-gpu-verification) 将对应 Ubuntu Noble ARM64 Mesa 解包到 `/root/.local/share/zfold/gpu/mesa-26.3.0-devel-20260824`；它只设置当前进程的驱动环境，不自动下载驱动或覆盖系统 Mesa。两个脚本使用 1024×768 Wine 虚拟桌面，避免该游戏直接窗口启动时的显示模式等待。
+
+### 终端历史滚动
+
+普通缓冲区中，上滑查看历史后，新输出和 TUI 重绘不再强制回到底部；新增历史行会保持可见内容的锚点，手动滑回底部后恢复跟随。备用屏幕和鼠标跟踪仍由 TUI 接收滚动事件，不伪造其历史。清空历史、切换终端或调整终端尺寸不保证旧视口保留。
+
+`TerminalScrollInstrumentation` 使用真实 PTY 和终端视图验证重绘、追加输出及恢复跟随；修复前可复现自动回底，修复后三项通过。已覆盖安装到 Zfold，保留 Ubuntu 与供应商数据；用户实际 omp 会话的手势复测仍由真机确认。
+
+### 终端键盘仅显式打开
+
+移除 `TerminalActivity.onSingleTapUp()` 中无条件弹出输入法的动作。点击终端内容仍由 TerminalView 获取焦点、处理 TUI 鼠标事件或退出文本选择，但不会因此请求键盘；底部「键盘」按钮继续切换显示/隐藏，终端菜单「显示键盘」继续显式打开输入法。
+
+修复提交 `e9fcfee` 的 compat28 / modern APK 已构建并通过原签名证书校验，另核对 compat28 APK 中单击回调仅返回、不再调用输入法。用户已确认安装完成：点击终端及 omp 底部输入行不弹键盘，控制条可正常拉出键盘；暂保留这一交互。omp 输入行属于同一个终端视图，不是独立 Android 输入框。未运行真机 instrumentation，菜单入口尚未单独复测。CI 运行时测试 176 项通过，既有 `session-catalog.test.mjs` 工作区隔离检查仍有 1 项失败。
+
+### 终端内容点击、回车与会话标签
+
+终端顶部增加横向 Tab 栏，当前会话高亮，点击标签直接切换，右侧「＋」新建会话；替代原会话选择弹窗，不结束后台进程。底部控制条新增「回车」，通过原有终端按键路径发送 Enter，不调用输入法。
+
+支持单击 OSC 8 超链接，通过 Android 打开网页及共享工作区文件；单击内联图片打开原生预览。链接按字符格保存，随历史滚动、宽字符、重排和主/备用缓冲区移动；已识别的内容点击不再同时发送 TUI 鼠标事件，普通 TUI 点击仍保留。拖动、长按选择和双击不打开链接，内容单击不弹键盘。
+
+交互终端声明 `PI_FORCE_HYPERLINKS=1`，Ubuntu 入口透传，避免 omp 18.11 将未识别终端的链接降级为普通文字；`PI_NO_HYPERLINKS=1` 或 omp 的 `tui.hyperlinks=off` 仍可关闭。新能力需要新终端及新启动的 omp，旧输出中的隐藏目标无法补回。只识别真实 OSC 8 链接和已解码图片，不猜测普通文字路径；文件范围仍限 `/workspace` 映射的共享工作区，guest 私有 `/root`、`/tmp` 不对 Android 暴露。
+
+全量 Android Java 编译、OSC 8/字符格生命周期和路径边界检查通过；实际 `KeyHandler` 的 Enter 编码经 Bash PTY 执行得到预期结果。用户已确认安装 `8d16f0d` 版；内容点击预览尚未完成真机交互验收。
+
+### 单行顶栏、顶满全屏与 Tab 管理
+
+终端只保留一行「会话标签 / ＋ / 菜单」，删除重复标题栏和常驻安装提示。「收起终端」移入菜单，会话状态和工作目录也在菜单中显示；Bash 安装进度只在安装期间出现。
+
+Activity 使用沉浸全屏，隐藏状态栏及导航栏，允许边缘滑动临时显示系统栏。内容绘制到屏幕顶边和摄像头区域，顶部 padding 为 0，不保留原状态栏或刘海的整行空白；横向边缘与键盘仍避让，键盘关闭后恢复终端高度。
+
+长按任意标签可重命名或「关闭会话及进程」，针对被长按的标签，不切换或关闭其他会话。显式关闭和进程自行退出都会移除标签，不保留“已结束”记录；关闭当前标签优先选择右邻，无右邻则选择左邻，关闭后台标签保持当前选择。最后一个关闭后退出终端页，只有下次重新打开终端才创建新会话。已关闭会话的迟到回调或菜单不能恢复标签。
+
+最终 Java 全量编译、实际会话注册表的左右邻接选择、后台关闭、最后移除和迟到回调检查通过。恢复 ADB 后，隔离包真机验证了顶部坐标 `y=0`、窗口高度 `2520`、菜单关闭后的全屏恢复、键盘开关与高度恢复、长按重命名、后台关闭不切换当前会话、关闭当前标签选择右邻，以及最后一个 Shell 退出后移除全部标签并结束页面；验证期间原应用 PID 保持 `10485`。独立测试包已卸载。`dc946ce` 的 compat28 安装包通过原应用签名校验，已按用户授权保留数据覆盖安装，用户确认可用。Android 两个构建目标及终端相关回归通过，完整 CI 的运行时测试任务仍有失败，不记为全绿。
+
+
+### 终端字形与图片
+
+宽度不匹配的 Android fallback 字形改为等比缩小、居中，不再只压缩横轴；单格宽图标可能更小，但保持原始比例，不拉伸整行文字。字符背景和光标保持完整字格。
+
+App 终端已接入 **iTerm2 OSC 1337 内联 PNG/JPEG**，图片随所属字符格滚动、擦除和切换缓冲区。交互终端向 omp 声明 `PI_FORCE_IMAGE_PROTOCOL=iterm2`，`ubuntu` 透传该能力；不伪装 Kitty，也不强制非交互运行环境使用图片。更新后需新开终端、重新启动 omp，已有进程不会自动获得新环境变量。
+
+`TerminalGlyphInstrumentation`、`TerminalImageInstrumentation` 和 `TerminalScrollInstrumentation` 已在 ARM64 模拟器通过；实际 omp 18.10 图片组件输出的相机 JPEG 已在终端绘制。协议范围、内存限制与截图见 [架构与验收记录](docs/TERMUX_OMP_ASSESSMENT.md)。本次验证时 Zfold 未连接 ADB，尚未覆盖安装这一轮渲染修复。
 
 ## 结构
 

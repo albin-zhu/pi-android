@@ -39,6 +39,7 @@ import android.widget.Scroller;
 
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
+import com.termux.terminal.TerminalImage;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.textselection.TextSelectionCursorController;
 
@@ -54,6 +55,7 @@ public final class TerminalView extends View {
     public TerminalEmulator mEmulator;
 
     public TerminalRenderer mRenderer;
+    private final TerminalImageRenderer mImageRenderer = new TerminalImageRenderer();
 
     public TerminalViewClient mClient;
 
@@ -77,6 +79,9 @@ public final class TerminalView extends View {
     private int mMouseScrollStartX = -1, mMouseScrollStartY = -1;
     /** Keep track of the time when a touch event leading to sending mouse scroll events started. */
     private long mMouseStartDownTime = -1;
+    private long mContentDownTime = -1;
+    private String mTouchedLink;
+    private TerminalImage mTouchedImage;
 
     final Scroller mScroller;
 
@@ -134,7 +139,7 @@ public final class TerminalView extends View {
             @Override
             public boolean onUp(MotionEvent event) {
                 mScrollRemainder = 0.0f;
-                if (mEmulator != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !scrolledWithFinger) {
+                if (mEmulator != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !scrolledWithFinger && !hasTappedContent(event)) {
                     // Quick event processing when mouse tracking is active - do not wait for check of double tapping
                     // for zooming.
                     sendMouseEventCode(event, TerminalEmulator.MOUSE_LEFT_BUTTON, true);
@@ -154,7 +159,7 @@ public final class TerminalView extends View {
                     return true;
                 }
                 requestFocus();
-                mClient.onSingleTapUp(event);
+                if (!openTappedContent(event)) mClient.onSingleTapUp(event);
                 return true;
             }
 
@@ -282,6 +287,9 @@ public final class TerminalView extends View {
     public boolean attachSession(TerminalSession session) {
         if (session == mTermSession) return false;
         mTopRow = 0;
+        mContentDownTime = -1;
+        mTouchedLink = null;
+        mTouchedImage = null;
 
         mTermSession = session;
         mEmulator = null;
@@ -456,6 +464,7 @@ public final class TerminalView extends View {
                 // .. unless we're hitting the end of history transcript, in which
                 // case we abort text selection and scroll to end.
                 stopTextSelectionMode();
+                mTopRow = 0;
             } else {
                 skipScrolling = true;
                 mTopRow -= rowShift;
@@ -464,14 +473,10 @@ public final class TerminalView extends View {
         }
 
         if (!skipScrolling && mTopRow != 0) {
-            // Scroll down if not already there.
-            if (mTopRow < -3) {
-                // Awaken scroll bars only if scrolling a noticeable amount
-                // - we do not want visible scroll bars during normal typing
-                // of one row at a time.
-                awakenScrollBars();
-            }
-            mTopRow = 0;
+            // A user browsing history is not following live output. Repaints do
+            // not move the viewport; newly archived rows move the same content
+            // further above the live screen. Clamp only when old history expires.
+            mTopRow = Math.max(-rowsInHistory, mTopRow - mEmulator.getScrollCounter());
         }
 
         mEmulator.clearScrollCounter();
@@ -534,6 +539,28 @@ public final class TerminalView extends View {
         return new int[] { column, row };
     }
 
+    private void captureTappedContent(MotionEvent event) {
+        mContentDownTime = event.getDownTime();
+        mTouchedLink = null;
+        mTouchedImage = null;
+        if (isSelectingText() || event.getX() < 0 || event.getY() < mRenderer.mFontLineSpacingAndAscent) return;
+        int[] cell = getColumnAndRow(event, true);
+        mTouchedLink = mEmulator.getScreen().getHyperlink(cell[0], cell[1]);
+        if (mTouchedLink == null) mTouchedImage = mEmulator.getScreen().getImage(cell[0], cell[1]);
+    }
+
+    private boolean hasTappedContent(MotionEvent event) {
+        return event.getDownTime() == mContentDownTime && (mTouchedLink != null || mTouchedImage != null);
+    }
+
+    private boolean openTappedContent(MotionEvent event) {
+        if (!hasTappedContent(event)) return false;
+        // Use the touched content, not whatever a streaming redraw put under the pointer later.
+        if (mTouchedLink != null) mClient.onOpenLink(mTouchedLink);
+        else if (mTouchedImage.bitmap != null && !mTouchedImage.bitmap.isRecycled()) mClient.onOpenImage(mTouchedImage.bitmap);
+        return true;
+    }
+
     /** Send a single mouse event code to the terminal. */
     void sendMouseEventCode(MotionEvent e, int button, boolean pressed) {
         int[] columnAndRow = getColumnAndRow(e, false);
@@ -588,6 +615,7 @@ public final class TerminalView extends View {
     public boolean onTouchEvent(MotionEvent event) {
         if (mEmulator == null) return true;
         final int action = event.getAction();
+        if (action == MotionEvent.ACTION_DOWN) captureTappedContent(event);
 
         if (isSelectingText()) {
             updateFloatingToolbarVisibility(event);
@@ -607,7 +635,7 @@ public final class TerminalView extends View {
                         if (!TextUtils.isEmpty(text)) mEmulator.paste(text.toString());
                     }
                 }
-            } else if (mEmulator.isMouseTrackingActive()) { // BUTTON_PRIMARY.
+            } else if (mEmulator.isMouseTrackingActive() && !hasTappedContent(event)) { // BUTTON_PRIMARY.
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
                     case MotionEvent.ACTION_UP:
@@ -959,8 +987,8 @@ public final class TerminalView extends View {
 
     /** Check if the terminal size in rows and columns should be updated. */
     public void updateSize() {
-        int viewWidth = getWidth();
-        int viewHeight = getHeight();
+        int viewWidth = getWidth() - getPaddingLeft() - getPaddingRight();
+        int viewHeight = getHeight() - getPaddingTop() - getPaddingBottom();
         if (viewWidth == 0 || viewHeight == 0 || mTermSession == null) return;
 
         // Set to 80 and 24 if you want to enable vttest.
@@ -968,7 +996,9 @@ public final class TerminalView extends View {
         // A phone keyboard can leave only two visible lines; keep the cursor in that viewport.
         int newRows = Math.max(2, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
 
-        if (mEmulator == null || (newColumns != mEmulator.mColumns || newRows != mEmulator.mRows)) {
+        if (mEmulator == null || newColumns != mEmulator.mColumns || newRows != mEmulator.mRows
+                || (int) mRenderer.getFontWidth() != mEmulator.getCellWidthPixels()
+                || mRenderer.getFontLineSpacing() != mEmulator.getCellHeightPixels()) {
             mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(), mRenderer.getFontLineSpacing());
             mEmulator = mTermSession.getEmulator();
             mClient.onEmulatorSet();
@@ -995,6 +1025,7 @@ public final class TerminalView extends View {
             }
 
             mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3]);
+            mImageRenderer.render(mEmulator, canvas, mTopRow, mRenderer);
 
             // render the text selection handles
             renderTextSelection();

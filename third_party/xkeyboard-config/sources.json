@@ -1,0 +1,21 @@
+{
+  "project": "xkeyboard-config",
+  "version": "2.29-2",
+  "distribution": "Ubuntu 20.04 (architecture-independent data)",
+  "package": {
+    "url": "https://archive.ubuntu.com/ubuntu/pool/main/x/xkeyboard-config/xkb-data_2.29-2_all.deb",
+    "sha256": "890cc198b5a1023e3b3a879448524267d338b046a415bae7aff6216165bc4085"
+  },
+  "source": [
+    {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/x/xkeyboard-config/xkeyboard-config_2.29.orig.tar.gz",
+      "sha256": "d8034c8b771b51140409039f8e3351e90a0092238b81af04239794e8d3dc0813"
+    },
+    {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/x/xkeyboard-config/xkeyboard-config_2.29-2.diff.gz",
+      "sha256": "8dc241399c899e7c4d2ae41e442ec310b45e70b7935aaffec66c2d1d0c065bf4"
+    }
+  ],
+  "source_checksum_record": "https://archive.ubuntu.com/ubuntu/pool/main/x/xkeyboard-config/xkeyboard-config_2.29-2.dsc",
+  "packaging": "All files below usr/share/X11/xkb, with relative symlinks materialized, stored in x11/xkb.zip. This version uses xz compression supported by Python's standard library; no dpkg, zstd or NDK is needed. Guest applications may install newer keyboard layouts separately."
+}

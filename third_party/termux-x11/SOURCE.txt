@@ -1,0 +1,47 @@
+Termux:X11 embedded native engine and adapted Android JNI integration
+
+Upstream: https://github.com/termux/termux-x11
+Exact source: fa3a8b430e2896a19f44c99a9cb056254615ae06
+Official APK version: 1.03.01-fa3a8b4-06.10.26
+License: GNU GPL version 3; see LICENSE.txt. Native dependencies also retain
+ their respective upstream licenses in the source repositories.
+
+The full commit appears in the APK's classes.dex. The release body identifies
+that same commit. The release tag "nightly" is NOT an immutable source pin:
+scripts/x11_assets.py verifies the APK checksum, embedded commit string and
+extracted native checksum, and refuses a changed nightly artifact. sources.json
+records all observed artifact checksums, source archive checksum, dynamic
+libraries and exact submodule gitlinks. The source archive alone is incomplete:
+GitHub-generated archives omit submodule contents.
+
+Retrieve the corresponding upstream source, including build scripts and all
+pinned dependencies (do not use submodule update --remote):
+
+  git clone --no-checkout https://github.com/termux/termux-x11.git termux-x11-source
+  git -C termux-x11-source checkout --detach fa3a8b430e2896a19f44c99a9cb056254615ae06
+  git -C termux-x11-source submodule update --init --recursive
+
+Check the submodule commits against sources.json. The exact superproject tree
+includes CMake recipes, patches and Gradle/toolchain configuration. Native
+sources are under lorie/src/main/cpp. Upstream builds the Xlorie CMake target;
+lorie/version.gradle records its NDK version. No native modifications are made
+to the extracted libXlorie.so by this project. The upstream engine's auxiliary
+TCP knock listener is not disabled by -nolisten tcp: the embedding service must
+apply this project's process-wide network guard before loading/starting it.
+
+This project's adapted Java sources, network guard, packaging scripts and build
+configuration are also part of the source needed for the combined application.
+Its source distribution must correspond to the specific distributed APK.
+
+A license notice and an upstream link alone are NOT a declaration of GPL
+compliance. Before distributing binaries, provide recipients equivalent access
+to the complete corresponding source (including every pinned submodule, local
+modifications and build/install scripts), applicable notices and any required
+installation information under GPLv3. Preserve availability for the required
+period; do not rely on the moving nightly tag. The distributor remains
+responsible for the combined work's licensing and source-conveyance obligations.
+
+Keyboard data is independently packaged from Ubuntu's xkb-data 2.29-2. Its
+source URLs, checksums and copyright/license text are in
+third_party/xkeyboard-config/. The compact ZIP contains the complete installed
+XKB tree rather than only one keyboard layout.

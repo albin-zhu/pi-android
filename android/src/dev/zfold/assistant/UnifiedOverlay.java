@@ -83,8 +83,9 @@ final class UnifiedOverlay {
     body.setElevation(Ui.dp(app, 10));
     body.setPadding(Ui.dp(app, 10), Ui.dp(app, 9), Ui.dp(app, 5), Ui.dp(app, 9));
     body.setMinimumHeight(Ui.dp(app, 48));
+    PiRuntime runtime=PiRuntime.running();
 
-    View mark = Ui.agentMark(app, PiRuntime.get(app).agentAvatar, 30);
+    View mark = Ui.agentMark(app, runtime==null?null:runtime.agentAvatar, 30);
     if(value==Mode.CALL){
       android.widget.FrameLayout avatar=new android.widget.FrameLayout(app);avatar.addView(mark,new android.widget.FrameLayout.LayoutParams(Ui.dp(app,30),Ui.dp(app,30),Gravity.CENTER));
       avatar.setBackground(Ui.ripple(app,Color.TRANSPARENT,24,0xffe8eff8));avatar.setContentDescription("点击头像打断语音");avatar.setFocusable(true);avatar.setOnClickListener(v->{Ui.click(v);VoiceTurnController controller=MainActivity.activeVoice();if(controller!=null)controller.forceInterrupt();});body.addView(avatar,new LinearLayout.LayoutParams(Ui.dp(app,48),Ui.dp(app,48)));
@@ -93,7 +94,7 @@ final class UnifiedOverlay {
     LinearLayout labels = new LinearLayout(app);
     labels.setOrientation(LinearLayout.VERTICAL);
     labels.setPadding(Ui.dp(app, 10), 0, 0, 0);
-    android.widget.TextView title = Ui.text(app, PiRuntime.get(app).agentName, 13, 0xffedf4ff);
+    android.widget.TextView title = Ui.text(app, runtime==null?"独立手机工具":runtime.agentName, 13, 0xffedf4ff);
     title.setTypeface(android.graphics.Typeface.create("sans-serif-medium", 0));
     title.setSingleLine(true);
     title.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -104,17 +105,16 @@ final class UnifiedOverlay {
     labels.addView(statusView);
     body.addView(labels, new LinearLayout.LayoutParams(0, -2, 1f));
 
-    PiRuntime runtime = PiRuntime.get(app);
     if (value == Mode.TASK && !takeoverMode) {
       body.addView(new Ui.Action(app, R.drawable.ic_microphone, "", "语音接管当前任务", 0xffe8eff8, Color.TRANSPARENT,
-          () -> AssistantOverlay.showForVoice(app)), new LinearLayout.LayoutParams(Ui.dp(app, 48), Ui.dp(app, 48)));
+          () -> {PhoneToolDispatcher.stopExternal();AssistantOverlay.showForVoice(app);}), new LinearLayout.LayoutParams(Ui.dp(app, 48), Ui.dp(app, 48)));
       body.addView(new Ui.Action(app, R.drawable.ic_x, "", "停止当前手机操作", 0xffe8eff8, Color.TRANSPARENT,
-          () -> runtime.send(PiRuntime.json("type", "stop"))), new LinearLayout.LayoutParams(Ui.dp(app, 48), Ui.dp(app, 48)));
-      body.setOnClickListener(view -> {hideLocked(); AssistantOverlay.show(app);});
+          () -> PhoneToolDispatcher.stopPhone(app)), new LinearLayout.LayoutParams(Ui.dp(app, 48), Ui.dp(app, 48)));
+      body.setOnClickListener(view -> {PhoneToolDispatcher.stopExternal();hideLocked(); AssistantOverlay.show(app);});
       body.setContentDescription("Zfold 正在操作手机。点主体展开助手；右侧可用语音接管或停止。");
     } else if (value == Mode.CALL) {
-      if (runtime.busy) body.addView(new Ui.Action(app, R.drawable.ic_x, "", "停止当前手机操作", 0xffe8eff8, Color.TRANSPARENT,
-          () -> runtime.send(PiRuntime.json("type", "stop"))), new LinearLayout.LayoutParams(Ui.dp(app, 48), Ui.dp(app, 48)));
+      if (runtime!=null&&runtime.busy) body.addView(new Ui.Action(app, R.drawable.ic_x, "", "停止当前手机操作", 0xffe8eff8, Color.TRANSPARENT,
+          () -> PhoneToolDispatcher.stopPhone(app)), new LinearLayout.LayoutParams(Ui.dp(app, 48), Ui.dp(app, 48)));
       body.addView(new Ui.Action(app, R.drawable.ic_x, "", "结束实时通话", 0xffff4553, Color.TRANSPARENT,
           () -> {
             VoiceTurnController controller = MainActivity.activeVoice();

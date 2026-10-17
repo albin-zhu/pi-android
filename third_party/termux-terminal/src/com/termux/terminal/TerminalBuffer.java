@@ -292,8 +292,17 @@ public final class TerminalBuffer {
                 } else {
                     for (int i = 0; i < oldLine.getSpaceUsed(); i++)
                         // NEWLY INTRODUCED BUG! Should not index oldLine.mStyle with char indices
-                        if (oldLine.mText[i] != ' '/* || oldLine.mStyle[i] != currentStyle */)
+                        if (oldLine.mText[i] != ' ')
                             lastNonSpaceIndex = i + 1;
+                }
+                if (oldLine.hasImages()) {
+                    lastNonSpaceIndex = oldLine.getSpaceUsed();
+                    justToCursor = false;
+                }
+                int lastHyperlinkColumn = oldLine.getLastHyperlinkColumn();
+                if (lastHyperlinkColumn >= 0) {
+                    lastNonSpaceIndex = Math.max(lastNonSpaceIndex, oldLine.findStartOfColumn(lastHyperlinkColumn + 1));
+                    justToCursor = false;
                 }
 
                 int currentOldCol = 0;
@@ -321,6 +330,15 @@ public final class TerminalBuffer {
                     int offsetDueToCombiningChar = ((displayWidth <= 0 && currentOutputExternalColumn > 0) ? 1 : 0);
                     int outputColumn = currentOutputExternalColumn - offsetDueToCombiningChar;
                     setChar(outputColumn, currentOutputExternalRow, codePoint, styleAtCol);
+                    if (displayWidth > 0) {
+                        TerminalRow output = allocateFullLineIfNecessary(externalToInternalRow(currentOutputExternalRow));
+                        for (int x = 0; x < displayWidth; x++) {
+                            TerminalImage image = oldLine.getImage(currentOldCol + x);
+                            if (image != null) output.setImage(outputColumn + x, image, oldLine.getImageX(currentOldCol + x), oldLine.getImageY(currentOldCol + x));
+                            String hyperlink = oldLine.getHyperlink(currentOldCol + x);
+                            if (hyperlink != null) output.setHyperlink(outputColumn + x, hyperlink);
+                        }
+                    }
 
                     if (displayWidth > 0) {
                         if (oldCursorRow == externalOldRow && oldCursorColumn == currentOldCol) {
@@ -344,6 +362,7 @@ public final class TerminalBuffer {
                     currentOutputExternalColumn = 0;
                 }
             }
+            for (TerminalRow oldLine : oldLines) if (oldLine != null) oldLine.clearImages();
 
             cursor[0] = newCursorColumn;
             cursor[1] = newCursorRow;
@@ -449,14 +468,36 @@ public final class TerminalBuffer {
     }
 
     public void setChar(int column, int row, int codePoint, long style) {
+        setChar(column, row, codePoint, style, null);
+    }
+
+    void setChar(int column, int row, int codePoint, long style, String hyperlink) {
         if (row  < 0 || row >= mScreenRows || column < 0 || column >= mColumns)
             throw new IllegalArgumentException("TerminalBuffer.setChar(): row=" + row + ", column=" + column + ", mScreenRows=" + mScreenRows + ", mColumns=" + mColumns);
         row = externalToInternalRow(row);
-        allocateFullLineIfNecessary(row).setChar(column, codePoint, style);
+        allocateFullLineIfNecessary(row).setChar(column, codePoint, style, hyperlink);
     }
 
     public long getStyleAt(int externalRow, int column) {
         return allocateFullLineIfNecessary(externalToInternalRow(externalRow)).getStyle(column);
+    }
+
+    /** Get an OSC 8 target at a visual cell, including negative transcript rows, without allocating a row. */
+    public String getHyperlink(int column, int externalRow) {
+        if (column < 0 || column >= mColumns || externalRow < -mActiveTranscriptRows || externalRow >= mScreenRows) return null;
+        TerminalRow line = mLines[externalToInternalRow(externalRow)];
+        return line == null ? null : line.getHyperlink(column);
+    }
+
+    /** Get an inline image at the same visual coordinates as text and hyperlinks. */
+    public TerminalImage getImage(int column, int externalRow) {
+        if (column < 0 || column >= mColumns || externalRow < -mActiveTranscriptRows || externalRow >= mScreenRows) return null;
+        TerminalRow line = mLines[externalToInternalRow(externalRow)];
+        return line == null ? null : line.getImage(column);
+    }
+
+    void clearHyperlinks() {
+        for (TerminalRow line : mLines) if (line != null) line.clearHyperlinks();
     }
 
     /** Support for http://vt100.net/docs/vt510-rm/DECCARA and http://vt100.net/docs/vt510-rm/DECCARA */
@@ -484,7 +525,20 @@ public final class TerminalBuffer {
         }
     }
 
+    /** Attach to the same row/cell objects as text, so ring scrolling and block operations carry images. */
+    void setImage(int column, int row, TerminalImage image, int imageX, int imageY) {
+        allocateFullLineIfNecessary(externalToInternalRow(row)).setImage(column, image, imageX, imageY);
+    }
+
+    void clearImages() {
+        for (TerminalRow line : mLines) if (line != null) line.clearImages();
+    }
+
     public void clearTranscript() {
+        for (int row = -mActiveTranscriptRows; row < 0; row++) {
+            TerminalRow line = mLines[externalToInternalRow(row)];
+            if (line != null) line.clearImages();
+        }
         if (mScreenFirstRow < mActiveTranscriptRows) {
             Arrays.fill(mLines, mTotalRows + mScreenFirstRow - mActiveTranscriptRows, mTotalRows, null);
             Arrays.fill(mLines, 0, mScreenFirstRow, null);

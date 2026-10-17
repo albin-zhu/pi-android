@@ -1,0 +1,116 @@
+{
+  "project": "Termux:X11",
+  "repository": "https://github.com/termux/termux-x11",
+  "commit": "fa3a8b430e2896a19f44c99a9cb056254615ae06",
+  "license": "GPL-3.0",
+  "apk": {
+    "url": "https://github.com/termux/termux-x11/releases/download/nightly/termux-x11-universal-debug.apk",
+    "sha256": "64995746d1887a0e70bc8977d4a9c5ea56e3e00eadd4a6eeab32ae6048ba733a",
+    "release_id": 397927753,
+    "asset_id": 616219007,
+    "version": "1.03.01-fa3a8b4-06.10.26",
+    "provenance": "Release body and embedded classes.dex commit string agree on the full source commit. The nightly tag is mutable; downloads are accepted only with this SHA-256."
+  },
+  "native": {
+    "member": "lib/arm64-v8a/libXlorie.so",
+    "sha256": "8ad76408710c21b9a61d3db07900e5bb4e3f88efb1670ac0ff3a2166f403567d",
+    "modified": false,
+    "needed": [
+      "libGLESv2.so",
+      "libandroid.so",
+      "libmediandk.so",
+      "liblog.so",
+      "libm.so",
+      "libz.so",
+      "libEGL.so",
+      "libc.so"
+    ]
+  },
+  "source_archive": {
+    "url": "https://codeload.github.com/termux/termux-x11/tar.gz/fa3a8b430e2896a19f44c99a9cb056254615ae06",
+    "sha256": "8157f93bd764c09b01179a12aeaab1362e354ae7866caf2bc84b17e189fc45f5",
+    "includes_submodules": false
+  },
+  "submodules": [
+    {
+      "path": "lorie/src/main/cpp/bzip2",
+      "commit": "6a8690fc8d26c815e798c588f796eabe9d684cf0",
+      "url": "https://gitlab.com/bzip2/bzip2.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/libepoxy",
+      "commit": "c84bc9459357a40e46e2fec0408d04fbdde2c973",
+      "url": "https://github.com/anholt/libepoxy"
+    },
+    {
+      "path": "lorie/src/main/cpp/libfontenc",
+      "commit": "780d1f6f192a331de7b298a96e23ebc44d2a884b",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libfontenc.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/libtirpc",
+      "commit": "5ca4ca92f629d9d83e83544b9239abaaacf0a527",
+      "url": "https://github.com/alisw/libtirpc"
+    },
+    {
+      "path": "lorie/src/main/cpp/libx11",
+      "commit": "6c75545a1deb51f5903992c52af6bc35cc9bc103",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libx11.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxau",
+      "commit": "a9c65683e68b3a4349afee5d7673b393fb924d2e",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxau.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxcvt",
+      "commit": "dd8631c61465cc0de5e476c7a98e56528d62b163",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxcvt.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxdmcp",
+      "commit": "1192d3bc407348ff316bd3bffc791b3ac73f591b",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxdmcp.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxfont",
+      "commit": "975cc6526e892c6fad8fa49d0fef58565fbaa003",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxfont.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxkbfile",
+      "commit": "42e5dedd7fd3c7c73f3870a8751893c03c1afc69",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxkbfile.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxshmfence",
+      "commit": "89f064748554e11832a3ec783945e1f4c7fe846e",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxshmfence.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxtrans",
+      "commit": "cf05ba4a10c90da2c63805a5375e983b174e28b0",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxtrans.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/pixman",
+      "commit": "9cc163c9da0fb4da430641715313d95a6ec466d9",
+      "url": "https://gitlab.freedesktop.org/pixman/pixman.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/xkbcomp",
+      "commit": "2c7789785981ad1fce3858c726615b49293f7de0",
+      "url": "https://gitlab.freedesktop.org/xorg/app/xkbcomp.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/xorgproto",
+      "commit": "6d3907b6d5dc4aa7d7ee6ee5d7d8714e7466630b",
+      "url": "https://gitlab.freedesktop.org/xorg/proto/xorgproto.git"
+    },
+    {
+      "path": "lorie/src/main/cpp/xserver",
+      "commit": "65d790bd208ec380b196eb98f144abb0b32e334d",
+      "url": "https://gitlab.freedesktop.org/xorg/xserver.git"
+    }
+  ]
+}
