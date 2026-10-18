@@ -2,6 +2,31 @@
 
 当前交付状态（2026-10-12）：Fold7 已覆盖安装 0.2.87-compat28，实际 Pi SDK 为 1.0.4，`openai-codex/gpt-6.1-sol` 与原会话恢复；模型中断原因可从历史查看，自动重试/压缩进度可见。八份私有配置指纹保留已核对。本次只修复可观察性与构建版本校验，不宣称消除上游连接故障或完成 CLI/TUI 迁移。下面保留各版本原始记录。
 
+## Markdown 相对资源与表格修复
+
+- 用户反馈相对 Markdown／图片链接未渲染、表格错乱；原生 `Ui.markdown` 仅有基础排版且 `PreviewActivity` 移除了非 http(s) 链接。文件预览现已清理该路径，改为 `marked 18.0.11` 和独立离线 WebView；聊天的原生 Markdown 不变。固定资产随正常 bundle 打包，Pi 仍为 1.0.4。
+- 新增 `PreviewMarkdownWeb`、`PreviewMarkdownPaths`、`PreviewTree`：相对文档／图片按当前文档路径解析，允许授权根内的父目录引用，严格单次解码和 canonical 边界；支持中文锚点、文档返回历史、图片单独预览及渲染完成后的滚动恢复。Markdown 仅可加载固定脚本、源码 JSON 和授权图片，SVG 响应使用禁脚本 CSP；原始 HTML 转义、网络图片和危险协议不加载。
+- 外部单 URI 仍只读取该文档。新增系统文件夹选择和临时只读树授权，通过 provider ID 与子项元数据定位；不能确认原始文档时要求明确选择 Markdown。未猜测 ID 的文件路径，不持久化授权，不自动打开同名文件。授权树内 `.md` 和图片也支持提供方返回通用 MIME 的情况。
+- 9 项 renderer 回归通过，覆盖 GFM 表格结构／列对齐／转义竖线／代码、参考链接与图片、Unicode 锚点、原始 HTML 和危险 URL 拒绝、单文件授权限制。`PreviewMarkdownPathsCheck` 与 `PreviewFilesCheck` 通过，包含实际文件、编码路径、父目录引用、符号链接越界及读取限制。
+- 临时 smoke 读取共享目录中的真实 Markdown／SVG 文件，执行实际 `renderMarkdown`：两个表格输出 12 个表头、16 个数据单元格；中文下一篇文档、锚点及父目录 SVG 目标可解析，原始脚本未成为活动标签，单文件授权没有生成相邻图片请求。输出 `MARKDOWN_REAL_FILES_SMOKE_OK`。此结果不代表浏览器布局或 Android URI 授权已经实测通过。
+- 已完成 Android Java/API 35、D8、资源链接和独立验证包签名。准备了 `dev.zfold.assistant.markdowncheck` 及另一 UID 的 `dev.zfold.assistant.markdownfixture`：后者是私有文件、opaque document ID 的真实 DocumentsProvider，便于后续系统树选择及授权检查；均未安装。native 复用缓存，不是完整 NDK 冷构建。
+- **视觉及真机授权交互尚未验收**：此前 ADB `127.0.0.1:36159` 拒绝连接，手机实际窗口树只有 SystemUI／Keyguard；手机桥派发样例 URL 的回执未作为渲染成功证据。宿主 ARM64 浏览器运行时下载也未完成。本次发现 `127.0.0.1:46013` 已连接，用于原密钥签名和安装包交付，没有补做表格窄屏布局、图片实际显示、链接／返回／旋转及跨 UID 文件夹授权验收。
+- 新手动安装包：`/workspace/workspace/artifacts/Zfold-0.2.87-compat28-markdown.apk`，52,103,920 bytes，SHA-256 `e011e3ce28892a82212e5a1ff70aa6d566db103b7ec4ca3c1cf0200a18a88737`。包名 `dev.zfold.assistant`，versionCode 287，versionName `0.2.87-compat28-markdown`，targetSdk 28，ARM64。APK v3 签名、zipalign 校验通过，证书 SHA-256 为原应用的 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`；发布副本逐字节一致，Android 共享路径的 SHA-256 也一致。
+- 私钥仅挂载到独立签名进程，没有复制到共享目录。未自动安装、重启主应用、提交或推送。此前 `Zfold-0.2.87-compat28-documents.apk` 不包含本次修复，应使用新的 `-markdown.apk`。
+
+## 共享路径打开与安卓 Markdown 文件入口
+
+- `OpenTargets.local` 统一调用共享路径解析器：补齐公共原生入口的 `/workspace` 转换，保留 Android 路径别名、单次 URI 解码及 canonical 越界检查。拒绝私有路径时说明共享范围，不扩大到 `/root`、`/tmp`。
+- 新增导出的 `MarkdownEntryActivity`，只转交 `ACTION_VIEW` 的单文档 URI 和只读授权；`PreviewActivity` 仍不导出。Markdown MIME、纯文本扩展名及读取授权在读取前检查；省略 MIME 时由后台读取线程查询 provider。文档流有 2 MiB 硬上限，不依赖 `available()` 或提供方声明的大小，复用严格编码及二进制检查。刷新、取消与外部转交原 URI 已接入。
+- 实际执行 `TerminalLinkTargetsCheck` 和 `PreviewFilesCheck`，共享路径／别名、Unicode 与单次解码、路径穿越／符号链接越界、MIME／扩展名、未知长度／短读／零读／超限流及编码拒绝检查通过。断言关注接收、拒绝和内容，不锁定错误文案。
+- 临时 JVM smoke 从共享存储中的真实临时 Markdown 文件执行「编码后的 guest URI → canonical 文件 → 文件／InputStream 两种读取」，内容一致，输出 `DOCUMENT_OPEN_SMOKE_OK`。这是宿主读取链路证据，不是 Android 文件管理器授权或页面渲染验收；临时文件自动删除。
+- 全部 Android／终端 Java 使用 API 35 编译、D8、资源／Manifest 链接和 zipalign 完成，输出 `ANDROID_DOCUMENT_BUILD_OK`。修复了编译发现的 `Intent.setClipData` 返回 `void`、不能继续链式调用的问题。native 复用缓存主包，JS 未改动并复用现有 bundle；不是完整 NDK 冷构建。
+- 当前 `phone list` 可连接桥并返回 `/workspace` → `/storage/emulated/0/pi` 的映射信息，同时返回 `bindingVerified:false`；不据此声称任意 guest 路径可访问。用户尚未提供原报错目标，因此公共入口漏转换是已确认的代码缺口，但尚未证明就是该次点击失败的具体原因。
+- **真机交互尚未验收**：旧 ADB 地址失效后，用户提供 `127.0.0.1:36159` 并明确要求只打包、自行安装。本次连接仅用于私有签名进程和共享 APK 校验，没有安装隔离包或主应用；文件管理器候选、跨 UID 临时授权、撤销授权、旋转／刷新和外部选择器仍未验证。
+- 手动安装包：`/workspace/workspace/artifacts/Zfold-0.2.87-compat28-documents.apk`，52,075,029 bytes，SHA-256 `bf4bf962f17bd84a0c898a9da6b8787424f8526cf012b660f3cad07a95c6317f`。包名 `dev.zfold.assistant`，versionCode 287，versionName `0.2.87-compat28-documents`，targetSdk 28，ARM64，图标入口为 `LauncherActivity`；ZIP 完整性、zipalign 和 APK v3 签名验证通过。
+- 签名证书 SHA-256 为原应用的 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。私钥仅挂载到独立签名进程，未复制到共享目录。发布副本与签名产物逐字节一致，Android `/storage/emulated/0/pi/workspace/artifacts/` 下同一 APK 的 SHA-256 也一致。没有执行安装、重启主应用、提交或推送。
+- 当前 CLI `omp --help` 确认版本 18.11.3 支持 `@image.png` 附件；已有会话可读取用户提供的共享图片路径。没有为验证用法自动截屏或调用视觉模型。
+
 ## 图标启动页与新终端默认环境
 
 - 新增独立 `LauncherActivity` 分发应用图标入口，默认终端，可选 GUI 或记住上次的终端／GUI；明确的聊天、语音、分享和设置 Intent 不经此分发。终端菜单与 GUI 工作台新增同一「启动设置」入口。
@@ -12,6 +37,28 @@
 - 保留用户现有文件预览等未提交改动。未安装验证包或主 APK，未修改手机启动偏好、终端配置或已有会话，未提交／推送。
 - 手动安装包：`/workspace/workspace/artifacts/Zfold-0.2.87-compat28-startup.apk`，52,070,933 bytes，SHA-256 `6773d0da5d195d990640eb45fce4c65091605f2c4d23f156369b78457b5908ca`。主包名 `dev.zfold.assistant`、versionCode 287、targetSdk 28、ARM64、`LauncherActivity` 图标入口及内嵌 Pi 1.0.4 已从 APK 核对；JS 使用当前源码重新 bundle，Java／D8／资源重新构建，native 复用既有主包。
 - 原签名验证通过，证书 SHA-256 为 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。私钥仅挂载到独立签名进程，未复制到共享目录；发布副本与签名产物 SHA-256 一致。没有执行 APK 安装。
+
+## 文件 PreviewActivity · 2026-10-17
+
+### 已实施
+
+- `OpenTargets` 统一处理终端 `xdg-open`、文件链接与本应用 artifact URI：共享工作区的 Markdown、HTML/HTM、SVG 和常见文本优先进入非导出的 `PreviewActivity`；外部打开显式使用系统选择器，APK 确认、目录及其他应用 content URI 路由保留。
+- 原生 Markdown／可选复制文本、HTML/SVG 离线 WebView、刷新、源码切换、错误显示及外部打开已接入。HTML 使用每次加载独立的 HTTPS 虚拟来源，只提供文档同目录及子目录资源，无 JavaScript 原生桥；网络、文件/content 访问、框架页、表单、下载与权限请求禁用。WebView 保留白色默认画布，避免未指定样式的黑色文字在深色原生背景上不可见。
+- 严格 UTF-8、带 BOM 的 UTF-16、2 MiB 上限与 canonical 资源边界由 `PreviewFiles` 集中处理。`.gtm` 只按可读文本处理；Markdown 是基础排版，不加载图片或相对文件链接。
+
+### 已执行的验证
+
+- `javac` + `PreviewFilesCheck` 实际读取临时文件：中文／空格路径、UTF-8/BOM、UTF-16LE/BE、空文件、未知扩展名文本、无效编码、二进制、恰好 2 MiB／超限、缺失文件、目录、内部符号链接与越界符号链接均通过，临时目录由检查程序删除。
+- `npm run bundle` 完成；`phone-open.test.mjs`、`image-open-save.test.mjs` 共 5 项通过。其中 opener 测试实际启动 CLI，覆盖预览／外部派发、安装待确认、拒绝、失败及执行结果不确定的退出语义；不把模拟桥回执视为 Android 页面渲染证据。
+- 最终全部 Android／终端 Java 使用 API 35 编译、D8、资源链接及 zipalign 完成。JS 重新打包，未改动的 native 库复用上一已验证主包；不是完整 NDK 冷构建。资源链接使用上游 ARM64 静态 SDK 工具 35.0.2，下载归档 SHA-256 为 `db1cea2c4454d5f9c5a802646b2d1cf560b4ee7badbe23e51ab8e1881bb50fc2`。
+- 独立测试包 `dev.zfold.assistant.previewcheck` 已完成签名及签名验证；它使用真实 `OpenTargets` 和 `PreviewActivity`，临时启动器不进入主包。测试夹具包含中文空格 Markdown、相对 CSS/JS/SVG/JSON 网页、GTM、UTF-16、二进制及超限文本。
+
+### 当前阻塞与交付边界
+
+- 手机当前锁屏，ADB 无已连接设备；尚未安装或实际打开新增预览页。**Markdown 视觉效果、WebView 本地资源／脚本／fetch、按钮交互、刷新及 Android 外部选择器尚未完成实机验收。** 不能用编译、签名或 CLI 回执代替这些结论。
+- 主应用未重装，既有终端和游戏进程未主动结束。主包目前为已对齐的未签名 APK，52,037,966 bytes，SHA-256 `9c58711f276f7d8c463872911c88ff1d805e38840f7468887793c9e40cab5462`；尚未使用原主应用私钥签名，不能当作可覆盖安装包。
+- 独立验证包为 52,066,841 bytes，SHA-256 `26bf92d1ca4e5964837d0c955fcef23153fd00316e20e83688d34f8ee8e7b43a`。APK 与签名输入暂存于共享工作区 `.preview-build-20261017/`，测试文档暂存于 `.preview-smoke-20261017/`，等待解锁后继续验证；没有复制主应用私钥。
+- 本轮没有重跑已知存在 session-catalog 基线失败的全套测试，也没有提交或推送这次预览修改。README 与 opener 使用说明已同步。
 
 ## 通用 X11 / Wine 集成 · Fold7 真机
 

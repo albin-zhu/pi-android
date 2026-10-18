@@ -673,6 +673,42 @@ GPU 脚本要求已按 [Adreno 830 验证记录](VERIFICATION.md#android-gpu-ver
 
 全量 Android Java 编译、OSC 8/字符格生命周期和路径边界检查通过；实际 `KeyHandler` 的 Enter 编码经 Bash PTY 执行得到预期结果。用户已确认安装 `8d16f0d` 版；内容点击预览尚未完成真机交互验收。
 
+### 文件预览与 xdg-open
+
+共享工作区内的 Markdown、HTML/HTM、SVG 和常见文本、代码、JSON/YAML/XML 文件，默认进入应用内独立的 `PreviewActivity`，不再依赖手机安装对应阅读器。终端 `xdg-open`、文件链接和本应用的 artifact URI 使用同一条打开路由；网页 URL、目录及其他应用的 content URI 仍走系统 Intent，APK 仍先确认安装。
+
+```sh
+xdg-open '/workspace/生成报告.md'
+xdg-open '/workspace/demo/index.html'
+```
+
+预览页提供刷新、渲染／源码切换、外部打开和范围说明。刷新会重新读取文件，不修改内容；外部打开使用系统应用选择器，不再回到内部预览。未知文件没有外部处理器时，进入预览页尝试文本读取；不能读取的文件显示原因，不改成打开父目录。
+
+- Markdown 使用离线 WebView 和固定版本 `marked 18.0.11` 渲染 GFM：支持表格、列对齐、转义竖线、代码块、列表、引用和参考链接。宽表格单独横向滚动，不挤宽正文；图片按可用宽度缩放。共享目录内支持相对 Markdown／图片链接、中文标题锚点及返回上篇文档；`../` 只能在共享根目录内解析，符号链接不能越界。
+- Markdown 内的原始 HTML 显示为文本，不作为脚本或另一个 HTML 页面执行；只加载内置渲染脚本和授权范围内的图片，包括 SVG。网络图片不自动加载，缺失图片或缺少授权会显示说明；手动点击 http(s) 链接才打开外部应用。Markdown 页不提供 JavaScript 原生桥。
+- HTML/SVG 在独立的离线 WebView 来源中渲染，可执行本地脚本、读取文档同目录及子目录内的资源，包括相对 CSS、JS、图片及本地数据。禁止外网、跨目录资源、`file:`/`content:` 访问、嵌入页面、表单、下载及网页权限请求，没有 JavaScript 原生桥。需要联网或完整浏览器能力时使用「外部打开」。
+- 文本最大 2 MiB，支持严格 UTF-8，以及带 BOM 的 UTF-16LE/BE；超限、无效编码、二进制或已移除文件显示明确错误，不截断或伪装为文本。`.gtm` 仅按文本处理，不宣称支持某个专有 GTM 格式。
+- 通过文件路径打开时，只允许共享工作区：Ubuntu `/workspace` 对应 Android `/storage/emulated/0/pi`，`/workspace/workspace` 对应手机 `pi/workspace`。公共原生打开入口和终端链接统一转换路径并检查 canonical 边界；Ubuntu 私有 `/root`、`/tmp` 不会因为运行在同一手机上而自动共享。PDF、Office 等未新增内部格式解析器。
+
+安卓文件管理器新增 Markdown「打开方式 → 橙橙」入口，接受 Markdown MIME，或文件名为 `.md`、`.markdown`、`.mdown`、`.mkd` 的 `text/plain` 文档。文件管理器必须提供 `content://` URI 和读取授权；默认只读取选中的文档，因此该入口不要求文件位于 `pi` 目录，也不反推文件路径。部分管理器将 Markdown 当作纯文本，系统也可能在 `.txt` 的候选中显示橙橙，但该入口会拒绝普通 `.txt`。
+
+授权文档同样限制 2 MiB，并检查编码和二进制内容；刷新重新检查授权，外部打开转交原 URI 和只读授权，不复制文件。没有读取授权时需回到文件管理器重新打开。
+
+从文件管理器打开的文档若需要相邻图片或 Markdown，点击「授权文件夹」，在系统选择器中选择包含文档及关联资源的文件夹。只使用该文件夹的临时只读授权，不申请持久授权；通过 provider 返回的子项及文档身份定位资源，不将 provider ID 当文件路径。若无法确认原文档属于所选目录，会要求明确选择 Markdown，不按同名文件自动替换。之后可用「打开文件夹」切换文档或重新授权；授权撤销后读取会失败并提示重新选择。
+
+`xdg-open` 的成功退出只表示预览或外部打开已分发，不证明页面已经渲染。此功能需要更新 APK；实机覆盖范围见 `VERIFICATION.md`。
+
+### omp CLI 使用手机截图
+
+当前 `omp 18.11.3` 支持 `@图片路径` 附件。将手机截图复制到 `内部存储/pi/workspace/screenshots/`，对应 Ubuntu 路径为 `/workspace/workspace/screenshots/`：
+
+```sh
+omp @/workspace/workspace/screenshots/截图.png "分析这张截图"
+```
+
+在已经运行的对话中，不必新开会话：提供完整的 Ubuntu 图片路径并让助手读取即可。手机相册中的 `Pictures/Screenshots` 不等于上述共享目录；也不要将文件管理器的 `content://` URI 当作 CLI 本地文件路径。图片理解仍取决于当前模型是否支持视觉输入。
+
+
 ### 单行顶栏、顶满全屏与 Tab 管理
 
 终端只保留一行「会话标签 / ＋ / 菜单」，删除重复标题栏和常驻安装提示。「收起终端」移入菜单，会话状态和工作目录也在菜单中显示；Bash 安装进度只在安装期间出现。

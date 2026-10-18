@@ -8,10 +8,10 @@ import java.io.FileOutputStream;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-/** Android handler verification for URL/file/directory open fallbacks. */
+/** Android dispatch verification for URL, workspace preview and directory opening. */
 public final class OpenToolInstrumentation extends Instrumentation {
   private Bundle options;
-  private String error;private JSONObject fileResult,directoryResult;
+  private String error;private JSONObject fileResult,contentResult,directoryResult;
   private final CountDownLatch done=new CountDownLatch(1);
 
   @Override public void onCreate(Bundle arguments){options=arguments;start();}
@@ -25,24 +25,33 @@ public final class OpenToolInstrumentation extends Instrumentation {
       return;
     }
     try {
-      File directory=new File(android.os.Environment.getExternalStorageDirectory(),"pi/workspace").getCanonicalFile();
-      directory.mkdirs();File file=new File(directory,"open-tool.txt");
-      try(FileOutputStream out=new FileOutputStream(file)){out.write("Zfold open tool\n".getBytes());}
+      File directory=new File(ArtifactProvider.root(getTargetContext()),"workspace").getCanonicalFile();
+      directory.mkdirs();File file=new File(directory,"open-tool 中文 空格.md");
+      try(FileOutputStream out=new FileOutputStream(file)){out.write("# 本地预览\n\nZfold open tool\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));}
       android.util.Log.i("ZfoldOpen","created "+file+" exists="+file.isFile());
       call("open",PiRuntime.json("target",file.getPath()),value->{fileResult=value;done.countDown();});
       done.await(10,java.util.concurrent.TimeUnit.SECONDS);
       android.util.Log.i("ZfoldOpen","file result "+fileResult+" error "+error);
+      CountDownLatch contentDone=new CountDownLatch(1);
+      call("open",PiRuntime.json("target",OpenTargets.fileUri(getTargetContext(),file).toString()),value->{contentResult=value;contentDone.countDown();});
+      contentDone.await(10,TimeUnit.SECONDS);
+      android.util.Log.i("ZfoldOpen","content result "+contentResult+" error "+error);
       CountDownLatch second=new CountDownLatch(1);
       call("open",PiRuntime.json("target",directory.getPath()),value->{directoryResult=value;second.countDown();});
       second.await(10,java.util.concurrent.TimeUnit.SECONDS);
       android.util.Log.i("ZfoldOpen","directory result "+directoryResult+" error "+error);
-      boolean ok=fileResult!=null&&fileResult.optBoolean("opened")&&"file".equals(fileResult.optString("kind"))
-        &&directoryResult!=null&&directoryResult.optBoolean("opened")&&"directory".equals(directoryResult.optString("kind"));
+      boolean ok=previewReceipt(fileResult,"file")&&previewReceipt(contentResult,"content")
+        &&directoryResult!=null&&directoryResult.optBoolean("opened")&&"directory".equals(directoryResult.optString("kind"))&&!directoryResult.optBoolean("previewDispatched");
       Bundle outcome=new Bundle();
-      outcome.putString("file",String.valueOf(fileResult));outcome.putString("directory",String.valueOf(directoryResult));
+      outcome.putString("file",String.valueOf(fileResult));outcome.putString("content",String.valueOf(contentResult));outcome.putString("directory",String.valueOf(directoryResult));
       outcome.putString("error",error);
       finish(ok?-1:0,outcome);
     }catch(Throwable failure){error=String.valueOf(failure);Bundle outcome=new Bundle();outcome.putString("error",error);finish(0,outcome);}
+  }
+  private boolean previewReceipt(JSONObject value,String kind){
+    return value!=null&&value.optBoolean("opened")&&value.optBoolean("previewDispatched")&&kind.equals(value.optString("kind"))
+      &&getTargetContext().getPackageName().equals(value.optString("handlerPackage"))
+      &&PreviewActivity.class.getName().equals(value.optString("handlerActivity"));
   }
 
   private void call(String name,JSONObject args,java.util.function.Consumer<JSONObject> receiver){

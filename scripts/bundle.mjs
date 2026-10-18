@@ -35,6 +35,11 @@ fs.copyFileSync('runtime/windows.sh',`${phoneOut}/bin/windows`);
 await build({entryPoints:['runtime/omp-phone-extension.mjs'],outfile:`${phoneOut}/omp-phone-extension.mjs`,
   bundle:true,platform:'node',format:'esm',target:'node24',external:['@oh-my-pi/*'],logLevel:'info'});
 fs.copyFileSync('runtime/ubuntu.sh',`${out}/ubuntu.sh`);
+const previewOut='android/assets/preview';
+fs.mkdirSync(previewOut,{recursive:true});
+await build({entryPoints:['runtime/markdown-preview.mjs'],outfile:`${previewOut}/markdown.js`,
+  bundle:true,platform:'browser',format:'iife',target:'chrome80',logLevel:'info'});
+for(const extension of ['html','css'])fs.copyFileSync(`runtime/markdown-preview.${extension}`,`${previewOut}/markdown.${extension}`);
 const licenses='android/assets/licenses';fs.mkdirSync(licenses,{recursive:true});
 fs.copyFileSync('LICENSE',`${licenses}/Project-GPL-3.0.txt`);
 fs.copyFileSync('THIRD_PARTY_NOTICES.md',`${licenses}/THIRD_PARTY_NOTICES.md`);

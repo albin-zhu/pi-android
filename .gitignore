@@ -4,6 +4,7 @@ vendor/
 !runtime/vendor/
 !runtime/vendor/**
 android/assets/runtime/
+android/assets/preview/
 android/assets/licenses/
 artifacts/*.apk
 artifacts/*.idsig
