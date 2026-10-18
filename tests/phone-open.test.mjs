@@ -27,7 +27,7 @@ test('invalid opener targets and unmapped guest files fail without a usable phon
   assert.equal(result.code,1);assert.match(result.stderr,/bind mapping/);assert.equal(result.stdout,'');
 });
 
-test('opener exit status distinguishes Android handoff, refusal, fallback and uncertain execution',{skip:process.platform!=='linux'},async t=>{
+test('opener exit status distinguishes external/preview dispatch, refusal and uncertain execution',{skip:process.platform!=='linux'},async t=>{
   const endpoint='phone-open-test-'+randomUUID(),sockets=new Set();
   let receipt;
   const server=net.createServer(socket=>{
@@ -43,9 +43,9 @@ test('opener exit status distinguishes Android handoff, refusal, fallback and un
   t.after(async()=>{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));});
   for(const [value,code,error] of [
     [{opened:true},0,null],
+    [{opened:true,previewDispatched:true,handler:'PreviewActivity',handlerPackage:'dev.zfold.assistant'},0,null],
     [{opened:false,confirmationRequested:true},0,/not installed yet/],
     [{opened:false,status:'declined'},1,/declined/],
-    [{opened:false,fallbackOpened:true},1,/containing directory instead/],
     [{opened:false},1,/did not open/],
     [null,2,/uncertain/]
   ]){

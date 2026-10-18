@@ -15,7 +15,7 @@ const specifications = [
   ['ui_swipe','滑动界面','提供最近 screenshotId，按截图像素坐标滑动；起终点不能相同。执行后自动返回新截图。',Type=>Type.Object({screenshotId:Type.String(),x1:Type.Number(),y1:Type.Number(),x2:Type.Number(),y2:Type.Number()})],
   ['ui_back','返回上一页','执行 Android 返回操作。',Type=>Type.Object({})],
   ['app_open','打开应用','使用包名打开应用；可通过 app_list 获取包名。',Type=>Type.Object({packageName:Type.String()})],
-  ['open','打开 URL/文件/目录','Android 原生打开工具：URL 用系统 handler，文件/目录用 DocumentsProvider；文件没有专用 handler 时回退到包含目录。target 可以是 https/mailto 等 URI，或 /storage/pi 下的文件、目录。',Type=>Type.Object({target:Type.String({minLength:1,maxLength:4096}),mime:Type.Optional(Type.String({maxLength:160})),chooser:Type.Optional(Type.Boolean())})],
+  ['open','打开 URL/文件/目录','工作区 Markdown、HTML/HTM、SVG 和可读文本在应用内预览（离线、本地资源；.gtm 按文本读取）；其他文件和 URL 用 Android handler，目录用文件管理器。未知文件没有 handler 时显示预览或明确错误，不回退目录。chooser:true 仅外部打开；APK 安装仍需确认。opened/previewDispatched 仅表示已派发打开，不证明渲染成功。target 可以是 https/mailto 等 URI，或 /storage/pi 下的文件、目录。',Type=>Type.Object({target:Type.String({minLength:1,maxLength:4096}),mime:Type.Optional(Type.String({maxLength:160})),chooser:Type.Optional(Type.Boolean())})],
   ['app_list','列出可打开的应用','列出手机具有启动入口的应用名称与包名。',Type=>Type.Object({})],
   ['split_screen','控制折叠屏分屏','state 读取窗口几何推断；launch 仅尝试多窗口启动，三星可能打开浮窗，position 不保证真实左右位置。必须复查目标包、边界和截图；toggle 可能被系统拒绝。',Type=>Type.Object({action:Type.Union([Type.Literal('state'),Type.Literal('toggle'),Type.Literal('launch')]),packageName:Type.Optional(Type.String()),position:Type.Optional(Type.Union([Type.Literal('left'),Type.Literal('right'),Type.Literal('primary'),Type.Literal('secondary')]))})],
 ];
