@@ -517,6 +517,8 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     if(circleButton.getVisibility()==View.GONE)items.add(circleButton);
     if(attachButton.getVisibility()==View.GONE)items.add(attachButton);
     if(screenShareButton.getVisibility()==View.GONE)items.add(screenShareButton);
+    items.add(new Ui.Action(this,R.drawable.ic_arrow_square_out,"虚拟屏","只读查看 Agent 的 Xvfb",
+        theme.ink,android.graphics.Color.TRANSPARENT,()->VirtualScreenActivity.open(this,"")));
     items.add(workbenchButton);
     ToolbarOverflow.show(overflowButton,items);
   }

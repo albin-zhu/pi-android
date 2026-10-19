@@ -17,7 +17,7 @@ final class PhoneToolDispatcher {
   private static final Set<String> exposed=Collections.unmodifiableSet(new LinkedHashSet<>(Arrays.asList(
     "phone_capabilities","phone_call","camera_capture","contact_search","phone_sms","device_info",
     "screen_read","screen_windows","ui_system","screen_capture","ui_tap","ui_input","ui_swipe",
-    "ui_back","app_open","open","app_list","split_screen")));
+    "ui_back","app_open","open","app_list","split_screen","virtual_screen")));
   private static final Map<String,Call> calls=new HashMap<>(); // UI-thread confined
   private static volatile boolean embeddedPhoneActive;
   private static int embeddedCalls;
@@ -28,7 +28,7 @@ final class PhoneToolDispatcher {
   static boolean phoneBusy(){Call call=external;return embeddedPhoneActive||(call!=null&&call.controlStarted>0);}
   static boolean metadata(String name){return name.equals("device_info")||name.equals("phone_capabilities")||name.equals("app_list");}
   static boolean readOnly(String name,JSONObject args){
-    return metadata(name)||name.equals("screen_read")||name.equals("screen_windows")||name.equals("contact_search")||
+    return metadata(name)||name.equals("virtual_screen")||name.equals("screen_read")||name.equals("screen_windows")||name.equals("contact_search")||
       (name.equals("screen_capture")&&!args.optBoolean("save"))||
       (name.equals("ui_system")&&args.optString("action","list").equals("list"))||
       (name.equals("split_screen")&&args.optString("action","state").equals("state"))||
@@ -50,6 +50,10 @@ final class PhoneToolDispatcher {
     if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->submit(call));return;}
     if(call.invalid()){call.finish(null,"操作已停止或连接已关闭");return;}
     if(calls.containsKey(call.id)){call.finish(null,"重复的工具调用 ID");return;}
+    if(call.owner!=null&&call.name.equals("virtual_screen")){
+      // Opening the read-only viewer never takes phone control.
+      calls.put(call.id,call);call.registered=true;call.start();return;
+    }
     if(call.owner!=null){
       if(!allowed(call.name)){call.finish(null,"不支持的手机工具："+call.name);return;}
       if(external!=null||embeddedPhoneActive||embeddedCalls>0){call.finish(null,"手机正由另一个任务控制，请等待该任务结束");return;}

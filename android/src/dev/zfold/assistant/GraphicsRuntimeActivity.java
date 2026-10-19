@@ -25,6 +25,7 @@ public final class GraphicsRuntimeActivity extends Activity {
     TextView title=Ui.text(this,"图形应用 · X11 / Wine",22,theme.ink);title.setTypeface(Typeface.create("sans-serif-medium",0));content.addView(title);
     text("X11 显示独立于终端和聊天。先打开显示，再回到终端启动 Linux 图形程序或 Windows 程序；离开显示页面不会结束会话。");
     button("打开 X11 显示",()->com.termux.x11.MainActivity.open(this));
+    button("查看 Agent 虚拟屏（Xvfb）",()->startActivity(new Intent(this,VirtualScreenActivity.class)));
     text("新 Ubuntu 终端自动连接 DISPLAY=:9。已有终端请重新进入 ubuntu，以加载显示 socket、授权文件和 windows 命令。");
     status=Ui.text(this,"",13,theme.muted);content.addView(status);
     text("Wine 为可选下载：固定版本 Box64 + Wine WoW64，支持尝试运行 32/64 位 Windows 程序。不是安全沙箱；只运行你信任的程序。首次安装会在新终端展示来源并请求确认，不包含游戏文件。");

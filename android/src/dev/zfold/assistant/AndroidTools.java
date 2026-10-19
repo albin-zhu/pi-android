@@ -41,6 +41,12 @@ public final class AndroidTools {
         PhoneActions.execute(context,name,args,request.optString("id"),result);return;
       }
       if(name.equals("runtime_environment")){result.done(RuntimeEnvironment.base(context),null);return;}
+      if(name.equals("virtual_screen")) {
+        String requested=args.optString("display","").trim();
+        if(!requested.isEmpty()&&!requested.matches(":?\\d{1,3}"))throw new Exception("display 必须是 :N");
+        VirtualScreenActivity.open(context,requested);
+        result.done(PiRuntime.json("opened",true,"display",requested,"readOnly",true),null);return;
+      }
       if(name.equals("device_info")) {
         Intent battery=context.registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         int level=battery==null?-1:battery.getIntExtra(BatteryManager.EXTRA_LEVEL,-1),scale=battery==null?100:battery.getIntExtra(BatteryManager.EXTRA_SCALE,100);

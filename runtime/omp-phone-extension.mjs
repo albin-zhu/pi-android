@@ -1,7 +1,7 @@
 import {createPhoneToolDefinitions} from './phone-tool-definitions.mjs';
 import {PhoneToolSession} from './phone-tools.mjs';
 
-const readOnly=new Set(['phone_capabilities','device_info','contact_search','screen_read','screen_windows','app_list']);
+const readOnly=new Set(['phone_capabilities','device_info','contact_search','screen_read','screen_windows','app_list','virtual_screen']);
 /** omp 18.10 injects typebox.Type and a five-argument tool execute API. No SDK import. */
 export default function phoneExtension(api){
   const Type=api.typebox?.Type;

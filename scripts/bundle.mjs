@@ -30,6 +30,7 @@ const phoneOut=`${out}/phone-tools`;
 fs.mkdirSync(phoneOut,{recursive:true});
 for(const name of ['phone-cli','phone-open','phone-tools','phone-socket-client','phone-frames','phone-paths','phone-tool-definitions','phone-turn-guard','native-tools'])fs.copyFileSync(`runtime/${name}.mjs`,`${phoneOut}/${name}.mjs`);
 fs.copyFileSync('runtime/windows.py',`${phoneOut}/windows.py`);
+fs.copyFileSync('runtime/x11-mirror.py',`${phoneOut}/x11-mirror.py`);
 fs.mkdirSync(`${phoneOut}/bin`,{recursive:true});
 fs.copyFileSync('runtime/windows.sh',`${phoneOut}/bin/windows`);
 await build({entryPoints:['runtime/omp-phone-extension.mjs'],outfile:`${phoneOut}/omp-phone-extension.mjs`,

@@ -2,6 +2,15 @@
 
 当前交付状态（2026-10-12）：Fold7 已覆盖安装 0.2.87-compat28，实际 Pi SDK 为 1.0.4，`openai-codex/gpt-6.1-sol` 与原会话恢复；模型中断原因可从历史查看，自动重试/压缩进度可见。八份私有配置指纹保留已核对。本次只修复可观察性与构建版本校验，不宣称消除上游连接故障或完成 CLI/TUI 迁移。下面保留各版本原始记录。
 
+## Markdown 打开入口打包回归修复 · 2026-10-19
+
+- 确认 `Zfold-0.2.87-compat28-virtual-screen.apk` 的实际二进制 Manifest 使用旧工作区声明，遗漏 `MarkdownEntryActivity` 和 `PreviewActivity`；虽然包内已有新版预览类和资源，系统仍无法把 Zfold 列为 Markdown 的打开方式。此次没有扩大 MIME／文件权限，也没有重写已支持 GFM 的渲染器。
+- 从 `/root/pi-android-main` 同一份源码重新 bundle 全部 JS、编译全部 Java／终端类、链接 Manifest／资源。保留 LauncherActivity 的启动页记忆、虚拟屏应用内入口与 agent 呼出；仅未改动的 native 库、KWS／X11 二进制资源复用上一主包，不宣称完整 NDK 冷构建。
+- 最终 APK 已核对导出的 Markdown 入口、`ACTION_VIEW`／`DEFAULT`／`content` 和五种 MIME；PreviewActivity 保持非导出。临时 JVM smoke 使用 Android 35 实际 `IntentFilter.match` 验证四种 Markdown MIME 与 text/plain 匹配，file/http/https 不匹配。text/plain 仍需 Markdown 扩展名；读取授权、大小限制和路径边界不变。
+- 已运行现有 9 项 Markdown renderer 回归、`PreviewFilesCheck`、`PreviewMarkdownPathsCheck`，全部通过。实际 Chromium 150 加载与 APK 逐字节一致的 HTML／CSS／JS，在同等 CSP 下验证 412px 窄屏：表格三列对齐、单元格粗体和转义竖线、宽表局部横向滚动且页面不横溢；实际点击中文锚点、相对文档与返回链接成功。单文件授权提示正确，危险 URL／原始 HTML 不执行，浏览器无页面错误。
+- Android Java／D8／资源构建、ZIP 完整性、zipalign 和 APK v3 签名通过；证书仍为 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。产物 `/workspace/workspace/artifacts/Zfold-0.2.87-compat28-markdown-restored.apk`，52,083,526 bytes，SHA-256 `70e618ca5e8d04a62b587822dfea71751a306dc60137e70d484325ab69c67d7d`。
+- **未自动安装或重启主应用。** 当前 ADB 无设备；浏览器 smoke 的相对文档由临时 HTTP 夹具供给，不冒充 Android 文件授权／Activity 导航验收。真机文件管理器“始终使用 Zfold”、Android WebView 及跨 UID 文件夹授权交互仍需安装后验证；不替用户修改系统默认应用。
+
 ## Markdown 相对资源与表格修复
 
 - 用户反馈相对 Markdown／图片链接未渲染、表格错乱；原生 `Ui.markdown` 仅有基础排版且 `PreviewActivity` 移除了非 http(s) 链接。文件预览现已清理该路径，改为 `marked 18.0.11` 和独立离线 WebView；聊天的原生 Markdown 不变。固定资产随正常 bundle 打包，Pi 仍为 1.0.4。
