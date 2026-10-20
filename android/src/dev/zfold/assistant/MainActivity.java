@@ -58,7 +58,6 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     });
     foregroundVoice=voice;
     getWindow().setDecorFitsSystemWindows(false);
-    AppShortcuts.publish(this);
     buildUI();UserQuestions.listen(questionChanged);backCallback=ChatBackNavigation.register(this);ScreenContext.listen(screenListener);screenListener.run();
     displayedSessionId=runtime.sessionId;for(JSONObject item:runtime.lastInterruptions.values())showInterruption(item);
     if(runtime.ready&&!runtime.configured)runtime.restoreConfiguration();

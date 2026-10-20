@@ -54,6 +54,7 @@
   </activity>
   <receiver android:name=".UsageWidget" android:exported="true" android:label="橙橙模型用量"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_usage" /></receiver>
   <receiver android:name=".ShortcutsWidget" android:exported="true" android:label="橙橙快捷入口"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_shortcuts" /></receiver>
+  <receiver android:name=".VirtualScreenWidget" android:exported="false" android:label="橙橙虚拟屏 · 只读选屏" android:icon="@drawable/ic_screen_share"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_virtual_screen" /></receiver>
   <activity android:name=".CircleEntryActivity" android:exported="true" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" android:taskAffinity="" android:noHistory="true" />
   <activity android:name=".ProcessTextActivity" android:exported="true" android:label="@string/ask_chengcheng" android:icon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:excludeFromRecents="true" android:taskAffinity="" android:documentLaunchMode="always" android:finishOnTaskLaunch="true">
    <intent-filter android:label="@string/ask_chengcheng">

@@ -50,7 +50,7 @@ export function fragmentId(hash){
   try{return decodeURIComponent(fragment);}catch{return fragment;}
 }
 
-const accessMessage='相对链接和图片需要文件夹读取权限。请点击上方「授权文件夹」，选择包含本文档及关联文件的文件夹。';
+const accessMessage='相对链接和图片需要文件夹读取权限。首次请点「授权文件夹」；已授权时点「打开文件夹」选择本文档。支持记忆的授权会保留，不必每次重新授权。';
 const imageMessage=(alt,reason)=>`${alt?`图片「${alt}」`:'图片'}：${reason}`;
 function imagePlaceholder(alt,reason){
   return `<span class="image-error" role="note">${escapeHtml(imageMessage(alt,reason))}</span>`;

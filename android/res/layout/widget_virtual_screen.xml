@@ -1,0 +1,63 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="8dp"
+    android:background="@drawable/widget_surface">
+  <LinearLayout
+      android:id="@+id/widget_virtual_screen_open"
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:minHeight="48dp"
+      android:paddingStart="8dp"
+      android:paddingEnd="8dp"
+      android:orientation="horizontal"
+      android:gravity="center_vertical"
+      android:background="@drawable/widget_touch"
+      android:focusable="true"
+      android:clickable="true"
+      android:contentDescription="虚拟屏，只读查看，点按选择屏幕">
+    <ImageView
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_marginEnd="8dp"
+        android:src="@drawable/ic_screen_share"
+        android:tint="@color/widget_accent"
+        android:importantForAccessibility="no" />
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:importantForAccessibility="noHideDescendants">
+      <TextView
+          android:layout_width="match_parent"
+          android:layout_height="22dp"
+          android:text="虚拟屏"
+          android:textColor="@color/widget_ink"
+          android:textSize="14sp"
+          android:fontFamily="sans-serif-medium"
+          android:gravity="center_vertical"
+          android:includeFontPadding="false"
+          android:maxLines="1"
+          android:ellipsize="end"
+          android:autoSizeTextType="uniform"
+          android:autoSizeMinTextSize="10sp"
+          android:autoSizeMaxTextSize="14sp"
+          android:autoSizeStepGranularity="1sp" />
+      <TextView
+          android:layout_width="match_parent"
+          android:layout_height="20dp"
+          android:text="只读 · 选择屏幕"
+          android:textColor="@color/widget_muted"
+          android:textSize="11sp"
+          android:gravity="center_vertical"
+          android:includeFontPadding="false"
+          android:maxLines="1"
+          android:ellipsize="end"
+          android:autoSizeTextType="uniform"
+          android:autoSizeMinTextSize="9sp"
+          android:autoSizeMaxTextSize="11sp"
+          android:autoSizeStepGranularity="1sp" />
+    </LinearLayout>
+  </LinearLayout>
+</FrameLayout>

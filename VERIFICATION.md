@@ -2,6 +2,17 @@
 
 当前交付状态（2026-10-12）：Fold7 已覆盖安装 0.2.87-compat28，实际 Pi SDK 为 1.0.4，`openai-codex/gpt-6.1-sol` 与原会话恢复；模型中断原因可从历史查看，自动重试/压缩进度可见。八份私有配置指纹保留已核对。本次只修复可观察性与构建版本校验，不宣称消除上游连接故障或完成 CLI/TUI 迁移。下面保留各版本原始记录。
 
+## Markdown 授权记忆、文档返回与桌面入口
+
+- 文件夹选择请求持久只读授权；复用 Android 保存的可读 tree grants，以 provider 身份确认当前文档，不能确认时仍要求用户明确选择文档。支持临时授权降级提示、失效授权回退和取消读取，不扩大到其他目录。
+- 顶部新增「上一文档」与独立「关闭」；恢复文档目标、源码模式、滚动和锚点，Android 13+ 注册系统返回回调。授权同一文档不增加重复历史。
+- 四个静态图标快捷入口包含原圈选及 Ubuntu TUI、Android TUI、虚拟屏；移除重复的动态发布。固定 action 经 LauncherActivity 路由，不转交外部 extras。终端按指定环境复用存活交互会话，排除命令／关闭中／已结束会话，不改默认启动偏好。新增虚拟屏 RemoteViews 桌面组件，使用每实例独立、不可变的直接 Activity PendingIntent，周期更新为 0；它是打开查看器的入口，不是实时画面。
+- 现有 9 项 Markdown renderer 测试、`PreviewFilesCheck`、`PreviewMarkdownPathsCheck` 全部通过。临时 JVM provider smoke 执行实际 `PreviewTree` 与 Android 35 的 Uri／Bundle／DocumentsContract：覆盖可读树过滤、重新打开复用、嵌套身份、拒绝同名／跨 provider 替换、失效／撤销授权、临时提供方和取消。ContentResolver 与 provider 发现使用宿主适配器，不作为真机跨进程权限证明。
+- 临时 JVM smoke 执行最终编译的 `PreviewActivity` 快照／恢复，检查文档与授权范围、源码和渲染滚动、锚点及重建状态；执行实际 `TerminalSessions.interactive` 检查环境选择、排除命令／结束中会话、重复入口复用、默认偏好不被访问、Ubuntu 前提错误和四会话上限。对象使用宿主状态注入，未启动 Android UI／PTY。现有终端 instrumentation 增加命令任务排除与重复选择回归，已编译，未在设备上运行。
+- 全部 JS 重新 bundle；210 个 Java 源文件完成 API 35 编译、D8、Manifest／资源链接。最终 APK 二进制中确认四个 shortcut action、组件 metadata 和零周期更新；MarkdownEntryActivity 仍导出，PreviewActivity／VirtualScreenActivity 仍非导出。ZIP 完整性、全部源码 assets 与包内逐字节匹配、zipalign、原证书 v3 签名通过。仅 native、KWS／X11 二进制复用前包，不宣称 NDK 冷构建。
+- 产物 `/workspace/workspace/artifacts/Zfold-0.2.87-compat28-preview-shortcuts.apk`，52,087,783 bytes，SHA-256 `b0c0efbe55d78f23172af061777698792c11198f09623a1e09829dc2222368a8`；versionCode 287，targetSdk 28，签名证书 SHA-256 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。
+- **未安装或重启主应用。** ADB 无设备；新增原生返回按钮、跨重启授权、三星桌面组件预览／缩放／点击与长按快捷入口尚未做真机视觉交互验收。宿主状态检查和编译资源核对不冒充这些验收。
+
 ## Markdown 打开入口打包回归修复 · 2026-10-19
 
 - 确认 `Zfold-0.2.87-compat28-virtual-screen.apk` 的实际二进制 Manifest 使用旧工作区声明，遗漏 `MarkdownEntryActivity` 和 `PreviewActivity`；虽然包内已有新版预览类和资源，系统仍无法把 Zfold 列为 Markdown 的打开方式。此次没有扩大 MIME／文件权限，也没有重写已支持 GFM 的渲染器。

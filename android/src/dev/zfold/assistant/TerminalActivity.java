@@ -14,7 +14,11 @@ import com.termux.view.*;
 public final class TerminalActivity extends Activity implements TerminalViewClient,TerminalSessions.Listener {
   private boolean fromOverlay;
   static void open(Context context){boolean overlay=FloatingNavigation.suspend(context);SystemWindowNavigation.open(context,TerminalActivity.class,overlay);}
-  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.hasExtra("from_overlay"))fromOverlay=intent.getBooleanExtra("from_overlay",false);}
+  @Override protected void onNewIntent(Intent intent){
+    super.onNewIntent(intent);setIntent(intent);
+    if(intent.hasExtra("from_overlay"))fromOverlay=intent.getBooleanExtra("from_overlay",false);
+    if(isEnvironmentEntry())openRequestedSession();
+  }
   private TerminalSessions sessions;private TerminalSessions.Job current;
   private TerminalView terminal;private TextView control,keyboard,installStatus;private boolean ctrl,tapToShowKeyboard;
   private TerminalTabs tabs;
@@ -28,7 +32,23 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     fontSize=getPreferences(MODE_PRIVATE).getFloat("fontSize",14);
     tapToShowKeyboard=getPreferences(MODE_PRIVATE).getBoolean("tapToShowKeyboard",false);
     sessions=TerminalSessions.get(this);sessions.observe(this);build();
-    try{attach(sessions.current());}catch(Exception error){showStartError(error);}
+    TerminalSessions.Job restored=state==null?null:sessions.jobs.get(state.getString("terminal_session"));
+    if(restored!=null)attach(restored);else openRequestedSession();
+  }
+  private boolean isEnvironmentEntry(){
+    String action=getIntent().getAction();
+    return LauncherActivity.ACTION_UBUNTU_TERMINAL.equals(action)||LauncherActivity.ACTION_ANDROID_TERMINAL.equals(action);
+  }
+  private void openRequestedSession(){
+    try{
+      attach(isEnvironmentEntry()
+        ?sessions.interactive(LauncherActivity.ACTION_UBUNTU_TERMINAL.equals(getIntent().getAction()))
+        :sessions.current());
+    }catch(Exception error){showStartError(error);}
+  }
+  @Override protected void onSaveInstanceState(Bundle state){
+    super.onSaveInstanceState(state);
+    if(current!=null)state.putString("terminal_session",current.session.mHandle);
   }
   private void build(){
     root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(BG);
@@ -138,7 +158,7 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
     else tabs.sync(current);
   }
   @Override public void paste(TerminalSessions.Job job){ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(clipboard.hasPrimaryClip()&&clipboard.getPrimaryClip().getItemCount()>0&&job.session.getEmulator()!=null)job.session.getEmulator().paste(clipboard.getPrimaryClip().getItemAt(0).coerceToText(this).toString());}
-  @Override protected void onResume(){super.onResume();StartupPreferences.rememberPage(this,StartupPreferences.TERMINAL);enterFullscreen();if(sessions!=null)sessions.observe(this);if(tabs!=null)tabs.sync(current);if(terminal!=null)terminal.setTerminalCursorBlinkerState(true,true);}
+  @Override protected void onResume(){super.onResume();if(!isEnvironmentEntry())StartupPreferences.rememberPage(this,StartupPreferences.TERMINAL);enterFullscreen();if(sessions!=null)sessions.observe(this);if(tabs!=null)tabs.sync(current);if(terminal!=null)terminal.setTerminalCursorBlinkerState(true,true);}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);if(terminal!=null)terminal.setTerminalCursorBlinkerState(false,false);super.onPause();}
   @Override protected void onDestroy(){if(sessions!=null)sessions.detach(this);if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
   @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(focused)enterFullscreen();}

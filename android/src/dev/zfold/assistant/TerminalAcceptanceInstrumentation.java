@@ -27,6 +27,17 @@ public final class TerminalAcceptanceInstrumentation extends Instrumentation imp
       scale=Settings.System.getFloat(getTargetContext().getContentResolver(),Settings.System.FONT_SCALE,1);
       File bash=new File(PiPackageManager.root(getTargetContext()),"usr/bin/bash");if(fresh)require(!bash.exists(),"Fresh acceptance must start without Bash");
       launch();waitView();job=current();
+      runOnMainSync(()->{
+        TerminalSessions sessions=TerminalSessions.get(getTargetContext());
+        TerminalSessions.Job interactive=sessions.current();
+        TerminalSessions.Job command=sessions.createCommand(new String[]{"/system/bin/sh"},"shortcut boundary");
+        try{
+          require(sessions.interactive(interactive.ubuntu)==interactive,"Shortcut selected a command job instead of the live interactive shell");
+          int count=sessions.jobs.size();
+          require(sessions.interactive(interactive.ubuntu)==interactive&&sessions.jobs.size()==count,"Repeated shortcut created a duplicate session");
+        }finally{command.close();}
+      });
+      report.putBoolean("interactiveShortcutSelection",true);
       if(fresh){require(job.shell.equals("系统 Shell"),"Fresh install did not fall back to system shell");send("printf 'FRESH_%s\\n' SYSTEM\n");waitFor("FRESH_SYSTEM");report.putBoolean("systemShellFirstLaunch",true);
         int systemId=job.id;click("安装 Bash 并打开新终端");long until=System.currentTimeMillis()+600000;
         while(System.currentTimeMillis()<until){TerminalSessions.Job candidate=current();if(candidate!=null&&candidate.id>0&&candidate.id!=systemId&&candidate.shell.equals("Bash")){job=candidate;break;}Thread.sleep(250);}

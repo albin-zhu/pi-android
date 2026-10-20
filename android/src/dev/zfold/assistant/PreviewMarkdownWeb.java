@@ -147,7 +147,7 @@ final class PreviewMarkdownWeb {
         PreviewTree.Entry resource=tree.resolve(relative,cancellation);mime=resource.mime;
         if(!PreviewMarkdownPaths.image(mime))return denied();
         input=tree.open(resource,cancellation);
-      }else{report("此文件只有单文件读取授权；请点“授权文件夹”以加载相对图片和 Markdown 链接");return denied();}
+      }else{report("此文件只有单文件读取授权；请从上方文件夹入口选择已授权文档，或首次授权文件夹");return denied();}
       return response(mime,null,track(input),IMAGE_CSP);
     }catch(Exception error){if(!closed)report("本地图片无法读取或已拦截；请刷新，或重新授权文件夹");return denied();}
     finally{synchronized(this){cancellations.remove(cancellation);}}

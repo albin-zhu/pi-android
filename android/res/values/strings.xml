@@ -3,5 +3,11 @@
  <string name="accessibility_description">让你自己的 Pi 助手读取当前界面，并按你的指令点击、滑动和输入。可随时在系统设置关闭。</string>
  <string name="circle_ask_short">圈选提问</string>
  <string name="circle_ask_long">在当前屏幕圈选并提问</string>
+ <string name="ubuntu_terminal_short">Ubuntu TUI</string>
+ <string name="ubuntu_terminal_long">打开 Ubuntu 交互终端</string>
+ <string name="android_terminal_short">Android TUI</string>
+ <string name="android_terminal_long">打开 Android 交互终端</string>
+ <string name="virtual_screen_short">虚拟屏幕</string>
+ <string name="virtual_screen_long">只读查看虚拟屏幕</string>
  <string name="ask_chengcheng">问橙橙</string>
 </resources>

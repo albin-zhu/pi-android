@@ -3,9 +3,12 @@ package dev.zfold.assistant;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
+import android.content.Intent;
+import android.content.UriPermission;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.CancellationSignal;
+import android.os.OperationCanceledException;
 import android.provider.DocumentsContract;
 import java.io.File;
 import java.io.IOException;
@@ -17,9 +20,9 @@ import java.util.List;
 final class PreviewTree {
   static final class Entry {
     final String id,name,mime,relative;
-    final Uri uri;
+    final Uri tree,uri;
     Entry(Uri tree,String id,String name,String mime,String relative){
-      this.id=id;this.name=name;this.relative=relative;
+      this.tree=tree;this.id=id;this.name=name;this.relative=relative;
       // Providers may label every file application/octet-stream. Within an explicitly
       // granted tree, suffixes select the reader; decoding still rejects binary Markdown.
       if(DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)||PreviewMarkdownPaths.image(mime))this.mime=mime;
@@ -32,6 +35,37 @@ final class PreviewTree {
     boolean directory(){return DocumentsContract.Document.MIME_TYPE_DIR.equals(mime);}
     boolean markdown(){return PreviewFiles.kind(new File(name))==PreviewFiles.Kind.MARKDOWN||PreviewFiles.markdownMime(mime);}
   }
+  /** Android owns the grant list; preferences never substitute for actual permission. */
+  static List<Uri> savedFolders(Context context){
+    ArrayList<UriPermission> permissions=new ArrayList<>(context.getContentResolver().getPersistedUriPermissions());
+    permissions.sort((a,b)->Long.compare(b.getPersistedTime(),a.getPersistedTime()));
+    ArrayList<Uri> folders=new ArrayList<>();
+    for(UriPermission permission:permissions)
+      if(permission.isReadPermission()&&DocumentsContract.isTreeUri(permission.getUri()))folders.add(permission.getUri());
+    return folders;
+  }
+  static boolean remember(Context context,Uri tree,int flags){
+    if((flags&Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)==0)return false;
+    try{
+      context.getContentResolver().takePersistableUriPermission(tree,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+      return true;
+    }catch(SecurityException|IllegalArgumentException|UnsupportedOperationException unavailable){return false;}
+  }
+  static Entry rememberedDocument(Context context,Uri original,CancellationSignal cancellation){
+    for(Uri granted:savedFolders(context)){
+      cancellation.throwIfCanceled();
+      if(original==null||!granted.getAuthority().equals(original.getAuthority()))continue;
+      try{
+        Entry entry=new PreviewTree(context,granted).identify(context,original,cancellation);
+        if(entry!=null&&!entry.directory()&&entry.markdown())return entry;
+      }catch(OperationCanceledException cancelled){throw cancelled;}
+      catch(IOException|SecurityException|IllegalArgumentException|UnsupportedOperationException unavailable){
+        // A stale or unavailable provider must not prevent reading the incoming single-file grant.
+      }
+    }
+    return null;
+  }
+
   final Uri uri;
   private final ContentResolver resolver;
   PreviewTree(Context context,Uri uri)throws IOException {

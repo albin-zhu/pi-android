@@ -27,6 +27,15 @@ final class TerminalSessions implements TerminalSessionClient {
   void detach(Listener value){if(listener.get()==value)listener.clear();}
   Job current(){Job job=jobs.get(selected);return job!=null?job:create();}
   Job create(){return create(null,StartupPreferences.ubuntu(context));}
+  Job interactive(boolean ubuntu){
+    Job current=jobs.get(selected);
+    if(matchesInteractive(current,ubuntu))return current;
+    for(Job job:jobs.values())if(matchesInteractive(job,ubuntu)){select(job);return job;}
+    return create(null,ubuntu);
+  }
+  private static boolean matchesInteractive(Job job,boolean ubuntu){
+    return job!=null&&job.command==null&&job.ubuntu==ubuntu&&!job.closing&&job.session.isRunning();
+  }
   private Job create(String[] command,boolean ubuntu){
     if(liveCount()>=4)throw new IllegalStateException("已有 4 个运行中的终端，请先结束一个会话");
     if(ubuntu){String reason=StartupPreferences.ubuntuUnavailable(context);if(reason!=null)throw new IllegalStateException(reason);}

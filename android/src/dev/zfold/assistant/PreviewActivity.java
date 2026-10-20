@@ -13,6 +13,7 @@ import android.database.Cursor;
 import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.provider.OpenableColumns;
@@ -67,7 +68,8 @@ public final class PreviewActivity extends Activity {
   private CancellationSignal readCancellation;
   private Ui.Theme theme;
   private TextView title,pathLabel,status;
-  private Button mode,folder;
+  private Button mode,folder,previous;
+  private Object backCallback;
   private ProgressBar progress;
   private FrameLayout content;
   private ScrollView scroll;
@@ -117,6 +119,7 @@ public final class PreviewActivity extends Activity {
       restoreScroll=true;
     }
     build();load();
+    if(Build.VERSION.SDK_INT>=33)backCallback=Api33.register(this);
   }
 
   @Override protected void onNewIntent(Intent intent){
@@ -142,8 +145,9 @@ public final class PreviewActivity extends Activity {
     LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(theme.page);
     root.setOnApplyWindowInsetsListener((view,insets)->{Insets bars=insets.getInsets(WindowInsets.Type.systemBars());root.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});
     LinearLayout heading=new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);
-    heading.addView(new Ui.Action(this,R.drawable.ic_caret_down,"","返回",theme.ink,0,this::onBackPressed),new LinearLayout.LayoutParams(dp(48),dp(48)));
-    title=Ui.text(this,"文件预览",20,theme.ink);title.setMaxLines(2);heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));root.addView(heading);
+    previous=button(heading,"上一文档",this::previousDocument);previous.setEnabled(!history.isEmpty());
+    title=Ui.text(this,"文件预览",20,theme.ink);title.setMaxLines(2);heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+    button(heading,"关闭",this::finish);root.addView(heading);
     pathLabel=Ui.text(this,"",12,theme.muted);pathLabel.setTextIsSelectable(true);pathLabel.setMaxLines(3);pathLabel.setPadding(dp(16),dp(4),dp(16),dp(6));root.addView(pathLabel);
     HorizontalScrollView toolbar=new HorizontalScrollView(this);toolbar.setHorizontalScrollBarEnabled(true);
     LinearLayout actions=new LinearLayout(this);actions.setPadding(dp(10),0,dp(10),0);toolbar.addView(actions);
@@ -152,7 +156,7 @@ public final class PreviewActivity extends Activity {
     folder=button(actions,"授权文件夹",this::openFolder);folder.setVisibility(documentUri==null?View.GONE:View.VISIBLE);
     button(actions,"外部打开",this::openExternal);
     button(actions,"说明",()->new android.app.AlertDialog.Builder(this).setTitle("预览范围")
-      .setMessage("离线预览 · 文本最大 2 MiB · UTF-8 / 带 BOM 的 UTF-16。\n\nMarkdown 支持表格、授权目录内的相对 Markdown 链接和图片。外部单文件需点“授权文件夹”才能读取同目录资源；不会访问网络图片。GTM 仅作为文本。\n\nHTML/SVG 可运行本地脚本、读取同目录及子目录资源。网络、跨目录、嵌入页面、表单和下载已禁用。需要完整浏览器能力时可选择外部打开。")
+      .setMessage("离线预览 · 文本最大 2 MiB · UTF-8 / 带 BOM 的 UTF-16。\n\nMarkdown 支持表格、授权目录内的相对 Markdown 链接和图片。文件夹授权会在提供方支持时记住，下次打开同一提供方的文档自动复用；不支持记忆时会提示。若无法确认原文件身份，可从“打开文件夹”选择已授权文件夹内的文档，无需重复授权。不会访问网络图片。\n\n顶部“上一文档”返回跳转前的文档和阅读位置；“关闭”退出预览。系统返回先退页内跳转，再退文档。\n\nHTML/SVG 可运行本地脚本、读取同目录及子目录资源。网络、跨目录、嵌入页面、表单和下载已禁用。需要完整浏览器能力时可选择外部打开。")
       .setPositiveButton("知道了",null).show());root.addView(toolbar);
     progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setIndeterminate(true);root.addView(progress,new LinearLayout.LayoutParams(-1,dp(3)));
     status=Ui.text(this,"",12,theme.muted);status.setPadding(dp(16),dp(8),dp(16),dp(8));status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);root.addView(status);
@@ -169,11 +173,13 @@ public final class PreviewActivity extends Activity {
     final int ticket=++generation;final String requested=path;final Uri requestedUri=documentUri;final String requestedMime=documentMime;
     final Uri requestedTree=treeUri;final String requestedRelative=treeRelative;final boolean requestedImage=imageDocument;
     cancelRead();cancelFolder();
+    previous.setEnabled(!history.isEmpty());
     final CancellationSignal cancellation=new CancellationSignal();readCancellation=cancellation;
     disposeWeb();content.removeAllViews();scroll=null;text=null;file=null;kind=null;sharedRoot=null;selectedTree=null;
     String name=requestedUri!=null||requested.isEmpty()?"文件预览":new File(requested).getName();title.setText(name);setTitle(name);pathLabel.setText(requestedUri==null?requested:requestedUri.toString());
     mode.setEnabled(false);progress.setVisibility(View.VISIBLE);status.setTextColor(theme.muted);status.setText("正在读取文件…");
-    folder.setVisibility(requestedUri==null&&requestedTree==null&&folderUri==null?View.GONE:View.VISIBLE);folder.setText(folderUri==null?"授权文件夹":"打开文件夹");
+    folder.setVisibility(requestedUri==null&&requestedTree==null&&folderUri==null?View.GONE:View.VISIBLE);
+    folder.setText(folderUri==null&&PreviewTree.savedFolders(this).isEmpty()?"授权文件夹":"打开文件夹");
     pending=loader.submit(()->{
       try{
         if(requestedTree!=null&&requestedRelative!=null){
@@ -237,10 +243,16 @@ public final class PreviewActivity extends Activity {
         loaded=PreviewFiles.readText(input);
       }finally{cancellation.setOnCancelListener(null);}
     }
+    PreviewTree.Entry remembered=PreviewTree.rememberedDocument(this,uri,cancellation);
+    PreviewTree rememberedTree=remembered==null?null:new PreviewTree(this,remembered.tree);
     cancellation.throwIfCanceled();
     runOnUiThread(()->{
       if(!current(ticket))return;
       documentMime=resolvedMime;documentName=label;text=loaded;kind=PreviewFiles.Kind.MARKDOWN;imageDocument=false;
+      if(remembered!=null){
+        selectedTree=rememberedTree;treeUri=folderUri=remembered.tree;treeRelative=remembered.relative;
+        documentUri=remembered.uri;folder.setText("打开文件夹");pathLabel.setText("已记住的文件夹 / "+remembered.relative);
+      }
       title.setText(label);setTitle(label);showDocument();
     });
   }
@@ -293,12 +305,12 @@ public final class PreviewActivity extends Activity {
       @Override public void failed(String detail){if(current(ticket))showError(detail);}
     });
     web=markdownWeb.view;content.addView(web,new FrameLayout.LayoutParams(-1,-1));
-    if(sharedRoot==null&&selectedTree==null)status.setText("Markdown · 单文件授权；相对链接和图片需要点“授权文件夹”");
+    if(sharedRoot==null&&selectedTree==null)status.setText("Markdown · 单文件授权；请从上方文件夹入口选择已授权文档，或首次授权文件夹");
   }
 
   private void navigateMarkdown(String relative,String anchor){
     if(sharedRoot==null&&selectedTree==null){
-      status.setText("请先点“授权文件夹”，再选择此 Markdown 所在的文件夹");
+      status.setText("请从上方文件夹入口打开已授权目录中的 Markdown，或首次授权所在文件夹");
       Toast.makeText(this,"相对链接需要文件夹读取授权",Toast.LENGTH_LONG).show();return;
     }
     if(sharedRoot!=null){
@@ -328,14 +340,25 @@ public final class PreviewActivity extends Activity {
   }
 
   private void openFolder(){
-    if(folderUri==null){authorizeFolder();return;}
+    if(folderUri==null){
+      List<Uri> saved=PreviewTree.savedFolders(this);
+      if(saved.isEmpty()){authorizeFolder();return;}
+      if(saved.size()==1){folderUri=saved.get(0);browseFolder(folderUri,"");return;}
+      String[] labels=new String[saved.size()];
+      for(int i=0;i<saved.size();i++)labels[i]=saved.get(i).getAuthority()+" · "+DocumentsContract.getTreeDocumentId(saved.get(i));
+      new android.app.AlertDialog.Builder(this).setTitle("已授权文件夹")
+        .setItems(labels,(dialog,which)->{folderUri=saved.get(which);browseFolder(folderUri,"");})
+        .setPositiveButton("授权其他文件夹",(dialog,which)->authorizeFolder()).setNegativeButton("取消",null).show();
+      return;
+    }
     String parent=folderUri.equals(treeUri)&&treeRelative!=null?parentPath(treeRelative):"";
     browseFolder(folderUri,parent);
   }
 
   private void authorizeFolder(){
     try{
-      Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+      Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+        |Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
       if(folderUri!=null)intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,folderUri);
       startActivityForResult(intent,REQUEST_TREE);
     }catch(Exception error){status.setText("无法打开文件夹选择器："+message(error));}
@@ -347,6 +370,7 @@ public final class PreviewActivity extends Activity {
     if(result!=RESULT_OK||data==null||data.getData()==null){status.setText("未授权文件夹；保留当前文档和原有读取权限");return;}
     if((data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION)==0){status.setText("文件提供方未授予读取权限，请重新授权文件夹");return;}
     final Uri granted=data.getData(),original=documentUri;
+    final int grantFlags=data.getFlags();
     cancelFolder();final int ticket=folderGeneration;
     final CancellationSignal cancellation=new CancellationSignal();folderCancellation=cancellation;
     status.setText("正在确认文件夹授权和文档身份…");
@@ -357,10 +381,12 @@ public final class PreviewActivity extends Activity {
         tree.children(tree.root(),cancellation);
         PreviewTree.Entry identified=tree.identify(this,original,cancellation);
         cancellation.throwIfCanceled();
+        final boolean remembered=PreviewTree.remember(this,granted,grantFlags);
         runOnUiThread(()->{
           if(!folderCurrent(ticket))return;
+          Toast.makeText(this,remembered?"已记住文件夹读取权限，下次打开会自动复用":"提供方未允许记住权限，本次可用；下次可能需要重新授权",Toast.LENGTH_LONG).show();
           if(identified!=null&&!identified.directory()&&identified.markdown()){
-            selectTreeDocument(granted,identified);return;
+            selectTreeDocument(granted,identified,true);return;
           }
           // Keep the original URI and source. Never substitute a same-name file.
           folderUri=granted;folder.setText("打开文件夹");
@@ -408,10 +434,13 @@ public final class PreviewActivity extends Activity {
     });
   }
 
-  private void selectTreeDocument(Uri granted,PreviewTree.Entry entry){
-    rememberPosition();history.add(snapshotTarget());cancelFolder();
+  private void selectTreeDocument(Uri granted,PreviewTree.Entry entry){selectTreeDocument(granted,entry,false);}
+  private void selectTreeDocument(Uri granted,PreviewTree.Entry entry,boolean sameDocument){
+    rememberPosition();if(!sameDocument)history.add(snapshotTarget());cancelFolder();
     treeUri=folderUri=granted;treeRelative=entry.relative;documentUri=entry.uri;documentMime=entry.mime;
-    imageDocument=false;source=false;sourceY=renderX=renderY=0;fragment="";restoreScroll=false;load();
+    imageDocument=false;restoreScroll=sameDocument;
+    if(!sameDocument){source=false;sourceY=renderX=renderY=0;fragment="";}
+    load();
   }
 
   private static String parentPath(String relative){int slash=relative.lastIndexOf('/');return slash<0?"":relative.substring(0,slash);}
@@ -571,14 +600,29 @@ public final class PreviewActivity extends Activity {
   @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();}
   @Override protected void onPause(){rememberPosition();if(web!=null)web.onPause();SystemWindowNavigation.remember(this);super.onPause();}
   @Override protected void onDestroy(){
+    if(Build.VERSION.SDK_INT>=33&&backCallback!=null)Api33.unregister(this,backCallback);
     destroyed=true;++generation;cancelRead();cancelFolder();loader.shutdownNow();disposeWeb();
     if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();
   }
   @Override public void onBackPressed(){
     cancelFolder();
     if(web!=null&&web.canGoBack()){web.goBack();return;}
-    if(!history.isEmpty()){restoreTarget(history.remove(history.size()-1));restoreScroll=true;load();return;}
+    if(previousDocument())return;
     finish();
+  }
+  private boolean previousDocument(){
+    if(history.isEmpty())return false;
+    cancelFolder();restoreTarget(history.remove(history.size()-1));restoreScroll=true;load();return true;
+  }
+  private static class Api33 {
+    static Object register(PreviewActivity activity){
+      android.window.OnBackInvokedCallback callback=activity::onBackPressed;
+      activity.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,callback);
+      return callback;
+    }
+    static void unregister(PreviewActivity activity,Object callback){
+      activity.getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback)callback);
+    }
   }
   private int dp(float value){return Ui.dp(this,value);}
   private static String message(Exception error){return error.getMessage()==null?error.getClass().getSimpleName():error.getMessage();}
