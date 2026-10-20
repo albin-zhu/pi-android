@@ -10,7 +10,8 @@ import android.widget.*;
 
 /** One settings entry for independent ASR/TTS routes, credentials and a bounded preview. */
 final class SpeechSettings {
-  static AlertDialog show(Activity activity,VoiceTurnController voice,Runnable localSettings){
+  static AlertDialog show(Activity activity,VoiceTurnController voice,Runnable localSettings){return show(activity,voice,localSettings,null);}
+  static AlertDialog show(Activity activity,VoiceTurnController voice,Runnable localSettings,Runnable onDismiss){
     SpeechConfig config=SpeechConfig.load(activity);Ui.Theme theme=new Ui.Theme(activity);
     LinearLayout body=new LinearLayout(activity);body.setOrientation(LinearLayout.VERTICAL);int gap=Ui.dp(activity,18);body.setPadding(gap,Ui.dp(activity,8),gap,Ui.dp(activity,12));
     TextView current=Ui.text(activity,voice.providerStatus(),13,theme.muted);body.addView(current);
@@ -50,7 +51,7 @@ final class SpeechSettings {
       main.postDelayed(()->{if(token==preview[0]){stopPreview.run();status.setText("试听已结束");}},20000);
     };
     dialog.setOnShowListener(d->{dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->save.accept(false));dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v->save.accept(true));});
-    dialog.setOnDismissListener(d->stopPreview.run());local.setOnClickListener(v->{dialog.dismiss();localSettings.run();});dialog.show();return dialog;
+    dialog.setOnDismissListener(d->{stopPreview.run();if(onDismiss!=null)onDismiss.run();});local.setOnClickListener(v->{stopPreview.run();localSettings.run();});dialog.show();return dialog;
   }
   private static Spinner choice(Activity activity,LinearLayout parent,String title,String[] values,int selected){
     Ui.Theme theme=new Ui.Theme(activity);TextView label=Ui.text(activity,title,13,theme.ink);label.setPadding(0,Ui.dp(activity,16),0,Ui.dp(activity,5));parent.addView(label);

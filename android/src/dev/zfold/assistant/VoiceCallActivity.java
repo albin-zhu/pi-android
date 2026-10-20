@@ -1,7 +1,6 @@
 package dev.zfold.assistant;
 
 import android.animation.ValueAnimator;
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -27,7 +26,7 @@ import android.graphics.RectF;
 import org.json.JSONObject;
 
 /** Immersive, real-time voice conversation surface. */
-public final class VoiceCallActivity extends Activity implements PiRuntime.Listener {
+public final class VoiceCallActivity extends NavigableActivity implements PiRuntime.Listener {
   private static volatile VoiceCallActivity active;
   private static volatile boolean foreground;
   private final Handler main=new Handler(Looper.getMainLooper());
@@ -199,7 +198,7 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
   @Override protected void onPause(){UserQuestions.unlisten(questionChanged);AudioModeOwner.unlisten(audioChanged);SystemWindowNavigation.remember(this);super.onPause();if(active==this){foreground=false;VoiceCoordinator.get(this).voiceViewReady(false);}if(!isFinishing())VoiceMiniOverlay.showIfCallActive(this);}
   @Override protected void onStop(){camera.pause(this);super.onStop();}
   @Override protected void onDestroy(){if(audioDialog!=null)audioDialog.dismiss();if(isFinishing())camera.endVideo(this);camera.detach(this);if(active==this)active=null;runtime.unlisten(this);super.onDestroy();}
-  @Override public void onBackPressed(){startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}
+  @Override public void onBackPressed(){navigateUp();}
 
   @Override public void event(JSONObject event){
     String type=event.optString("type");

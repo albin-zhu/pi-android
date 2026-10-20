@@ -1,6 +1,5 @@
 package dev.zfold.assistant;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -11,7 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 /** Linux X11 display and optional Windows programs, independent of chat runs. */
-public final class GraphicsRuntimeActivity extends Activity {
+public final class GraphicsRuntimeActivity extends NavigableActivity {
   private Ui.Theme theme;
   private LinearLayout content;
   private EditText executable,arguments;

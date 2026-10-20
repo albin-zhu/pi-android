@@ -34,7 +34,7 @@ final class ToolCenter implements PiRuntime.Listener {
   private final View anchor;private final PiRuntime runtime;private final Host host;private final Ui.Theme theme;
   private EditText search;private LinearLayout chips,list;private TextView footer;private PopupWindow popup;
   private JSONArray tools=new JSONArray(),skills=new JSONArray();private JSONObject mcp=new JSONObject();
-  private int section=0;private boolean ready;
+  private int section=0;private boolean ready,leavingForAction;private Runnable onDismiss;
 
   interface Opener {void open();}
 
@@ -43,7 +43,8 @@ final class ToolCenter implements PiRuntime.Listener {
   }
 
   static void show(View anchor,PiRuntime runtime,Host host){new ToolCenter(anchor,runtime,host).open(0);}
-  static void show(View anchor,PiRuntime runtime,Host host,int initial){new ToolCenter(anchor,runtime,host).open(initial);}
+  static void show(View anchor,PiRuntime runtime,Host host,int initial){show(anchor,runtime,host,initial,null);}
+  static void show(View anchor,PiRuntime runtime,Host host,int initial,Runnable onDismiss){ToolCenter center=new ToolCenter(anchor,runtime,host);center.onDismiss=onDismiss;center.open(initial);}
 
   private void open(int initial){
     Context context=anchor.getContext();section=initial;
@@ -72,7 +73,7 @@ final class ToolCenter implements PiRuntime.Listener {
     chips=new LinearLayout(context);chips.setHorizontalScrollBarEnabled(false);LinearLayout.LayoutParams chipParams=new LinearLayout.LayoutParams(-1,-2);chipParams.setMargins(0,Ui.dp(context,13),0,Ui.dp(context,7));drawer.addView(chips,chipParams);
     ScrollView scroll=new ScrollView(context);scroll.setVerticalScrollBarEnabled(false);list=new LinearLayout(context);list.setOrientation(LinearLayout.VERTICAL);scroll.addView(list);drawer.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     footer=Ui.text(context,"正在读取工具目录…",11,theme.muted);footer.setPadding(0,Ui.dp(context,13),0,0);drawer.addView(footer);
-    popup=new PopupWindow(frame,-1,-1,true);popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));popup.setOutsideTouchable(true);popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);popup.setOnDismissListener(()->runtime.unlisten(this));
+    popup=new PopupWindow(frame,-1,-1,true);popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));popup.setOutsideTouchable(true);popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);popup.setOnDismissListener(()->{runtime.unlisten(this);if(!leavingForAction&&onDismiss!=null)onDismiss.run();});
     try{
       ((InputMethodManager)context.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(anchor.getWindowToken(),0);
       popup.showAtLocation(anchor,Gravity.TOP|Gravity.END,0,0);frame.requestFocus();runtime.listen(this);refresh();renderChips();
@@ -220,14 +221,15 @@ final class ToolCenter implements PiRuntime.Listener {
   }
 
   private void runCommand(String name,String argument){
+    leavingForAction=name.equals("voice")||name.equals("share")||name.equals("new")||name.equals("stop")||name.equals("skill")||name.equals("pkg")||name.equals("runtime");
     switch(name){
       case "tools":close();break;
       case "skills":section=1;renderChips();render();break;
-      case "mcp":close();ConnectorActivity.open(anchor.getContext());break;
-      case "packages":close();host.openPackages();break;
-      case "model":close();host.openModelSettings();break;
-      case "agent":close();host.openAgentSettings();break;
-      case "phone":close();host.openCapabilities();break;
+      case "mcp":ConnectorActivity.open(anchor.getContext());break;
+      case "packages":host.openPackages();break;
+      case "model":host.openModelSettings();break;
+      case "agent":host.openAgentSettings();break;
+      case "phone":host.openCapabilities();break;
       case "voice":close();host.toggleVoice();break;
       case "share":close();host.toggleScreenShare();break;
       case "new":close();host.newSession();break;

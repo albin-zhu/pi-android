@@ -10,10 +10,9 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
   private final MainActivity owner;private final int slop;
   private SessionPicker picker;private VelocityTracker tracker;
   private float downX,downY,startPosition,position,velocity,target;
-  private boolean candidate,dragging,blocked,settling,initiallyOpen,selecting,touchOpening;
+  private boolean candidate,dragging,blocked,settling,initiallyOpen,selecting;
   private long lastFrame;
   private View conversationRegion;
-  private Rect excluded=new Rect();
   SwipeNavigationLayout(MainActivity owner){super(owner);this.owner=owner;slop=ViewConfiguration.get(owner).getScaledTouchSlop();}
   void conversationRegion(View view){conversationRegion=view;}
   void selecting(boolean value){selecting=value;if(value)candidate=false;}
@@ -21,7 +20,6 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
   boolean fullyOpen(){return picker!=null&&position>.995f&&!settling;}
   float progress(){return position;}
   boolean isSettling(){return settling;}
-  boolean isTouchOpening(){return touchOpening;}
   SessionPicker currentPicker(){return picker;}
   void show(SessionPicker next){
     if(picker!=null){if(picker==next){open();return;}removeDrawer();}
@@ -42,7 +40,7 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
   private void settle(float destination,float releaseVelocity){
     float carried=settling?velocity:0;
     cancelSpring();target=destination;velocity=releaseVelocity==0?carried:releaseVelocity;
-    if(!Ui.motion()){position=target;touchOpening=false;paint();if(target==0)removeDrawer();return;}
+    if(!Ui.motion()){position=target;paint();if(target==0)removeDrawer();return;}
     settling=true;Choreographer.getInstance().postFrameCallback(this);
   }
   @Override public void doFrame(long now){
@@ -51,7 +49,7 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
     int steps=Math.max(1,(int)Math.ceil(elapsed/.008f));float dt=elapsed/steps;
     for(int i=0;i<steps;i++){velocity+=(480*(target-position)-44*velocity)*dt;position+=velocity*dt;}
     position=Math.max(0,Math.min(1,position));paint();
-    if(!Ui.motion()||(Math.abs(target-position)<.001f&&Math.abs(velocity)<.01f)){position=target;touchOpening=false;paint();settling=false;if(target==0)removeDrawer();return;}
+    if(!Ui.motion()||(Math.abs(target-position)<.001f&&Math.abs(velocity)<.01f)){position=target;paint();settling=false;if(target==0)removeDrawer();return;}
     Choreographer.getInstance().postFrameCallback(this);
   }
   @Override public boolean dispatchTouchEvent(MotionEvent event){
@@ -59,7 +57,6 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
     if(action==MotionEvent.ACTION_DOWN){
       if(tracker!=null)tracker.recycle();tracker=VelocityTracker.obtain();
       downX=event.getX();downY=event.getY();startPosition=position;initiallyOpen=settling?target==1:position>.5f;
-      touchOpening=false;
       candidate=picker!=null||(!selecting&&inside(conversationRegion,downX,downY)&&!ownsHorizontal(getChildAt(0),event.getRawX(),event.getRawY()));
       blocked=false;dragging=false;if(candidate)cancelSpring();
     }
@@ -68,7 +65,6 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
     if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL){
       if(!dragging&&picker!=null&&!settling&&position>0&&position<1)settle(initiallyOpen?1:0,0);
       if(tracker!=null){tracker.recycle();tracker=null;}dragging=false;
-      if(action==MotionEvent.ACTION_UP)touchOpening=false;
     }
     return result;
   }
@@ -81,7 +77,7 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
       if(Math.abs(dy)>slop&&Math.abs(dx)<=Math.abs(dy)*1.35f){blocked=true;return false;}
       if(Math.abs(dx)>slop&&Math.abs(dx)>Math.abs(dy)*1.35f){
         if(picker==null&&dx<0){blocked=true;return false;}
-        if(picker==null){owner.openSidebar();cancelSpring();position=0;startPosition=0;touchOpening=true;}
+        if(picker==null){owner.openSidebar();cancelSpring();position=0;startPosition=0;}
         if(picker==null)return false;dragging=true;drag(event.getX());getParent().requestDisallowInterceptTouchEvent(true);return true;
       }
     }
@@ -94,7 +90,7 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
     super.requestDisallowInterceptTouchEvent(disallow);
   }
   @Override public boolean onTouchEvent(MotionEvent event){
-    // The window edge can fall in content padding, with no child to own DOWN.
+    // Content padding can have no child to own DOWN.
     if(!dragging)onInterceptTouchEvent(event);
     if(!dragging||picker==null)return candidate||super.onTouchEvent(event);
     switch(event.getActionMasked()){
@@ -113,7 +109,7 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
   }
   @Override protected void onDetachedFromWindow(){cancelSpring();if(tracker!=null){tracker.recycle();tracker=null;}super.onDetachedFromWindow();}
   private void drag(float x){float dx=x-downX,travel=dx-Math.signum(dx)*Math.min(slop,Math.abs(dx));position=Math.max(0,Math.min(1,startPosition+travel/picker.drawerWidth));paint();}
-  private boolean inside(View view,float x,float y){if(view==null)return false;Rect rect=new Rect(0,0,view.getWidth(),view.getHeight());offsetDescendantRectToMyCoords(view,rect);return rect.contains((int)x,(int)y)||(x>=0&&x<Ui.dp(getContext(),24)&&y>=rect.top&&y<rect.bottom);}
+  private boolean inside(View view,float x,float y){if(view==null)return false;Rect rect=new Rect(0,0,view.getWidth(),view.getHeight());offsetDescendantRectToMyCoords(view,rect);return rect.contains((int)x,(int)y);}
   private boolean ownsHorizontal(View view,float x,float y){
     if(view.getVisibility()!=VISIBLE)return false;int[] at=new int[2];view.getLocationOnScreen(at);
     if(x<at[0]||x>=at[0]+view.getWidth()||y<at[1]||y>=at[1]+view.getHeight())return false;
@@ -122,18 +118,6 @@ final class SwipeNavigationLayout extends FrameLayout implements Choreographer.F
     if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=group.getChildCount()-1;i>=0;i--)if(ownsHorizontal(group.getChildAt(i),x,y))return true;}
     return false;
   }
-  void beginBack(){if(picker!=null){cancelSpring();startPosition=position;}}
-  void backProgress(float fraction){if(picker!=null){position=startPosition*(1-Math.max(0,Math.min(1,fraction)));paint();}}
-  void backOpenProgress(float fraction){if(picker!=null){position=startPosition+(1-startPosition)*Math.max(0,Math.min(1,fraction));paint();}}
-  void cancelBack(){if(picker!=null)open();}
   @Override protected void onSizeChanged(int w,int h,int oldw,int oldh){super.onSizeChanged(w,h,oldw,oldh);if(picker!=null){picker.resize(w,h);paint();}}
-  @Override protected void onLayout(boolean changed,int left,int top,int right,int bottom){
-    super.onLayout(changed,left,top,right,bottom);
-    if(conversationRegion==null||conversationRegion.getHeight()==0)return;
-    Rect body=new Rect(0,0,conversationRegion.getWidth(),conversationRegion.getHeight());offsetDescendantRectToMyCoords(conversationRegion,body);
-    int reach=Math.min(Ui.dp(getContext(),200),body.height()),start=body.top+(body.height()-reach)/2;
-    Rect next=new Rect(0,start,Ui.dp(getContext(),24),start+reach);
-    if(!excluded.equals(next)){excluded=next;setSystemGestureExclusionRects(java.util.Collections.singletonList(next));}
-  }
   void dispose(){if(tracker!=null){tracker.recycle();tracker=null;}removeDrawer();}
 }

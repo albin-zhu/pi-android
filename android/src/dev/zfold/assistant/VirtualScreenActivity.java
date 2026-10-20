@@ -54,7 +54,7 @@ import org.json.JSONObject;
  * for display selection so the same layout works on the cover screen, the
  * unfolded screen, split screen and half-fold postures.
  */
-public final class VirtualScreenActivity extends Activity {
+public final class VirtualScreenActivity extends NavigableActivity {
   private static final String EXTRA_DISPLAY = "display";
   private static final String MAGIC = "XMF1";
   private static final int MAX_FRAME = 8 * 1024 * 1024;
@@ -113,7 +113,9 @@ public final class VirtualScreenActivity extends Activity {
 
   static void open(Context context, String display) {
     Intent intent = new Intent(context, VirtualScreenActivity.class)
-        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+    if (!(context instanceof Activity) || context instanceof LauncherActivity)
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     if (display != null && !display.trim().isEmpty())
       intent.putExtra(EXTRA_DISPLAY, display.trim());
     context.startActivity(intent);
@@ -731,7 +733,7 @@ public final class VirtualScreenActivity extends Activity {
       hidePicker();
       return;
     }
-    finish();
+    navigateUp();
   }
 
   private void drainRelay(Process process) {

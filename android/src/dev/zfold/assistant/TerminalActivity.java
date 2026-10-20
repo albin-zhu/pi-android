@@ -11,7 +11,7 @@ import com.termux.terminal.TerminalSession;
 import com.termux.view.*;
 
 /** Real terminal surface: back detaches; ending a process is a named action. */
-public final class TerminalActivity extends Activity implements TerminalViewClient,TerminalSessions.Listener {
+public final class TerminalActivity extends NavigableActivity implements TerminalViewClient,TerminalSessions.Listener {
   private boolean fromOverlay;
   static void open(Context context){boolean overlay=FloatingNavigation.suspend(context);SystemWindowNavigation.open(context,TerminalActivity.class,overlay);}
   @Override protected void onNewIntent(Intent intent){
@@ -160,9 +160,9 @@ public final class TerminalActivity extends Activity implements TerminalViewClie
   @Override public void paste(TerminalSessions.Job job){ClipboardManager clipboard=(ClipboardManager)getSystemService(CLIPBOARD_SERVICE);if(clipboard.hasPrimaryClip()&&clipboard.getPrimaryClip().getItemCount()>0&&job.session.getEmulator()!=null)job.session.getEmulator().paste(clipboard.getPrimaryClip().getItemAt(0).coerceToText(this).toString());}
   @Override protected void onResume(){super.onResume();if(!isEnvironmentEntry())StartupPreferences.rememberPage(this,StartupPreferences.TERMINAL);enterFullscreen();if(sessions!=null)sessions.observe(this);if(tabs!=null)tabs.sync(current);if(terminal!=null)terminal.setTerminalCursorBlinkerState(true,true);}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);if(terminal!=null)terminal.setTerminalCursorBlinkerState(false,false);super.onPause();}
-  @Override protected void onDestroy(){if(sessions!=null)sessions.detach(this);if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
+  @Override protected void onDestroy(){if(sessions!=null)sessions.detach(this);if(isFinishing()&&fromOverlay&&!isReturningToMenu())FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
   @Override public void onWindowFocusChanged(boolean focused){super.onWindowFocusChanged(focused);if(focused)enterFullscreen();}
-  @Override public void onBackPressed(){finish();}
+  @Override public void onBackPressed(){navigateUp();}
   public float onScale(float scale){if(scale>1.1f){changeFont(1);return 1;}if(scale<.9f){changeFont(-1);return 1;}return scale;}
   public void onSingleTapUp(MotionEvent event){
     if(tapToShowKeyboard)showKeyboard();

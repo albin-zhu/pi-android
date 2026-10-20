@@ -1,10 +1,10 @@
 package dev.zfold.assistant;
-import android.app.*;
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
 import android.widget.*;
-public final class UsageActivity extends Activity {
+public final class UsageActivity extends NavigableActivity {
   @Override public void onCreate(Bundle state){super.onCreate(state);render();}
   @Override protected void onResume(){super.onResume();render();}
   void render(){

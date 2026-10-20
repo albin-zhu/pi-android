@@ -12,10 +12,10 @@ import com.termux.view.TerminalView;
 import java.io.File;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** Fresh install, actual selection/clipboard, background lifetime, orientation and session controls. */
+/** Fresh install, system Back lifetime, actual selection/clipboard, background lifetime, orientation and session controls. */
 public final class TerminalAcceptanceInstrumentation extends Instrumentation implements Application.ActivityLifecycleCallbacks {
   private volatile TerminalActivity activity;private TerminalView view;private TerminalSessions.Job job;private boolean fresh;
-  private ClipData clipboard;private float scale=1;private String error="";
+  private ClipData clipboard;private float scale=1;private String error="";private Activity navigationMenu;
   @Override public void onCreate(Bundle args){PiRuntime.testMode=true;fresh=Boolean.parseBoolean(args.getString("fresh","false"));start();}
   @Override public void onActivityCreated(Activity value,Bundle state){if(value instanceof TerminalActivity)activity=(TerminalActivity)value;}
   @Override public void onActivityResumed(Activity value){if(value instanceof TerminalActivity)activity=(TerminalActivity)value;}
@@ -27,6 +27,7 @@ public final class TerminalAcceptanceInstrumentation extends Instrumentation imp
       scale=Settings.System.getFloat(getTargetContext().getContentResolver(),Settings.System.FONT_SCALE,1);
       File bash=new File(PiPackageManager.root(getTargetContext()),"usr/bin/bash");if(fresh)require(!bash.exists(),"Fresh acceptance must start without Bash");
       launch();waitView();job=current();
+      checkSystemBack(report);
       runOnMainSync(()->{
         TerminalSessions sessions=TerminalSessions.get(getTargetContext());
         TerminalSessions.Job interactive=sessions.current();
@@ -59,9 +60,47 @@ public final class TerminalAcceptanceInstrumentation extends Instrumentation imp
       click("切换终端会话");click(original.name+" · Bash");job=current();require(job.id==id,"Session picker did not reattach the selected PTY");
       click("终端选项");click("结束当前会话及进程");for(int i=0;i<60&&job.session.isRunning();i++)Thread.sleep(100);require(!job.session.isRunning()&&additional.session.isRunning(),"Explicit close did not isolate the chosen session");report.putBoolean("sessionPickerAndClose",true);
     }catch(Throwable failure){error=failure.toString();report.putString("error",error);try{EmulatorChecks.screenshot(this,"terminal-acceptance-failure.png");}catch(Exception ignored){}}
-    finally{EmulatorChecks.cancelPointer(this);try{EmulatorChecks.shell(this,"settings put system font_scale "+scale);}catch(Exception ignored){}runOnMainSync(()->{ClipboardManager manager=(ClipboardManager)getTargetContext().getSystemService(Context.CLIPBOARD_SERVICE);if(clipboard!=null)manager.setPrimaryClip(clipboard);TerminalSessions.get(getTargetContext()).closeAll();if(activity!=null)activity.finishAndRemoveTask();});app.unregisterActivityLifecycleCallbacks(this);}
+    finally{EmulatorChecks.cancelPointer(this);try{EmulatorChecks.shell(this,"settings put system font_scale "+scale);}catch(Exception ignored){}runOnMainSync(()->{ClipboardManager manager=(ClipboardManager)getTargetContext().getSystemService(Context.CLIPBOARD_SERVICE);if(clipboard!=null)manager.setPrimaryClip(clipboard);TerminalSessions.get(getTargetContext()).closeAll();if(activity!=null)activity.finishAndRemoveTask();if(navigationMenu!=null&&!navigationMenu.isDestroyed())navigationMenu.finishAndRemoveTask();});app.unregisterActivityLifecycleCallbacks(this);}
     finish(error.isEmpty()?-1:0,report);
   }
+  private void checkSystemBack(Bundle report)throws Exception{
+    TerminalActivity original=activity;TerminalSessions.Job originalJob=job;
+    waitFocus(original);
+    runOnMainSync(()->{
+      require(original.isTaskRoot(),"Direct terminal launch did not create a task root");
+      original.getWindow().getInsetsController().hide(WindowInsets.Type.ime());
+    });
+    for(int i=0;i<100;i++){
+      boolean[] hidden={false};
+      runOnMainSync(()->{WindowInsets insets=original.getWindow().getDecorView().getRootWindowInsets();hidden[0]=insets!=null&&!insets.isVisible(WindowInsets.Type.ime());});
+      if(hidden[0])break;
+      if(i==99)throw new IllegalStateException("Keyboard did not hide before navigation Back");
+      Thread.sleep(50);
+    }
+    send("BACK_NAV_PID=$$; printf 'BACK_%s\\n' READY; sleep 2; printf 'BACK_%s\\n' ALIVE\n");waitFor("BACK_READY");
+    ActivityMonitor menuMonitor=addMonitor(WorkbenchActivity.class.getName(),null,false);
+    try{
+      back();navigationMenu=waitForMonitorWithTimeout(menuMonitor,10000);
+      require(navigationMenu instanceof WorkbenchActivity,"Root terminal Back did not open the function center");
+    }finally{removeMonitor(menuMonitor);}
+    waitFocus(navigationMenu);
+    runOnMainSync(()->{
+      require(original.isFinishing()||original.isDestroyed(),"Back left the terminal viewer open");
+      require(navigationMenu.isTaskRoot(),"Function center fallback did not become a task root");
+      require(TerminalSessions.get(getTargetContext()).find(originalJob.session)==originalJob&&originalJob.session.isRunning(),"Back ended the terminal session");
+    });
+    waitFor("BACK_ALIVE");
+    back();Thread.sleep(500);waitFocus(navigationMenu);
+    runOnMainSync(()->require(!navigationMenu.isFinishing()&&!navigationMenu.isDestroyed(),"Root function center exited on one Back"));
+    launch();waitView();waitFocus(activity);
+    require(activity!=original&&current()==originalJob&&originalJob.session.isRunning(),"Reopening terminal replaced the live PTY");
+    send("test \"$BACK_NAV_PID\" = \"$$\" && printf 'BACK_%s\\n' SAME_PROCESS\n");waitFor("BACK_SAME_PROCESS");
+    report.putBoolean("systemBackReturnsToMenuWithoutEndingSession",true);
+    report.putBoolean("rootMenuBackStaysOpen",true);
+    report.putBoolean("reopenAfterBackKeepsShellProcess",true);
+  }
+  private void waitFocus(Activity expected)throws Exception{for(int i=0;i<120;i++){boolean[] focused={false};runOnMainSync(()->focused[0]=expected.hasWindowFocus()&&!expected.isFinishing()&&!expected.isDestroyed());if(focused[0])return;Thread.sleep(50);}throw new IllegalStateException("Window did not receive focus: "+expected.getClass().getSimpleName());}
+  private void back(){require(getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK),"System Back rejected");}
   private void launch(){getTargetContext().startActivity(new Intent(getTargetContext(),TerminalActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
   private void waitView()throws Exception{for(int i=0;i<150;i++){runOnMainSync(()->{if(activity!=null)view=find(activity.getWindow().getDecorView());});if(activity!=null&&view!=null&&view.isAttachedToWindow()&&view.isLaidOut()&&current()!=null&&current().id>0)return;Thread.sleep(100);}throw new IllegalStateException("Terminal not ready");}
   private TerminalSessions.Job current(){AtomicReference<TerminalSessions.Job> result=new AtomicReference<>();runOnMainSync(()->{if(view!=null&&view.getCurrentSession()!=null)result.set(TerminalSessions.get(getTargetContext()).find(view.getCurrentSession()));});return result.get();}

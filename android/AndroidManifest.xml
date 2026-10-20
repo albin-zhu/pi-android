@@ -38,7 +38,7 @@
    <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
   </activity>
   <activity android:name=".MainActivity" android:enableOnBackInvokedCallback="true" android:exported="true" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
-  <activity android:name=".UsageActivity" android:exported="false" />
+  <activity android:name=".UsageActivity" android:exported="false" android:enableOnBackInvokedCallback="true" />
   <activity android:name=".PreviewActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:enableOnBackInvokedCallback="true" />
   <activity android:name=".MarkdownEntryActivity" android:exported="true" android:theme="@style/WorkScreenTheme">
    <intent-filter>
@@ -83,23 +83,23 @@
   <receiver android:name=".SmsSentReceiver" android:exported="false" />
   <activity android:name=".PhoneTaskFixtureActivity" android:exported="false" />
   <activity android:name=".FilePickActivity" android:exported="false" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" />
-  <activity android:name=".AvatarEditorActivity" android:exported="false" />
- <activity android:name=".RuntimePackageManagerActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
- <activity android:name=".TerminalActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.terminal" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
- <activity android:name=".ConnectorActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.connectors" android:windowSoftInputMode="adjustResize" />
- <activity android:name=".WorkbenchActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.workbench" />
- <activity android:name=".GraphicsRuntimeActivity" android:exported="false" android:theme="@style/WorkScreenTheme" />
- <activity android:name=".VirtualScreenActivity" android:exported="false" android:label="虚拟屏" android:theme="@style/WorkScreenTheme" android:supportsPictureInPicture="true" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.mirror" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
- <activity android:name="com.termux.x11.MainActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.x11" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+  <activity android:name=".AvatarEditorActivity" android:exported="false" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".RuntimePackageManagerActivity" android:exported="false" android:windowSoftInputMode="adjustResize" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".TerminalActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.terminal" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".ConnectorActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.connectors" android:windowSoftInputMode="adjustResize" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".WorkbenchActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.workbench" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".GraphicsRuntimeActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".VirtualScreenActivity" android:exported="false" android:label="虚拟屏" android:theme="@style/WorkScreenTheme" android:supportsPictureInPicture="true" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.mirror" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" android:enableOnBackInvokedCallback="true" />
+ <activity android:name="com.termux.x11.MainActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.x11" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" android:enableOnBackInvokedCallback="true" />
  <service android:name="com.termux.x11.X11Service" android:process=":x11server" android:exported="false" android:foregroundServiceType="specialUse">
    <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-started local X11 display for Linux and Windows applications" />
  </service>
  <activity android:name=".ConnectorOAuthActivity" android:exported="true">
    <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="dev.zfold.assistant" android:host="connector-oauth"/></intent-filter>
  </activity>
-  <activity android:name=".VoiceCallActivity" android:theme="@style/WorkScreenTheme" android:exported="false" android:launchMode="singleTop"
+  <activity android:name=".VoiceCallActivity" android:theme="@style/WorkScreenTheme" android:exported="false" android:launchMode="singleTop" android:enableOnBackInvokedCallback="true"
    android:showWhenLocked="true" android:turnScreenOn="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
-  <activity android:name=".UserQuestionActivity" android:theme="@style/WorkScreenTheme" android:exported="false" android:launchMode="singleTop" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+  <activity android:name=".UserQuestionActivity" android:theme="@style/WorkScreenTheme" android:exported="false" android:launchMode="singleTop" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" android:enableOnBackInvokedCallback="true" />
   <service android:name=".PhoneAccessibility" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
    <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
    <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility"/>

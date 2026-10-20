@@ -13,7 +13,6 @@ import android.database.Cursor;
 import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.provider.OpenableColumns;
@@ -58,7 +57,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 /** Private workspace preview. The WebView has a synthetic, per-render offline origin. */
-public final class PreviewActivity extends Activity {
+public final class PreviewActivity extends NavigableActivity {
   private static final String EXTRA_PATH="dev.zfold.assistant.preview.PATH";
   private static final String CSP="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
     +"img-src 'self' data:; font-src 'self' data:; media-src 'self'; connect-src 'self'; object-src 'none'; "
@@ -69,7 +68,6 @@ public final class PreviewActivity extends Activity {
   private Ui.Theme theme;
   private TextView title,pathLabel,status;
   private Button mode,folder,previous;
-  private Object backCallback;
   private ProgressBar progress;
   private FrameLayout content;
   private ScrollView scroll;
@@ -119,7 +117,6 @@ public final class PreviewActivity extends Activity {
       restoreScroll=true;
     }
     build();load();
-    if(Build.VERSION.SDK_INT>=33)backCallback=Api33.register(this);
   }
 
   @Override protected void onNewIntent(Intent intent){
@@ -156,7 +153,7 @@ public final class PreviewActivity extends Activity {
     folder=button(actions,"授权文件夹",this::openFolder);folder.setVisibility(documentUri==null?View.GONE:View.VISIBLE);
     button(actions,"外部打开",this::openExternal);
     button(actions,"说明",()->new android.app.AlertDialog.Builder(this).setTitle("预览范围")
-      .setMessage("离线预览 · 文本最大 2 MiB · UTF-8 / 带 BOM 的 UTF-16。\n\nMarkdown 支持表格、授权目录内的相对 Markdown 链接和图片。文件夹授权会在提供方支持时记住，下次打开同一提供方的文档自动复用；不支持记忆时会提示。若无法确认原文件身份，可从“打开文件夹”选择已授权文件夹内的文档，无需重复授权。不会访问网络图片。\n\n顶部“上一文档”返回跳转前的文档和阅读位置；“关闭”退出预览。系统返回先退页内跳转，再退文档。\n\nHTML/SVG 可运行本地脚本、读取同目录及子目录资源。网络、跨目录、嵌入页面、表单和下载已禁用。需要完整浏览器能力时可选择外部打开。")
+      .setMessage("离线预览 · 文本最大 2 MiB · UTF-8 / 带 BOM 的 UTF-16。\n\nMarkdown 支持表格、授权目录内的相对 Markdown 链接和图片。文件夹授权会在提供方支持时记住，下次打开同一提供方的文档自动复用；不支持记忆时会提示。若无法确认原文件身份，可从“打开文件夹”选择已授权文件夹内的文档，无需重复授权。不会访问网络图片。\n\n顶部“上一文档”返回跳转前的文档和阅读位置；“关闭”退出预览。系统返回先退页内跳转，再退文档，最后返回上一级；从桌面直接打开时返回功能中心。文件夹内返回先回上级文件夹，根目录返回只关闭选择器。\n\nHTML/SVG 可运行本地脚本、读取同目录及子目录资源。网络、跨目录、嵌入页面、表单和下载已禁用。需要完整浏览器能力时可选择外部打开。")
       .setPositiveButton("知道了",null).show());root.addView(toolbar);
     progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setIndeterminate(true);root.addView(progress,new LinearLayout.LayoutParams(-1,dp(3)));
     status=Ui.text(this,"",12,theme.muted);status.setPadding(dp(16),dp(8),dp(16),dp(8));status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);root.addView(status);
@@ -423,6 +420,9 @@ public final class PreviewActivity extends Activity {
               if(offset==1&&which==0){browseFolder(granted,parentPath(relative));return;}
               PreviewTree.Entry chosen=entries.get(which-offset);
               if(chosen.directory())browseFolder(granted,chosen.relative);else selectTreeDocument(granted,chosen);
+            }).setOnCancelListener(dialog->{
+              if(!folderCurrent(ticket))return;
+              if(relative.isEmpty())cancelFolder();else browseFolder(granted,parentPath(relative));
             }).setPositiveButton("重新授权",(dialog,which)->authorizeFolder()).setNegativeButton("取消",null).show();
         });
       }catch(Exception error){runOnUiThread(()->{
@@ -600,29 +600,18 @@ public final class PreviewActivity extends Activity {
   @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();}
   @Override protected void onPause(){rememberPosition();if(web!=null)web.onPause();SystemWindowNavigation.remember(this);super.onPause();}
   @Override protected void onDestroy(){
-    if(Build.VERSION.SDK_INT>=33&&backCallback!=null)Api33.unregister(this,backCallback);
     destroyed=true;++generation;cancelRead();cancelFolder();loader.shutdownNow();disposeWeb();
-    if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();
+    if(isFinishing()&&fromOverlay&&!isReturningToMenu())FloatingNavigation.restore(getApplicationContext());super.onDestroy();
   }
   @Override public void onBackPressed(){
     cancelFolder();
     if(web!=null&&web.canGoBack()){web.goBack();return;}
     if(previousDocument())return;
-    finish();
+    navigateUp();
   }
   private boolean previousDocument(){
     if(history.isEmpty())return false;
     cancelFolder();restoreTarget(history.remove(history.size()-1));restoreScroll=true;load();return true;
-  }
-  private static class Api33 {
-    static Object register(PreviewActivity activity){
-      android.window.OnBackInvokedCallback callback=activity::onBackPressed;
-      activity.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,callback);
-      return callback;
-    }
-    static void unregister(PreviewActivity activity,Object callback){
-      activity.getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback)callback);
-    }
   }
   private int dp(float value){return Ui.dp(this,value);}
   private static String message(Exception error){return error.getMessage()==null?error.getClass().getSimpleName():error.getMessage();}

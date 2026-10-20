@@ -19,17 +19,18 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-public final class MainActivity extends Activity implements PiRuntime.Listener {
+public final class MainActivity extends NavigableActivity implements PiRuntime.Listener {
   static final int BG=Color.rgb(245,246,247), INK=Color.rgb(16,20,24), MUTED=Color.rgb(95,107,120), ACCENT=Color.rgb(47,111,237), LINE=Color.rgb(226,230,234);
   static volatile MainActivity current;
   PiRuntime runtime; LinearLayout conversation,root,intro,draftAttachment,fileList,composerSurface,statusRow,actionToolbar; android.view.View slashSuggest; FrameLayout composerFrame;ConversationMinimap.Scroll scroll;ConversationMinimap minimap; TextView status,draftLabel,thinkingButton; Ui.RichBlock answer; Ui.Action voiceButton,modelButton,circleButton,attachButton,screenShareButton,sendButton,sessionButton,overflowButton; EditText input; ImageView draftThumbnail,draftExpanded; Bitmap draftBitmap; Ui.Theme theme;
   StringBuilder response=new StringBuilder(); boolean continuous,screenSharing,capturingScreen,composerCompact,screenWindowPending;
   final Runnable screenListener=()->{screenSharing=ScreenContext.enabled();updateScreenShareControl();};
-  private boolean returnWorkbench,temporarySettingsHost,smallWindow,windowLayoutApplied;
+  private boolean returnWorkbench,temporarySettingsHost,returningToWorkbench,smallWindow,windowLayoutApplied;
+  private String workbenchPage="";
   LinearLayout inputRow; Ui.Action workbenchButton; View welcomeMark,suggestions; TextView welcomeTitle,welcomeDescription; ScrollView attachmentScroll;
   private android.graphics.Insets windowBars=android.graphics.Insets.NONE,windowIme=android.graphics.Insets.NONE;
   private int toolbarWidth=-1;private float toolbarFontScale=-1;private boolean toolbarSmall;
-  SwipeNavigationLayout swipeNavigation;private Object backCallback;private ActionMode textSelection;
+  SwipeNavigationLayout swipeNavigation;private ActionMode textSelection;
   String lastSentFiles="";
   int statusToken;
   VoiceTurnController voice;
@@ -44,7 +45,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   final Map<String,InterruptionView> interruptionViews=new LinkedHashMap<>();
   private TextView retryLabel;
   @Override public void onCreate(Bundle state){
-    super.onCreate(state);returnWorkbench=getIntent().getBooleanExtra("return_workbench",false);temporarySettingsHost=returnWorkbench;theme=new Ui.Theme(this);getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);
+    super.onCreate(state);readWorkbenchRoute(getIntent());temporarySettingsHost=returnWorkbench;theme=new Ui.Theme(this);getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);
     getWindow().getDecorView().setSystemUiVisibility(theme.dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     current=this;
     runtime=PiRuntime.get(this);runtime.listen(this);
@@ -58,7 +59,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     });
     foregroundVoice=voice;
     getWindow().setDecorFitsSystemWindows(false);
-    buildUI();UserQuestions.listen(questionChanged);backCallback=ChatBackNavigation.register(this);ScreenContext.listen(screenListener);screenListener.run();
+    buildUI();UserQuestions.listen(questionChanged);ScreenContext.listen(screenListener);screenListener.run();
     displayedSessionId=runtime.sessionId;for(JSONObject item:runtime.lastInterruptions.values())showInterruption(item);
     if(runtime.ready&&!runtime.configured)runtime.restoreConfiguration();
     else if(runtime.configured)runtime.send(PiRuntime.json("type","history"));
@@ -263,7 +264,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       public void toggleVoice(){toggleVoice();}
       public void toggleScreenShare(){toggleScreenShare();}
       public void prompt(String text){sendText(text);}
-    },section);
+    },section,()->returnToWorkbench("open_tools"));
   }
   void bubble(String value,boolean user){
     LinearLayout line=new LinearLayout(this);ConversationMinimap.mark(line,user?ConversationMinimap.USER:ConversationMinimap.ASSISTANT);line.setGravity(user?Gravity.END:Gravity.START);line.setOrientation(LinearLayout.HORIZONTAL);
@@ -578,7 +579,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     AutoCompleteTextView model=modelField(fields,"模型名称（输入过滤或选择）",c.optString("model"));
     EditText api=field(fields,"消息格式（custom 必填：openai-responses / openai-completions / anthropic-messages / google-generative-ai）",c.optString("api","openai-responses"),false);
     ScrollView formScroll=new ScrollView(this);formScroll.addView(fields);AlertDialog dialog=new AlertDialog.Builder(this).setTitle("连接你的模型").setView(formScroll).setNegativeButton("取消",null).setPositiveButton("保存",null).create();
-    dialog.setOnDismissListener(d->{if(returnWorkbench){returnWorkbench=false;getIntent().removeExtra("return_workbench");WorkbenchActivity.returnFromSettings(this);if(temporarySettingsHost)finish();}});
+    dialog.setOnDismissListener(d->returnToWorkbench("open_models"));
     dialog.setOnShowListener(x->dialog.getButton(-1).setOnClickListener(v->{
       if(runtime.busy){notice("请先停止当前任务");return;}
       String providerId=provider.getText().toString().trim(),url=endpoint.getText().toString().trim(),apiValue=api.getText().toString().trim();
@@ -594,6 +595,16 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
       try(FileOutputStream out=new FileOutputStream(configFile())){out.write(value.toString().getBytes(StandardCharsets.UTF_8));}catch(Exception e){notice("保存失败");return;}
       runtime.send(PiRuntime.json("type","configure","config",value));dialog.dismiss();
     }));dialog.show();
+  }
+  private void readWorkbenchRoute(Intent intent){
+    returnWorkbench=intent.getBooleanExtra("return_workbench",false);workbenchPage="";
+    if(returnWorkbench){if(intent.getBooleanExtra("open_models",false))workbenchPage="open_models";else if(intent.getBooleanExtra("open_speech",false))workbenchPage="open_speech";else if(intent.getBooleanExtra("open_tools",false))workbenchPage="open_tools";else if(intent.getBooleanExtra("open_runtime_packs",false))workbenchPage="open_runtime_packs";}
+  }
+  private void returnToWorkbench(String page){if(page.equals(workbenchPage))returnToWorkbench();}
+  private void returnToWorkbench(){
+    if(!returnWorkbench||isFinishing()||isChangingConfigurations())return;
+    returnWorkbench=false;returningToWorkbench=temporarySettingsHost;getIntent().removeExtra("return_workbench");
+    WorkbenchActivity.returnFromSettings(this);if(temporarySettingsHost)finish();
   }
   void circleAskSettings(){
     boolean assist=CircleAskPrefs.assistInvokesCircle(this);
@@ -632,14 +643,15 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     showStatus("扫描 Runtime Packs…");
     new Thread(()->{
       JSONObject scan;
-      try{scan=PiRuntimePacks.available(this);}catch(Exception e){runOnUiThread(()->notice("扫描失败："+e.getMessage()));return;}
+      try{scan=PiRuntimePacks.available(this);}catch(Exception e){runOnUiThread(()->{notice("扫描失败："+e.getMessage());returnToWorkbench("open_runtime_packs");});return;}
       runOnUiThread(()->{
         if(isFinishing())return;showStatus(idleStatus());
         JSONArray archives=scan.optJSONArray("archives");
-        if(archives==null||archives.length()==0){new AlertDialog.Builder(this).setTitle("Runtime Packs").setMessage("没有找到 .tar.gz。\n\n请把 `scripts/runtime-pack.py` 生成的包放到：\n/storage/pi/runtime-packs/").setPositiveButton("完成",null).show();return;}
+        if(archives==null||archives.length()==0){new AlertDialog.Builder(this).setTitle("Runtime Packs").setMessage("没有找到 .tar.gz。\n\n请把 `scripts/runtime-pack.py` 生成的包放到：\n/storage/pi/runtime-packs/").setPositiveButton("完成",null).setOnDismissListener(d->returnToWorkbench("open_runtime_packs")).show();return;}
         ArrayList<String> labels=new ArrayList<>();ArrayList<JSONObject> files=new ArrayList<>();
         for(int i=0;i<archives.length();i++){JSONObject item=archives.optJSONObject(i);if(item==null)continue;files.add(item);labels.add(item.optString("name")+"\n"+(item.optBoolean("installed")?"已安装 · ":"未安装 · ")+item.optString("sha256").substring(0,12)+" · "+(item.optLong("size")/1024/1024)+" MB");}
-        new AlertDialog.Builder(this).setTitle("Runtime Packs").setItems(labels.toArray(new String[0]),(d,i)->{
+        AlertDialog packs=new AlertDialog.Builder(this).setTitle("Runtime Packs").setItems(labels.toArray(new String[0]),null).setNegativeButton("关闭",null).setOnDismissListener(d->returnToWorkbench("open_runtime_packs")).create();
+        packs.show();packs.getListView().setOnItemClickListener((parent,view,i,id)->{
           JSONObject item=files.get(i);
           new AlertDialog.Builder(this).setTitle("安装 Runtime Pack").setMessage("文件："+item.optString("name")+"\n\nSHA-256："+item.optString("sha256")+"\n\n安装会解压 Android/bionic 二进制到应用私有目录。请确认来源和哈希。").setNegativeButton("取消",null).setPositiveButton("安装",(x,y)->{
             showStatus("安装 "+item.optString("name")+"…");
@@ -651,7 +663,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
               catch(Exception error){runOnUiThread(()->{if(isFinishing())return;showStatus(idleStatus());notice("安装失败："+error.getMessage());});}
             },"pi-pack-install").start();
           }).show();
-        }).setNegativeButton("关闭",null).show();
+        });
       });
     },"pi-pack-scan").start();
   }
@@ -660,7 +672,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     startActivityForResult(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,Uri.parse("package:"+getPackageName())),23);
   }
   @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
-    if(request==23)notice(Environment.isExternalStorageManager()?"已授权 storage/pi，请完全退出并重新打开 Zfold":"未授予所有文件访问，Pi 继续使用应用私有目录");
+    if(request==23){notice(Environment.isExternalStorageManager()?"已授权 storage/pi，请完全退出并重新打开 Zfold":"未授予所有文件访问，Pi 继续使用应用私有目录");returnToWorkbench("open_runtime_packs");}
   }
   void jevSettings(){
     LinearLayout fields=new LinearLayout(this);fields.setOrientation(LinearLayout.VERTICAL);fields.setPadding(dp(24),0,dp(24),dp(12));
@@ -679,7 +691,7 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
     }));dialog.show();
   }
   void speechCapabilities(){
-    SpeechSettings.show(this,voice,this::localSpeechCapabilities);
+    SpeechSettings.show(this,voice,this::localSpeechCapabilities,()->returnToWorkbench("open_speech"));
   }
   private void localSpeechCapabilities(){
     showStatus("检查本机语音能力…");PhoneSpeech.inspectMandarin(this,support->{
@@ -803,22 +815,22 @@ public final class MainActivity extends Activity implements PiRuntime.Listener {
   }
   private void acceptGoalEntry(){if(getIntent().getBooleanExtra("open_goal",false)){getIntent().removeExtra("open_goal");root.post(()->GoalPanel.show(this,runtime));}}
   @Override protected void onResume(){super.onResume();if(!returnWorkbench)StartupPreferences.rememberPage(this,StartupPreferences.GUI);acceptGoalEntry();acceptLegacyDraft();acceptImage();acceptWakeEntry();if(getIntent().getBooleanExtra("open_voice",false)){getIntent().removeExtra("open_voice");root.post(this::toggleVoice);}}
-  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);acceptGoalEntry();root.post(this::acceptWakeEntry);returnWorkbench=intent.getBooleanExtra("return_workbench",false);acceptImage();if(intent.getBooleanExtra("open_tools",false)){intent.removeExtra("open_tools");sessionButton.post(()->showToolCenter(sessionButton));}if(intent.getBooleanExtra("open_models",false)){intent.removeExtra("open_models");settings();}if(intent.getBooleanExtra("open_capabilities",false)){intent.removeExtra("open_capabilities");permissions();}if(intent.getBooleanExtra("open_speech",false)){intent.removeExtra("open_speech");speechCapabilities();}if(intent.getBooleanExtra("open_sessions",false)){intent.removeExtra("open_sessions");sessionButton.post(this::openSidebar);}if(intent.getBooleanExtra("open_provider_auth",false)){intent.removeExtra("open_provider_auth");sessionButton.post(()->ProviderAuthDialog.show(sessionButton,runtime));}if(intent.getBooleanExtra("open_runtime_packs",false)){intent.removeExtra("open_runtime_packs");runtimePacksSettings();}}
+  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);acceptGoalEntry();root.post(this::acceptWakeEntry);readWorkbenchRoute(intent);acceptImage();if(intent.getBooleanExtra("open_tools",false)){intent.removeExtra("open_tools");sessionButton.post(()->showToolCenter(sessionButton));}if(intent.getBooleanExtra("open_models",false)){intent.removeExtra("open_models");settings();}if(intent.getBooleanExtra("open_capabilities",false)){intent.removeExtra("open_capabilities");permissions();}if(intent.getBooleanExtra("open_speech",false)){intent.removeExtra("open_speech");speechCapabilities();}if(intent.getBooleanExtra("open_sessions",false)){intent.removeExtra("open_sessions");sessionButton.post(this::openSidebar);}if(intent.getBooleanExtra("open_provider_auth",false)){intent.removeExtra("open_provider_auth");sessionButton.post(()->ProviderAuthDialog.show(sessionButton,runtime));}if(intent.getBooleanExtra("open_runtime_packs",false)){intent.removeExtra("open_runtime_packs");runtimePacksSettings();}}
   @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==21&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)toggleVoice();if(request==22)toggleWake();}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);super.onPause();if(voice.sessionActive()&&!VoiceCallActivity.isActive()){VoiceWakeService.resume(this);}}
   @Override public void onConfigurationChanged(android.content.res.Configuration config){super.onConfigurationChanged(config);if(new Ui.Theme(this).dark!=theme.dark){recreate();return;}root.post(this::adjustColumn);SystemWindowNavigation.remember(this);}
-  boolean canNavigateDrawerBack(){WindowInsets insets=getWindow().getDecorView().getRootWindowInsets();return textSelection==null&&(insets==null||!insets.isVisible(WindowInsets.Type.ime()));}
   void handleBack(){
     WindowInsets insets=getWindow().getDecorView().getRootWindowInsets();
     if(insets!=null&&insets.isVisible(WindowInsets.Type.ime())){((android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(),0);return;}
     if(textSelection!=null){textSelection.finish();return;}
     if(swipeNavigation.hasDrawer()){swipeNavigation.close();return;}
     if(draftExpanded.getVisibility()==View.VISIBLE){draftExpanded.setVisibility(View.GONE);return;}
+    if(returnWorkbench){returnToWorkbench();return;}
     showStatus("已在当前对话");
   }
   @Override public void onBackPressed(){handleBack();}
   @Override public void onActionModeStarted(ActionMode mode){super.onActionModeStarted(mode);textSelection=mode;syncMinimapSuppression();if(swipeNavigation!=null)swipeNavigation.selecting(true);}
   @Override public void onActionModeFinished(ActionMode mode){super.onActionModeFinished(mode);if(textSelection==mode)textSelection=null;syncMinimapSuppression();if(swipeNavigation!=null)swipeNavigation.selecting(false);}
   @Override public void onWindowFocusChanged(boolean focus){super.onWindowFocusChanged(focus);if(root!=null)SystemWindowNavigation.remember(this);if(focus)SystemAssistEntry.attach(this);}
-  @Override protected void onDestroy(){PromptDispatcher.get(this).unlistenQueue(queueChanged);UserQuestions.unlisten(questionChanged);ChatBackNavigation.unregister(this,backCallback);if(minimap!=null)minimap.dispose();if(swipeNavigation!=null)swipeNavigation.dispose();if(current==this)current=null;runtime.unlisten(this);ScreenContext.unlisten(screenListener);pendingTaskPrompt=null;VoiceCoordinator.get(this).forget(this);if(isFinishing()&&!VoiceCallActivity.isActive())voice.stopSession(false);if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
+  @Override protected void onDestroy(){PromptDispatcher.get(this).unlistenQueue(queueChanged);UserQuestions.unlisten(questionChanged);if(minimap!=null)minimap.dispose();if(swipeNavigation!=null)swipeNavigation.dispose();if(current==this)current=null;runtime.unlisten(this);ScreenContext.unlisten(screenListener);pendingTaskPrompt=null;VoiceCoordinator.get(this).forget(this);if(isFinishing()&&!returningToWorkbench&&!VoiceCallActivity.isActive())voice.stopSession(false);if(draftBitmap!=null){draftThumbnail.setImageDrawable(null);draftExpanded.setImageDrawable(null);draftBitmap.recycle();draftBitmap=null;}super.onDestroy();}
 }

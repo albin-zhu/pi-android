@@ -2,6 +2,17 @@
 
 当前交付状态（2026-10-12）：Fold7 已覆盖安装 0.2.87-compat28，实际 Pi SDK 为 1.0.4，`openai-codex/gpt-6.1-sol` 与原会话恢复；模型中断原因可从历史查看，自动重试/压缩进度可见。八份私有配置指纹保留已核对。本次只修复可观察性与构建版本校验，不宣称消除上游连接故障或完成 CLI/TUI 迁移。下面保留各版本原始记录。
 
+## 全应用统一分层返回
+
+- 用共同的 `NavigableActivity` 管理 13 个持续交互页面的系统 Back 回调；Android 13+ 回调先处理键盘／选字，再交给页面的本地返回层级，旧系统保留 `onBackPressed`。有调用页时返回原 task 上一页；无上一页时返回可复用的功能中心，聊天和功能中心根页不直接退出。
+- 删除旧 `ChatBackNavigation` 和聊天左边缘的系统手势排除区域；左右系统边缘均为返回，不再把左边缘 Back 转成打开侧栏。普通内容区域的侧栏拖动与横向内容手势保留。虚拟屏先关选屏层，Markdown 先退网页／文档历史，文件夹列表先退父目录；明确关闭与结束进程操作保持独立。
+- 工作台的模型、语音、工具目录、Runtime Packs 均保留返回工作台的路由；嵌套设置保留父菜单，配置重建或非父弹窗关闭不抢导航。临时设置宿主返回时不停止已有语音会话。root 回退菜单与旧悬浮入口恢复互斥；应用内虚拟屏／头像编辑保留实际 caller，桌面虚拟屏仍复用独立 task。
+- 宿主 smoke 对前包实际编译的 TerminalActivity／VirtualScreenActivity 执行 root Back，观察到只 finish、不打开父页。新包 smoke 执行 11 个实际 viewer 类的有父页／无父页路径，以及真实 MainActivity、WorkbenchActivity 的根页保留；覆盖 API 30/32 与 33/34 路由、键盘／选字优先、重复返回、显式关闭区别、回调释放、悬浮来源和不转交无关 extras。另一 smoke 覆盖四类设置菜单的嵌套关闭、配置重建、冷／热聊天宿主及重复回调。Android Activity／Window／系统服务边界使用宿主适配器，不冒充设备 task／窗口／PTY 验证。
+- 更新 `SwipeNavigationInstrumentation`、`InteractionInstrumentation`、`TerminalAcceptanceInstrumentation`，保留真实手势与进程边界回归：两侧边缘返回／取消、菜单层级、root 终端返回功能中心、根菜单不退出、Shell 原进程重开。三者已随全部源码编译，本次未在模拟器或真机执行。
+- 全部 210 个 Java 源文件完成 API 35 编译、D8、资源／Manifest 链接；最终 APK 二进制确认 13 个页面均启用 Back 回调。ZIP 完整性、源码 assets 逐字节匹配、zipalign、原证书 v3 签名通过。JS 未改动，native／KWS／X11 二进制复用上一主包，不宣称 NDK 冷构建。
+- 产物 `/workspace/workspace/artifacts/Zfold-0.2.87-compat28-unified-back.apk`，52,091,879 bytes，SHA-256 `9ee759056739df6f66f64d0b1e395352484fbae2012093611b4b1ac656712360`；versionCode 287，targetSdk 28，原签名证书 SHA-256 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。
+- **未安装或重启主应用。** 本次 `adb devices` 无设备；三星边缘手势、取消动画、弹窗与输入法优先级、跨 task 回退和返回后实际 Shell／X11 进程存活仍未做真机视觉交互验收。下方旧版本记录保留历史含义，不代表本版重跑通过。
+
 ## Markdown 授权记忆、文档返回与桌面入口
 
 - 文件夹选择请求持久只读授权；复用 Android 保存的可读 tree grants，以 provider 身份确认当前文档，不能确认时仍要求用户明确选择文档。支持临时授权降级提示、失效授权回退和取消读取，不扩大到其他目录。

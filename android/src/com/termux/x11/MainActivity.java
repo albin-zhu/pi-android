@@ -22,12 +22,13 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.ToggleButton;
+import dev.zfold.assistant.NavigableActivity;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /** Independent general-purpose X11 display; it never owns a Pi/chat terminal session. */
-public final class MainActivity extends Activity {
+public final class MainActivity extends NavigableActivity {
     private static final AtomicInteger NEXT_TOKEN = new AtomicInteger();
     private final Messenger replies = new Messenger(new Handler(Looper.getMainLooper(), this::handleReply));
     private Messenger server;

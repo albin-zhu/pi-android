@@ -10,7 +10,7 @@ import java.util.*;
 import org.json.*;
 
 /** Task-bound form. Dismissing the view preserves the unanswered request and draft. */
-public final class UserQuestionActivity extends Activity {
+public final class UserQuestionActivity extends NavigableActivity {
   private String requestId;private UserQuestions.Request rendered;private LinearLayout body;private TextView status;private Ui.Theme theme;
   private final ArrayList<EditText> inputs=new ArrayList<>();private final Runnable changed=this::refresh;
   static void show(Context context,String id){
@@ -62,5 +62,5 @@ public final class UserQuestionActivity extends Activity {
     body.setFocusableInTouchMode(true);body.requestFocus();
   }
   private void submit(boolean declined){try{UserQuestions.submit(this,requestId,declined);finish();}catch(Exception error){status.setTextColor(theme.error);status.setText(error.getMessage());}}
-  @Override public void onBackPressed(){finish();}
+  @Override public void onBackPressed(){navigateUp();}
 }

@@ -1,6 +1,6 @@
 package dev.zfold.assistant;
 
-import android.app.*;
+import android.app.AlertDialog;
 import android.content.*;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -13,7 +13,7 @@ import java.util.*;
 import org.json.*;
 
 /** Connection management is a direct workflow, independent of model configuration. */
-public final class ConnectorActivity extends Activity implements PiRuntime.Listener {
+public final class ConnectorActivity extends NavigableActivity implements PiRuntime.Listener {
   private PiRuntime runtime;private Ui.Theme theme;private LinearLayout list;private TextView summary;
   private JSONObject state=new JSONObject();private JSONArray recipes=new JSONArray();
   private final Map<String,String> pending=new HashMap<>();private final Set<String> loginRequests=new HashSet<>();
@@ -26,15 +26,14 @@ public final class ConnectorActivity extends Activity implements PiRuntime.Liste
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);if(intent.hasExtra("from_overlay"))fromOverlay=intent.getBooleanExtra("from_overlay",false);setIntent(intent);refresh();}
   @Override protected void onResume(){super.onResume();if(runtime!=null)refresh();}
   @Override protected void onPause(){SystemWindowNavigation.remember(this);super.onPause();}
-  @Override protected void onDestroy(){runtime.unlisten(this);if(isFinishing()&&fromOverlay)FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
-  @Override public void onBackPressed(){finish();}
+  @Override protected void onDestroy(){runtime.unlisten(this);if(isFinishing()&&fromOverlay&&!isReturningToMenu())FloatingNavigation.restore(getApplicationContext());super.onDestroy();}
   private void build(){
     getWindow().setDecorFitsSystemWindows(false);getWindow().setStatusBarColor(theme.page);getWindow().setNavigationBarColor(theme.page);
     getWindow().getDecorView().setSystemUiVisibility(theme.dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(theme.page);
     root.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());root.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});
     LinearLayout header=row();header.setPadding(dp(12),dp(8),dp(12),dp(6));
-    header.addView(new Ui.Action(this,R.drawable.ic_caret_down,"","返回",theme.ink,Color.TRANSPARENT,this::finish),new LinearLayout.LayoutParams(dp(48),dp(48)));
+    header.addView(new Ui.Action(this,R.drawable.ic_caret_down,"","返回",theme.ink,Color.TRANSPARENT,this::navigateUp),new LinearLayout.LayoutParams(dp(48),dp(48)));
     TextView title=text("连接",22,theme.ink);title.setTypeface(Typeface.create("sans-serif-medium",0));header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
     header.addView(button("添加连接",true,this::chooseAdd));root.addView(header);
     summary=text("正在读取连接…",13,theme.muted);summary.setPadding(dp(22),0,dp(22),dp(14));root.addView(summary);
