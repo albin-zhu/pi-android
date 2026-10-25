@@ -12,7 +12,7 @@ import com.termux.view.TerminalView;
 import java.io.File;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** Fresh install, actual selection/clipboard, background lifetime, orientation and session controls. */
+/** Fresh install, system Back lifetime, actual selection/clipboard, background lifetime, orientation and session controls. */
 public final class TerminalAcceptanceInstrumentation extends Instrumentation implements Application.ActivityLifecycleCallbacks {
   private volatile TerminalActivity activity;private TerminalView view;private TerminalSessions.Job job;private boolean fresh;
   private ClipData clipboard;private float scale=1;private String error="";

@@ -103,6 +103,95 @@
 - 用户提供的 ADB 35019 端口完成 TLS 连接，但设备拒绝当前客户端证书（`CERTIFICATE_UNKNOWN`）。用户随后要求只打包、手动安装；本轮未运行设备安装、force-stop 或 instrumentation，本地诊断 ADB 服务已停止。最初只检查 Android 私有密钥与构建缓存，遗漏用户此前提供的 `/workspace/debug.keystore`；通过历史记录找回路径、校验证书后直接复用，未重新索取、导出、复制或生成密钥。签名不需要本轮 ADB 授权。
 - 设备边界：新工作台布局、折叠／横屏、IME 及滚动切换、Ubuntu 的真实启动目录、进程回收、GUI／预览／窗口返回仍未真机验收。运行日志和产物元数据保存在 `.build/tui/`；不把编译成功或历史版本的设备记录等同于本轮行为验证。
 
+## 全应用统一分层返回
+
+- 用共同的 `NavigableActivity` 管理 13 个持续交互页面的系统 Back 回调；Android 13+ 回调先处理键盘／选字，再交给页面的本地返回层级，旧系统保留 `onBackPressed`。有调用页时返回原 task 上一页；无上一页时返回可复用的功能中心，聊天和功能中心根页不直接退出。
+- 删除旧 `ChatBackNavigation` 和聊天左边缘的系统手势排除区域；左右系统边缘均为返回，不再把左边缘 Back 转成打开侧栏。普通内容区域的侧栏拖动与横向内容手势保留。虚拟屏先关选屏层，Markdown 先退网页／文档历史，文件夹列表先退父目录；明确关闭与结束进程操作保持独立。
+- 工作台的模型、语音、工具目录、Runtime Packs 均保留返回工作台的路由；嵌套设置保留父菜单，配置重建或非父弹窗关闭不抢导航。临时设置宿主返回时不停止已有语音会话。root 回退菜单与旧悬浮入口恢复互斥；应用内虚拟屏／头像编辑保留实际 caller，桌面虚拟屏仍复用独立 task。
+- 宿主 smoke 对前包实际编译的 TerminalActivity／VirtualScreenActivity 执行 root Back，观察到只 finish、不打开父页。新包 smoke 执行 11 个实际 viewer 类的有父页／无父页路径，以及真实 MainActivity、WorkbenchActivity 的根页保留；覆盖 API 30/32 与 33/34 路由、键盘／选字优先、重复返回、显式关闭区别、回调释放、悬浮来源和不转交无关 extras。另一 smoke 覆盖四类设置菜单的嵌套关闭、配置重建、冷／热聊天宿主及重复回调。Android Activity／Window／系统服务边界使用宿主适配器，不冒充设备 task／窗口／PTY 验证。
+- 更新 `SwipeNavigationInstrumentation`、`InteractionInstrumentation`、`TerminalAcceptanceInstrumentation`，保留真实手势与进程边界回归：两侧边缘返回／取消、菜单层级、root 终端返回功能中心、根菜单不退出、Shell 原进程重开。三者已随全部源码编译，本次未在模拟器或真机执行。
+- 全部 210 个 Java 源文件完成 API 35 编译、D8、资源／Manifest 链接；最终 APK 二进制确认 13 个页面均启用 Back 回调。ZIP 完整性、源码 assets 逐字节匹配、zipalign、原证书 v3 签名通过。JS 未改动，native／KWS／X11 二进制复用上一主包，不宣称 NDK 冷构建。
+- 产物 `/workspace/workspace/artifacts/Zfold-0.2.87-compat28-unified-back.apk`，52,091,879 bytes，SHA-256 `9ee759056739df6f66f64d0b1e395352484fbae2012093611b4b1ac656712360`；versionCode 287，targetSdk 28，原签名证书 SHA-256 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。
+- **未安装或重启主应用。** 本次 `adb devices` 无设备；三星边缘手势、取消动画、弹窗与输入法优先级、跨 task 回退和返回后实际 Shell／X11 进程存活仍未做真机视觉交互验收。下方旧版本记录保留历史含义，不代表本版重跑通过。
+
+## Markdown 授权记忆、文档返回与桌面入口
+
+- 文件夹选择请求持久只读授权；复用 Android 保存的可读 tree grants，以 provider 身份确认当前文档，不能确认时仍要求用户明确选择文档。支持临时授权降级提示、失效授权回退和取消读取，不扩大到其他目录。
+- 顶部新增「上一文档」与独立「关闭」；恢复文档目标、源码模式、滚动和锚点，Android 13+ 注册系统返回回调。授权同一文档不增加重复历史。
+- 四个静态图标快捷入口包含原圈选及 Ubuntu TUI、Android TUI、虚拟屏；移除重复的动态发布。固定 action 经 LauncherActivity 路由，不转交外部 extras。终端按指定环境复用存活交互会话，排除命令／关闭中／已结束会话，不改默认启动偏好。新增虚拟屏 RemoteViews 桌面组件，使用每实例独立、不可变的直接 Activity PendingIntent，周期更新为 0；它是打开查看器的入口，不是实时画面。
+- 现有 9 项 Markdown renderer 测试、`PreviewFilesCheck`、`PreviewMarkdownPathsCheck` 全部通过。临时 JVM provider smoke 执行实际 `PreviewTree` 与 Android 35 的 Uri／Bundle／DocumentsContract：覆盖可读树过滤、重新打开复用、嵌套身份、拒绝同名／跨 provider 替换、失效／撤销授权、临时提供方和取消。ContentResolver 与 provider 发现使用宿主适配器，不作为真机跨进程权限证明。
+- 临时 JVM smoke 执行最终编译的 `PreviewActivity` 快照／恢复，检查文档与授权范围、源码和渲染滚动、锚点及重建状态；执行实际 `TerminalSessions.interactive` 检查环境选择、排除命令／结束中会话、重复入口复用、默认偏好不被访问、Ubuntu 前提错误和四会话上限。对象使用宿主状态注入，未启动 Android UI／PTY。现有终端 instrumentation 增加命令任务排除与重复选择回归，已编译，未在设备上运行。
+- 全部 JS 重新 bundle；210 个 Java 源文件完成 API 35 编译、D8、Manifest／资源链接。最终 APK 二进制中确认四个 shortcut action、组件 metadata 和零周期更新；MarkdownEntryActivity 仍导出，PreviewActivity／VirtualScreenActivity 仍非导出。ZIP 完整性、全部源码 assets 与包内逐字节匹配、zipalign、原证书 v3 签名通过。仅 native、KWS／X11 二进制复用前包，不宣称 NDK 冷构建。
+- 产物 `/workspace/workspace/artifacts/Zfold-0.2.87-compat28-preview-shortcuts.apk`，52,087,783 bytes，SHA-256 `b0c0efbe55d78f23172af061777698792c11198f09623a1e09829dc2222368a8`；versionCode 287，targetSdk 28，签名证书 SHA-256 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。
+- **未安装或重启主应用。** ADB 无设备；新增原生返回按钮、跨重启授权、三星桌面组件预览／缩放／点击与长按快捷入口尚未做真机视觉交互验收。宿主状态检查和编译资源核对不冒充这些验收。
+
+## Markdown 打开入口打包回归修复 · 2026-10-19
+
+- 确认 `Zfold-0.2.87-compat28-virtual-screen.apk` 的实际二进制 Manifest 使用旧工作区声明，遗漏 `MarkdownEntryActivity` 和 `PreviewActivity`；虽然包内已有新版预览类和资源，系统仍无法把 Zfold 列为 Markdown 的打开方式。此次没有扩大 MIME／文件权限，也没有重写已支持 GFM 的渲染器。
+- 从 `/root/pi-android-main` 同一份源码重新 bundle 全部 JS、编译全部 Java／终端类、链接 Manifest／资源。保留 LauncherActivity 的启动页记忆、虚拟屏应用内入口与 agent 呼出；仅未改动的 native 库、KWS／X11 二进制资源复用上一主包，不宣称完整 NDK 冷构建。
+- 最终 APK 已核对导出的 Markdown 入口、`ACTION_VIEW`／`DEFAULT`／`content` 和五种 MIME；PreviewActivity 保持非导出。临时 JVM smoke 使用 Android 35 实际 `IntentFilter.match` 验证四种 Markdown MIME 与 text/plain 匹配，file/http/https 不匹配。text/plain 仍需 Markdown 扩展名；读取授权、大小限制和路径边界不变。
+- 已运行现有 9 项 Markdown renderer 回归、`PreviewFilesCheck`、`PreviewMarkdownPathsCheck`，全部通过。实际 Chromium 150 加载与 APK 逐字节一致的 HTML／CSS／JS，在同等 CSP 下验证 412px 窄屏：表格三列对齐、单元格粗体和转义竖线、宽表局部横向滚动且页面不横溢；实际点击中文锚点、相对文档与返回链接成功。单文件授权提示正确，危险 URL／原始 HTML 不执行，浏览器无页面错误。
+- Android Java／D8／资源构建、ZIP 完整性、zipalign 和 APK v3 签名通过；证书仍为 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。产物 `/workspace/workspace/artifacts/Zfold-0.2.87-compat28-markdown-restored.apk`，52,083,526 bytes，SHA-256 `70e618ca5e8d04a62b587822dfea71751a306dc60137e70d484325ab69c67d7d`。
+- **未自动安装或重启主应用。** 当前 ADB 无设备；浏览器 smoke 的相对文档由临时 HTTP 夹具供给，不冒充 Android 文件授权／Activity 导航验收。真机文件管理器“始终使用 Zfold”、Android WebView 及跨 UID 文件夹授权交互仍需安装后验证；不替用户修改系统默认应用。
+
+## Markdown 相对资源与表格修复
+
+- 用户反馈相对 Markdown／图片链接未渲染、表格错乱；原生 `Ui.markdown` 仅有基础排版且 `PreviewActivity` 移除了非 http(s) 链接。文件预览现已清理该路径，改为 `marked 18.0.11` 和独立离线 WebView；聊天的原生 Markdown 不变。固定资产随正常 bundle 打包，Pi 仍为 1.0.4。
+- 新增 `PreviewMarkdownWeb`、`PreviewMarkdownPaths`、`PreviewTree`：相对文档／图片按当前文档路径解析，允许授权根内的父目录引用，严格单次解码和 canonical 边界；支持中文锚点、文档返回历史、图片单独预览及渲染完成后的滚动恢复。Markdown 仅可加载固定脚本、源码 JSON 和授权图片，SVG 响应使用禁脚本 CSP；原始 HTML 转义、网络图片和危险协议不加载。
+- 外部单 URI 仍只读取该文档。新增系统文件夹选择和临时只读树授权，通过 provider ID 与子项元数据定位；不能确认原始文档时要求明确选择 Markdown。未猜测 ID 的文件路径，不持久化授权，不自动打开同名文件。授权树内 `.md` 和图片也支持提供方返回通用 MIME 的情况。
+- 9 项 renderer 回归通过，覆盖 GFM 表格结构／列对齐／转义竖线／代码、参考链接与图片、Unicode 锚点、原始 HTML 和危险 URL 拒绝、单文件授权限制。`PreviewMarkdownPathsCheck` 与 `PreviewFilesCheck` 通过，包含实际文件、编码路径、父目录引用、符号链接越界及读取限制。
+- 临时 smoke 读取共享目录中的真实 Markdown／SVG 文件，执行实际 `renderMarkdown`：两个表格输出 12 个表头、16 个数据单元格；中文下一篇文档、锚点及父目录 SVG 目标可解析，原始脚本未成为活动标签，单文件授权没有生成相邻图片请求。输出 `MARKDOWN_REAL_FILES_SMOKE_OK`。此结果不代表浏览器布局或 Android URI 授权已经实测通过。
+- 已完成 Android Java/API 35、D8、资源链接和独立验证包签名。准备了 `dev.zfold.assistant.markdowncheck` 及另一 UID 的 `dev.zfold.assistant.markdownfixture`：后者是私有文件、opaque document ID 的真实 DocumentsProvider，便于后续系统树选择及授权检查；均未安装。native 复用缓存，不是完整 NDK 冷构建。
+- **视觉及真机授权交互尚未验收**：此前 ADB `127.0.0.1:36159` 拒绝连接，手机实际窗口树只有 SystemUI／Keyguard；手机桥派发样例 URL 的回执未作为渲染成功证据。宿主 ARM64 浏览器运行时下载也未完成。本次发现 `127.0.0.1:46013` 已连接，用于原密钥签名和安装包交付，没有补做表格窄屏布局、图片实际显示、链接／返回／旋转及跨 UID 文件夹授权验收。
+- 新手动安装包：`/workspace/workspace/artifacts/Zfold-0.2.87-compat28-markdown.apk`，52,103,920 bytes，SHA-256 `e011e3ce28892a82212e5a1ff70aa6d566db103b7ec4ca3c1cf0200a18a88737`。包名 `dev.zfold.assistant`，versionCode 287，versionName `0.2.87-compat28-markdown`，targetSdk 28，ARM64。APK v3 签名、zipalign 校验通过，证书 SHA-256 为原应用的 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`；发布副本逐字节一致，Android 共享路径的 SHA-256 也一致。
+- 私钥仅挂载到独立签名进程，没有复制到共享目录。未自动安装、重启主应用、提交或推送。此前 `Zfold-0.2.87-compat28-documents.apk` 不包含本次修复，应使用新的 `-markdown.apk`。
+
+## 共享路径打开与安卓 Markdown 文件入口
+
+- `OpenTargets.local` 统一调用共享路径解析器：补齐公共原生入口的 `/workspace` 转换，保留 Android 路径别名、单次 URI 解码及 canonical 越界检查。拒绝私有路径时说明共享范围，不扩大到 `/root`、`/tmp`。
+- 新增导出的 `MarkdownEntryActivity`，只转交 `ACTION_VIEW` 的单文档 URI 和只读授权；`PreviewActivity` 仍不导出。Markdown MIME、纯文本扩展名及读取授权在读取前检查；省略 MIME 时由后台读取线程查询 provider。文档流有 2 MiB 硬上限，不依赖 `available()` 或提供方声明的大小，复用严格编码及二进制检查。刷新、取消与外部转交原 URI 已接入。
+- 实际执行 `TerminalLinkTargetsCheck` 和 `PreviewFilesCheck`，共享路径／别名、Unicode 与单次解码、路径穿越／符号链接越界、MIME／扩展名、未知长度／短读／零读／超限流及编码拒绝检查通过。断言关注接收、拒绝和内容，不锁定错误文案。
+- 临时 JVM smoke 从共享存储中的真实临时 Markdown 文件执行「编码后的 guest URI → canonical 文件 → 文件／InputStream 两种读取」，内容一致，输出 `DOCUMENT_OPEN_SMOKE_OK`。这是宿主读取链路证据，不是 Android 文件管理器授权或页面渲染验收；临时文件自动删除。
+- 全部 Android／终端 Java 使用 API 35 编译、D8、资源／Manifest 链接和 zipalign 完成，输出 `ANDROID_DOCUMENT_BUILD_OK`。修复了编译发现的 `Intent.setClipData` 返回 `void`、不能继续链式调用的问题。native 复用缓存主包，JS 未改动并复用现有 bundle；不是完整 NDK 冷构建。
+- 当前 `phone list` 可连接桥并返回 `/workspace` → `/storage/emulated/0/pi` 的映射信息，同时返回 `bindingVerified:false`；不据此声称任意 guest 路径可访问。用户尚未提供原报错目标，因此公共入口漏转换是已确认的代码缺口，但尚未证明就是该次点击失败的具体原因。
+- **真机交互尚未验收**：旧 ADB 地址失效后，用户提供 `127.0.0.1:36159` 并明确要求只打包、自行安装。本次连接仅用于私有签名进程和共享 APK 校验，没有安装隔离包或主应用；文件管理器候选、跨 UID 临时授权、撤销授权、旋转／刷新和外部选择器仍未验证。
+- 手动安装包：`/workspace/workspace/artifacts/Zfold-0.2.87-compat28-documents.apk`，52,075,029 bytes，SHA-256 `bf4bf962f17bd84a0c898a9da6b8787424f8526cf012b660f3cad07a95c6317f`。包名 `dev.zfold.assistant`，versionCode 287，versionName `0.2.87-compat28-documents`，targetSdk 28，ARM64，图标入口为 `LauncherActivity`；ZIP 完整性、zipalign 和 APK v3 签名验证通过。
+- 签名证书 SHA-256 为原应用的 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。私钥仅挂载到独立签名进程，未复制到共享目录。发布副本与签名产物逐字节一致，Android `/storage/emulated/0/pi/workspace/artifacts/` 下同一 APK 的 SHA-256 也一致。没有执行安装、重启主应用、提交或推送。
+- 当前 CLI `omp --help` 确认版本 18.11.3 支持 `@image.png` 附件；已有会话可读取用户提供的共享图片路径。没有为验证用法自动截屏或调用视觉模型。
+
+## 图标启动页与新终端默认环境
+
+- 新增独立 `LauncherActivity` 分发应用图标入口，默认终端，可选 GUI 或记住上次的终端／GUI；明确的聊天、语音、分享和设置 Intent 不经此分发。终端菜单与 GUI 工作台新增同一「启动设置」入口。
+- `TerminalSessions` 在创建新交互会话时固定 Shell／Ubuntu 选择；已有会话不改变，显式 Wine 等命令优先且不受默认 Ubuntu 的安装检查影响。Ubuntu 使用已有 `runtime/bin/ubuntu` 启动入口，缺少 PRoot、根文件系统或 compat28 通道时明确报错，不自动安装或隐藏回退。
+- 全部 Android／终端 Java 使用 API 35 编译、D8、资源链接及独立验证包签名检查通过；GUI 记忆条件调整后已增量编译并重新生成验证包。复用了缓存的 native 库，不是完整 NDK 冷构建。
+- 临时 JVM smoke 执行实际 `StartupPreferences` 策略，覆盖固定页／上次页优先级、无历史及无效存储值、环境选择、缺少 PRoot 与不支持的通道，输出 `STARTUP_POLICY_SMOKE_OK`。仅偏好存储和 Context 使用宿主适配；这不是 Android 生命周期、真实设置窗口或 PRoot 启动的验收。临时策略检查源码已移除。
+- 独立包 `dev.zfold.assistant.startupcheck` 已生成但未安装。用户随后改为只要求主 APK 并自行安装；新 ADB 连接仅用于私有签名进程，没有继续界面测试。**尚未执行真机冷／热启动、设置交互、PTY 保留及自动进入 Ubuntu 的验收**，不以编译通过代替这些结果。临时检查脚本已清理。
+- 保留用户现有文件预览等未提交改动。未安装验证包或主 APK，未修改手机启动偏好、终端配置或已有会话，未提交／推送。
+- 手动安装包：`/workspace/workspace/artifacts/Zfold-0.2.87-compat28-startup.apk`，52,070,933 bytes，SHA-256 `6773d0da5d195d990640eb45fce4c65091605f2c4d23f156369b78457b5908ca`。主包名 `dev.zfold.assistant`、versionCode 287、targetSdk 28、ARM64、`LauncherActivity` 图标入口及内嵌 Pi 1.0.4 已从 APK 核对；JS 使用当前源码重新 bundle，Java／D8／资源重新构建，native 复用既有主包。
+- 原签名验证通过，证书 SHA-256 为 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。私钥仅挂载到独立签名进程，未复制到共享目录；发布副本与签名产物 SHA-256 一致。没有执行 APK 安装。
+
+## 文件 PreviewActivity · 2026-10-17
+
+### 已实施
+
+- `OpenTargets` 统一处理终端 `xdg-open`、文件链接与本应用 artifact URI：共享工作区的 Markdown、HTML/HTM、SVG 和常见文本优先进入非导出的 `PreviewActivity`；外部打开显式使用系统选择器，APK 确认、目录及其他应用 content URI 路由保留。
+- 原生 Markdown／可选复制文本、HTML/SVG 离线 WebView、刷新、源码切换、错误显示及外部打开已接入。HTML 使用每次加载独立的 HTTPS 虚拟来源，只提供文档同目录及子目录资源，无 JavaScript 原生桥；网络、文件/content 访问、框架页、表单、下载与权限请求禁用。WebView 保留白色默认画布，避免未指定样式的黑色文字在深色原生背景上不可见。
+- 严格 UTF-8、带 BOM 的 UTF-16、2 MiB 上限与 canonical 资源边界由 `PreviewFiles` 集中处理。`.gtm` 只按可读文本处理；Markdown 是基础排版，不加载图片或相对文件链接。
+
+### 已执行的验证
+
+- `javac` + `PreviewFilesCheck` 实际读取临时文件：中文／空格路径、UTF-8/BOM、UTF-16LE/BE、空文件、未知扩展名文本、无效编码、二进制、恰好 2 MiB／超限、缺失文件、目录、内部符号链接与越界符号链接均通过，临时目录由检查程序删除。
+- `npm run bundle` 完成；`phone-open.test.mjs`、`image-open-save.test.mjs` 共 5 项通过。其中 opener 测试实际启动 CLI，覆盖预览／外部派发、安装待确认、拒绝、失败及执行结果不确定的退出语义；不把模拟桥回执视为 Android 页面渲染证据。
+- 最终全部 Android／终端 Java 使用 API 35 编译、D8、资源链接及 zipalign 完成。JS 重新打包，未改动的 native 库复用上一已验证主包；不是完整 NDK 冷构建。资源链接使用上游 ARM64 静态 SDK 工具 35.0.2，下载归档 SHA-256 为 `db1cea2c4454d5f9c5a802646b2d1cf560b4ee7badbe23e51ab8e1881bb50fc2`。
+- 独立测试包 `dev.zfold.assistant.previewcheck` 已完成签名及签名验证；它使用真实 `OpenTargets` 和 `PreviewActivity`，临时启动器不进入主包。测试夹具包含中文空格 Markdown、相对 CSS/JS/SVG/JSON 网页、GTM、UTF-16、二进制及超限文本。
+
+### 当前阻塞与交付边界
+
+- 手机当前锁屏，ADB 无已连接设备；尚未安装或实际打开新增预览页。**Markdown 视觉效果、WebView 本地资源／脚本／fetch、按钮交互、刷新及 Android 外部选择器尚未完成实机验收。** 不能用编译、签名或 CLI 回执代替这些结论。
+- 主应用未重装，既有终端和游戏进程未主动结束。主包目前为已对齐的未签名 APK，52,037,966 bytes，SHA-256 `9c58711f276f7d8c463872911c88ff1d805e38840f7468887793c9e40cab5462`；尚未使用原主应用私钥签名，不能当作可覆盖安装包。
+- 独立验证包为 52,066,841 bytes，SHA-256 `26bf92d1ca4e5964837d0c955fcef23153fd00316e20e83688d34f8ee8e7b43a`。APK 与签名输入暂存于共享工作区 `.preview-build-20261017/`，测试文档暂存于 `.preview-smoke-20261017/`，等待解锁后继续验证；没有复制主应用私钥。
+- 本轮没有重跑已知存在 session-catalog 基线失败的全套测试，也没有提交或推送这次预览修改。README 与 opener 使用说明已同步。
+
 ## 通用 X11 / Wine 集成 · Fold7 真机
 
 - 活动源码为 `/root/pi-android-omp-termux` 的 `feat/omp-termux-app`；保留用户已有的 `TerminalActivity.java` 修改，未修改该文件。新增工作台/工具中心入口、独立 X11 服务与显示页面、Ubuntu 挂载和可选 `windows` 安装/启动命令。

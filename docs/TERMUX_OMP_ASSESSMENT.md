@@ -77,7 +77,7 @@ omp
 
 ### Ubuntu 链接交给 Android 打开
 
-安装器在 guest 的 `/usr/local/bin/xdg-open` 安装原生打开入口，调用 `/opt/pi-phone/phone-open.mjs`，复用同 UID 手机工具桥的 `open`。无需 Linux 桌面、浏览器或新增 HTTP 服务。调用 `xdg-open` 的终端链接立即走 Android 系统 handler；不改终端鼠标/链接识别逻辑。
+安装器在 guest 的 `/usr/local/bin/xdg-open` 安装原生打开入口，调用 `/opt/pi-phone/phone-open.mjs`，复用同 UID 手机工具桥的 `open`。无需 Linux 桌面、浏览器或新增 HTTP 服务。共享工作区的 Markdown、HTML/HTM、SVG 与常见文本默认进入 Android `PreviewActivity`；URL、目录及其他文件仍可由系统 handler 打开，不改终端鼠标/链接识别逻辑。预览范围与限制见 [文件预览与 xdg-open](../README.md#文件预览与-xdg-open)。
 
 ```sh
 xdg-open 'https://example.com/'
@@ -86,10 +86,15 @@ xdg-open './包含 空格的图片.png'
 ```
 
 - URL 交给 Android；相对文件路径按调用进程 cwd 解析，`file://` URI 先解码，再复用 `ZFOLD_PHONE_PATH_MAP`。只有实际绑定的工作区可打开；`/root`、`/tmp` 等未映射路径明确失败，不复制到公共目录，也不上传文件。
-- 保留手机工具确认与系统权限。APK 仍需 Android 确认安装，不把“已弹确认框”当作“已安装”。无文件 handler 而回退到目录时返回非零，避免错误报告文件已打开。
-- 退出码：0 为 Android 接收打开操作或弹出 APK 确认；1 为参数/路径/连接/拒绝等失败；2 为执行结果不确定；130 为取消。连接中断不会重放操作。
+- 原生公共入口也转换 guest `/workspace`，避免绕过终端专用转换时误拒共享文件；最终仍校验 canonical 路径，拒绝 `..` 或符号链接越界。映射不会把全部 Ubuntu 根文件系统暴露给 Android。
+- 安卓文件管理器另有导出的 Markdown 分发入口，只接受带读取授权的单个 `content://` 文档，再转入私有预览页。单文件授权不包含相邻资源；可通过「授权文件夹」取得系统 DocumentsProvider 树的临时只读权限，再解析树内相对 Markdown 和图片。文档身份无法确认时要求明确选择文件，不猜路径或按同名文件替换。文本仍限 2 MiB，不改变 CLI 映射或自动导入截图。
+- Markdown 预览改用内置 `marked 18.0.11` 与离线 WebView，表格独立横向滚动；共享路径的相对链接可在共享根内跨目录，但不能越界。只加载授权图片和固定渲染资产；原始 HTML 按文本展示，网络图片和危险协议被拦截。直接打开 HTML/SVG 的既有隔离路由不变。
+- 保留手机工具确认与系统权限。APK 仍需 Android 确认安装，不把“已弹确认框”当作“已安装”。未知文件没有外部 handler 时尝试内部文本预览；无法读取会显示错误，不再用打开父目录代替打开文件。
+- 退出码：0 为预览／外部打开已分发或弹出 APK 确认，不证明内容已经渲染；1 为参数/路径/连接/拒绝等失败；2 为执行结果不确定；130 为取消。连接中断不会重放操作。
 - 已热部署到当前 Ubuntu：新增 opener 模块及 guest 命令，未重装 APK、重启 App 或终端。opener 是独立新增文件，旧 APK 启动时复制既有资源不会覆盖它；源码 bundle 与安装器也已纳入后续构建。
 - 真机通过实际 `xdg-open` 命令验证 Chrome 打开带 query/fragment 的 HTTPS 地址，工作区 PNG 由三星相册显示。截图保存在工作区 `artifacts/android-xdg-open/`；不将命令回执单独视为画面成功。Bun 执行 opener 与 socket 回归共 8 项通过；尚未逐个验证所有 Android URI scheme 或第三方应用。
+- 上述 Chrome/相册记录属于原 opener 的实机覆盖；新增内部预览需要更新 APK，其验收状态单独记录在 `VERIFICATION.md`，不能沿用旧截图作为预览页证据。
+- 当前 `omp 18.11.3` 的 `@图片路径` 可用于新会话附件；已有会话直接提供共享目录内的图片路径供助手读取。手机 `pi/workspace/screenshots/截图.png` 对应 `/workspace/workspace/screenshots/截图.png`，不是任意相册路径或 `content://` URI；参见 [omp CLI 使用手机截图](../README.md#omp-cli-使用手机截图)。
 
 
 ## 终端字形与内联图片
