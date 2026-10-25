@@ -19,14 +19,12 @@ import android.widget.TextView;
 import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import java.util.ArrayList;
 
 /** One searchable catalog for skills, agent tools, MCP connections, and local commands. */
 final class ToolCenter implements PiRuntime.Listener {
   interface Host {
     void openModelSettings();void openAgentSettings();void openCapabilities();void openSpeech();
-    void openPackages();void newSession();void stopTask();void toggleVoice();void toggleScreenShare();
-    void prompt(String text);
+    void openPackages();
     void openSkills();void openProviderAuth();void openRuntimePacks();
     void openTerminal();
   }
@@ -34,16 +32,16 @@ final class ToolCenter implements PiRuntime.Listener {
   private final View anchor;private final PiRuntime runtime;private final Host host;private final Ui.Theme theme;
   private EditText search;private LinearLayout chips,list;private TextView footer;private PopupWindow popup;
   private JSONArray tools=new JSONArray(),skills=new JSONArray();private JSONObject mcp=new JSONObject();
-  private int section=0;private boolean ready;
+  private int section=0;private boolean ready;private Runnable onDismiss;
 
-  interface Opener {void open();}
 
   private ToolCenter(View anchor,PiRuntime runtime,Host host){
     this.anchor=anchor;this.runtime=runtime;this.host=host;theme=new Ui.Theme(anchor.getContext());
   }
 
   static void show(View anchor,PiRuntime runtime,Host host){new ToolCenter(anchor,runtime,host).open(0);}
-  static void show(View anchor,PiRuntime runtime,Host host,int initial){new ToolCenter(anchor,runtime,host).open(initial);}
+  static void show(View anchor,PiRuntime runtime,Host host,int initial){show(anchor,runtime,host,initial,null);}
+  static void show(View anchor,PiRuntime runtime,Host host,int initial,Runnable onDismiss){ToolCenter center=new ToolCenter(anchor,runtime,host);center.onDismiss=onDismiss;center.open(initial);}
 
   private void open(int initial){
     Context context=anchor.getContext();section=initial;
@@ -62,7 +60,7 @@ final class ToolCenter implements PiRuntime.Listener {
     brand.addView(new Ui.Action(context,R.drawable.ic_arrow_clockwise,"","刷新工具目录",theme.muted,Color.TRANSPARENT,this::refresh),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     brand.addView(new Ui.Action(context,R.drawable.ic_x,"","关闭工具中心",theme.muted,Color.TRANSPARENT,this::close),new LinearLayout.LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     drawer.addView(brand);
-    TextView help=Ui.text(context,"会话、Agent、供应商、工具和运行时的统一入口。列表只展示能力；执行仍受权限和确认控制。",12,theme.muted);
+    TextView help=Ui.text(context,"Agent、供应商、工具和运行时的设置入口。列表只展示能力，不会执行任务。",12,theme.muted);
     help.setLineSpacing(Ui.dp(context,3),1f);LinearLayout.LayoutParams helpParams=new LinearLayout.LayoutParams(-1,-2);helpParams.setMargins(0,Ui.dp(context,9),0,0);drawer.addView(help,helpParams);
     search=field(context,"搜索名称、用途或命令");drawer.addView(search,new LinearLayout.LayoutParams(-1,-2));
     search.addTextChangedListener(new android.text.TextWatcher(){
@@ -72,7 +70,7 @@ final class ToolCenter implements PiRuntime.Listener {
     chips=new LinearLayout(context);chips.setHorizontalScrollBarEnabled(false);LinearLayout.LayoutParams chipParams=new LinearLayout.LayoutParams(-1,-2);chipParams.setMargins(0,Ui.dp(context,13),0,Ui.dp(context,7));drawer.addView(chips,chipParams);
     ScrollView scroll=new ScrollView(context);scroll.setVerticalScrollBarEnabled(false);list=new LinearLayout(context);list.setOrientation(LinearLayout.VERTICAL);scroll.addView(list);drawer.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     footer=Ui.text(context,"正在读取工具目录…",11,theme.muted);footer.setPadding(0,Ui.dp(context,13),0,0);drawer.addView(footer);
-    popup=new PopupWindow(frame,-1,-1,true);popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));popup.setOutsideTouchable(true);popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);popup.setOnDismissListener(()->runtime.unlisten(this));
+    popup=new PopupWindow(frame,-1,-1,true);popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));popup.setOutsideTouchable(true);popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);popup.setOnDismissListener(()->{runtime.unlisten(this);if(onDismiss!=null)onDismiss.run();});
     try{
       ((InputMethodManager)context.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(anchor.getWindowToken(),0);
       popup.showAtLocation(anchor,Gravity.TOP|Gravity.END,0,0);frame.requestFocus();runtime.listen(this);refresh();renderChips();
@@ -137,8 +135,7 @@ final class ToolCenter implements PiRuntime.Listener {
       String name=item.optString("name"),description=item.optString("description","没有描述"),scope=item.optString("scope","project");
       if(!matches(name+" "+description+" "+scope,query))continue;
       String badge=scope.equals("builtin")?"内置":scope.equals("global")?"全局":"工作区";
-      ArrayList<Opener> ignored=new ArrayList<>();
-      card(name,description,badge,"Skill",R.drawable.ic_file,ignored.isEmpty()?null:null,()->host.prompt(SlashCommands.skillPrompt(name)));
+      card(name,description,badge,"Skill",R.drawable.ic_file,null,host::openSkills);
       added++;
     }
     if(added==0)minor("没有匹配 Skill");
@@ -181,8 +178,7 @@ final class ToolCenter implements PiRuntime.Listener {
       if(!matches(name+" "+label+" "+description,query))continue;
       boolean enabled=item.optBoolean("enabled",true);String reason=item.optString("reason");
       String badge=enabled?"已注册":item.optString("availability").equals("configuration_required")?"待配置":"不支持";
-      card(label,description+(reason.isEmpty()?"":" · "+reason),badge,name,R.drawable.ic_gear_six,null,
-        enabled?()->host.prompt("请使用 "+name+" 工具完成一个最小验证步骤；执行前说明参数。"):null);
+      card(label,description+(reason.isEmpty()?"":" · "+reason),badge,name,R.drawable.ic_gear_six,null,null);
       added++;
     }
     if(added==0)minor("没有匹配工具");
@@ -209,32 +205,21 @@ final class ToolCenter implements PiRuntime.Listener {
 
   private void commandRows(String query){
     for(SlashCommands.Command command:SlashCommands.catalog()){
+      if(!java.util.Arrays.asList("tools","skills","mcp","packages","model","agent","phone").contains(command.name))continue;
       if(!matches(command.name+" "+command.title+" "+command.detail+" "+command.category,query))continue;
-      card("/"+command.name,command.title+" · "+command.detail,command.category,"命令",R.drawable.ic_arrow_square_out,null,()->{
-        String[] parsed=new String[2];
-        if(!SlashCommands.parse(command.invocation(),parsed))return;
-        if(command.wantsArgument){Toast.makeText(anchor.getContext(),"请补全参数，例如 "+command.invocation(),Toast.LENGTH_SHORT).show();return;}
-        runCommand(parsed[0],parsed[1]);
-      });
+      card("/"+command.name,command.title+" · "+command.detail,command.category,"命令",R.drawable.ic_arrow_square_out,null,()->runCommand(command.name));
     }
   }
 
-  private void runCommand(String name,String argument){
+  private void runCommand(String name){
     switch(name){
       case "tools":close();break;
       case "skills":section=1;renderChips();render();break;
-      case "mcp":close();ConnectorActivity.open(anchor.getContext());break;
-      case "packages":close();host.openPackages();break;
-      case "model":close();host.openModelSettings();break;
-      case "agent":close();host.openAgentSettings();break;
-      case "phone":close();host.openCapabilities();break;
-      case "voice":close();host.toggleVoice();break;
-      case "share":close();host.toggleScreenShare();break;
-      case "new":close();host.newSession();break;
-      case "stop":close();host.stopTask();break;
-      case "skill":close();host.prompt(SlashCommands.skillPrompt(argument));break;
-      case "pkg":close();host.prompt(SlashCommands.packagePrompt(argument));break;
-      case "runtime":close();host.prompt(SlashCommands.runtimePrompt());break;
+      case "mcp":ConnectorActivity.open(anchor.getContext());break;
+      case "packages":host.openPackages();break;
+      case "model":host.openModelSettings();break;
+      case "agent":host.openAgentSettings();break;
+      case "phone":host.openCapabilities();break;
     }
   }
 

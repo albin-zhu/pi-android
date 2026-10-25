@@ -1,284 +1,226 @@
 package com.termux.x11;
 
 import android.app.Activity;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.ServiceConnection;
-import android.graphics.Color;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.IBinder;
-import android.os.Looper;
-import android.os.Message;
-import android.os.Messenger;
-import android.os.ParcelFileDescriptor;
-import android.os.RemoteException;
-import android.view.KeyEvent;
+import android.graphics.Typeface;
+import android.os.Build;
+import android.view.Gravity;
 import android.view.View;
-import android.view.WindowManager;
-import android.widget.Button;
-import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
+import android.widget.PopupMenu;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.ToggleButton;
+import dev.zfold.assistant.NavigableActivity;
+import dev.zfold.assistant.R;
+import dev.zfold.assistant.Ui;
+import dev.zfold.assistant.VirtualScreenActivity;
+import java.util.ArrayList;
 
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
-
-/** Independent general-purpose X11 display; it never owns a Pi/chat terminal session. */
-public final class MainActivity extends Activity {
-    private static final AtomicInteger NEXT_TOKEN = new AtomicInteger();
-    private final Messenger replies = new Messenger(new Handler(Looper.getMainLooper(), this::handleReply));
-    private Messenger server;
-    private LorieView display;
+/** Window manager for the single authenticated :9 server. Rendering lives in X11Service. */
+public final class MainActivity extends NavigableActivity implements RootlessClient.Listener {
+    private static final String EXTRA_READ_ONLY = "com.termux.x11.READ_ONLY";
+    private RootlessClient client;
     private TextView status;
-    private Button startButton, stopButton;
-    private ToggleButton ctrlButton, altButton;
-    private boolean bound, visible, running, stopping, attachmentRequested;
-    private boolean desiredRunning = true;
-    private int token;
+    private LinearLayout windows;
+    private Ui.Theme theme;
+    private String session;
+    private boolean readOnly;
+    private ArrayList<Bundle> snapshot = new ArrayList<>();
 
-    public static void open(Context context) {
-        Intent intent = new Intent(context, MainActivity.class);
+    public static void open(Context context) { open(context, false); }
+    public static void openReadOnly(Context context) { open(context, true); }
+    private static void open(Context context, boolean readOnly) {
+        Intent intent = new Intent(context, MainActivity.class).putExtra(EXTRA_READ_ONLY, readOnly)
+                .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         if (!(context instanceof Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(intent);
     }
-
-    // JNI_OnLoad registers this even though the embedded UI does not use hidden windowing APIs.
+    // Registered by the pinned engine's JNI_OnLoad, even though this UI uses document tasks.
     private static native void nativeSetLaunchWindowingModeFreeform(Object options);
 
-    private final ServiceConnection connection = new ServiceConnection() {
-        @Override public void onServiceConnected(ComponentName name, IBinder binder) {
-            if (!visible) return;
-            server = new Messenger(binder);
-            send(X11Service.WATCH);
-        }
-        @Override public void onServiceDisconnected(ComponentName name) { serverExited(); }
-        @Override public void onBindingDied(ComponentName name) {
-            serverExited();
-            if (bound) { unbindService(this); bound = false; }
-        }
-        @Override public void onNullBinding(ComponentName name) {
-            serverExited();
-            status.setText("X11 service did not provide its display connection");
-        }
-    };
-
-    @Override public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        if (savedInstanceState != null) desiredRunning = savedInstanceState.getBoolean("running", true);
-        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    @Override public void onCreate(Bundle state) {
+        super.onCreate(state);
+        readOnly = getIntent().getBooleanExtra(EXTRA_READ_ONLY, false);
+        buildContent(); client = new RootlessClient(this, this, readOnly);
+        startDisplay();
+    }
+    private void buildContent() {
+        CharSequence previousStatus = status == null ? "正在连接 X11 :9…" : status.getText();
+        theme = new Ui.Theme(this);
+        setTitle(readOnly ? "X11 :9 · 只读窗口" : "X11 :9 · 应用窗口");
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(theme.page);
         LinearLayout toolbar = new LinearLayout(this);
-        toolbar.setOrientation(LinearLayout.HORIZONTAL);
-        startButton = button(toolbar, "Start / Show", v -> startDisplay());
-        stopButton = button(toolbar, "Stop X11", v -> stopDisplay());
-        button(toolbar, "Keyboard", v -> { if (display != null) display.showKeyboard(); });
-        button(toolbar, "Leave view", v -> finish());
-        root.addView(scroll(toolbar), new LinearLayout.LayoutParams(-1, -2));
-        status = new TextView(this);
-        status.setTextColor(Color.WHITE);
-        status.setText("Starting X11 display :9…");
-        status.setPadding(12, 4, 12, 4);
-        root.addView(status, new LinearLayout.LayoutParams(-1, -2));
-        LinearLayout keys = new LinearLayout(this);
-        ctrlButton = modifier(keys, "Ctrl");
-        altButton = modifier(keys, "Alt");
-        ctrlButton.setOnCheckedChangeListener((button, checked) -> { if (display != null) display.setCtrl(checked); });
-        altButton.setOnCheckedChangeListener((button, checked) -> { if (display != null) display.setAlt(checked); });
-        key(keys, "Esc", KeyEvent.KEYCODE_ESCAPE);
-        key(keys, "Tab", KeyEvent.KEYCODE_TAB);
-        key(keys, "↑", KeyEvent.KEYCODE_DPAD_UP);
-        key(keys, "↓", KeyEvent.KEYCODE_DPAD_DOWN);
-        key(keys, "←", KeyEvent.KEYCODE_DPAD_LEFT);
-        key(keys, "→", KeyEvent.KEYCODE_DPAD_RIGHT);
-        key(keys, "Backspace", KeyEvent.KEYCODE_DEL);
-        key(keys, "Enter", KeyEvent.KEYCODE_ENTER);
-        button(keys, "Right click", v -> { if (display != null) display.clickMouse(3); });
-        button(keys, "Middle click", v -> { if (display != null) display.clickMouse(2); });
-        root.addView(scroll(keys), new LinearLayout.LayoutParams(-1, -2));
-        try {
-            display = new LorieView(this);
-            root.addView(display, new LinearLayout.LayoutParams(-1, 0, 1));
-        } catch (LinkageError error) {
-            desiredRunning = false;
-            status.setText("X11 native library unavailable: " + error.getMessage());
-            startButton.setEnabled(false);
+        toolbar.setGravity(Gravity.CENTER_VERTICAL);
+        toolbar.setPadding(dp(8), dp(4), dp(8), dp(4));
+        toolbar.setBackgroundColor(theme.surface);
+        Ui.Action back = action(R.drawable.ic_caret_down, "", "返回", this::onBackPressed);
+        back.getChildAt(0).setRotation(90);
+        toolbar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        TextView title = Ui.text(this, "X11 :9", 18, theme.ink);
+        title.setTypeface(Typeface.create("sans-serif-medium", 0));
+        title.setPadding(dp(8), 0, dp(4), 0);
+        toolbar.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        toolbar.addView(action(R.drawable.ic_arrow_clockwise, "", "启动或重新连接", this::startDisplay),
+                new LinearLayout.LayoutParams(dp(48), dp(48)));
+        if (!readOnly) {
+            Ui.Action more = action(R.drawable.ic_dots_three, "", "更多操作", () -> {
+                PopupMenu menu = new PopupMenu(this, toolbar, Gravity.END);
+                menu.getMenu().add("停止 X11 服务").setOnMenuItemClickListener(item -> {
+                    new android.app.AlertDialog.Builder(this)
+                            .setTitle("停止 X11 服务？")
+                            .setMessage("停止 :9 会断开所有图形应用。是否继续？")
+                            .setPositiveButton("停止", (dialog, which) -> startService(
+                                    new Intent(this, X11Service.class).setAction(X11Service.ACTION_STOP)))
+                            .setNegativeButton("取消", null).show();
+                    return true;
+                });
+                menu.show();
+            });
+            toolbar.addView(more, new LinearLayout.LayoutParams(dp(48), dp(48)));
         }
-        TextView hint = new TextView(this);
-        hint.setTextColor(Color.LTGRAY);
-        hint.setText("Touch to click/drag · two fingers scroll · leaving keeps X11 running");
-        hint.setPadding(12, 2, 12, 4);
-        root.addView(hint, new LinearLayout.LayoutParams(-1, -2));
+        root.addView(toolbar, new LinearLayout.LayoutParams(-1, -2));
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(16), dp(16), dp(16), dp(20));
+        TextView mode = Ui.text(this, readOnly ? "只读预览" : "交互模式", 14, theme.accent);
+        mode.setTypeface(Typeface.create("sans-serif-medium", 0));
+        content.addView(mode);
+        TextView explanation = Ui.text(this, readOnly ? "仅查看画面，不发送键盘或触控输入" : "选择应用窗口，使用键盘和触控交互", 13, theme.muted);
+        explanation.setPadding(0, dp(6), 0, dp(10));
+        content.addView(explanation);
+        status = Ui.text(this, "", 12, theme.muted);
+        status.setText(previousStatus);
+        status.setTextIsSelectable(true);
+        status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        status.setPadding(dp(12), dp(10), dp(12), dp(10));
+        status.setBackground(Ui.shape(this, theme.field, 12, 0));
+        content.addView(status, new LinearLayout.LayoutParams(-1, -2));
+        if (readOnly) {
+            addEntry(content, action(R.drawable.ic_screen_share, "整个桌面 · 只读", "打开整个桌面，只读", () -> {
+                if (session == null) return;
+                Bundle desktop = new Bundle(); desktop.putLong("window", 0); desktop.putLong("generation", 0);
+                WindowActivity.open(this, session, desktop, true);
+            }));
+            addEntry(content, action(R.drawable.ic_workbench, "Xvfb 兼容预览", "打开 Xvfb 兼容预览",
+                    () -> VirtualScreenActivity.openXvfb(this, null)));
+        }
+        TextView heading = Ui.text(this, "应用窗口", 14, theme.ink);
+        heading.setTypeface(Typeface.create("sans-serif-medium", 0));
+        heading.setPadding(0, dp(22), 0, dp(4));
+        content.addView(heading);
+        windows = new LinearLayout(this);
+        windows.setOrientation(LinearLayout.VERTICAL);
+        content.addView(windows, new LinearLayout.LayoutParams(-1, -2));
+        scroll.addView(content);
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
+        showWindows();
     }
-
-    @Override protected void onStart() {
-        super.onStart();
-        visible = true;
-        token = NEXT_TOKEN.incrementAndGet();
-        attachmentRequested = false;
-        if (display == null) return;
-        bindDisplay();
-        if (desiredRunning) startDisplay();
+    private int dp(int value) { return Ui.dp(this, value); }
+    private Ui.Action action(int icon, String label, String description, Runnable callback) {
+        Ui.Action action = new Ui.Action(this, icon, label, description, theme.ink, theme.surface, callback);
+        if (Build.VERSION.SDK_INT >= 26) action.setTooltipText(description);
+        return action;
     }
-
-    private void bindDisplay() {
-        if (!bound) bound = bindService(new Intent(this, X11Service.class), connection, Context.BIND_AUTO_CREATE);
-        if (!bound) status.setText("Cannot bind X11 service");
+    private void addEntry(LinearLayout parent, View view) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(10);
+        parent.addView(view, params);
     }
-
     private void startDisplay() {
-        if (stopping || display == null) return;
-        desiredRunning = true;
-        try {
-            X11Service.start(this);
-            bindDisplay();
-            status.setText(running ? "Running :9" : "Starting X11 display :9…");
-            display.requestFocus();
-            requestAttachment();
-        } catch (RuntimeException error) {
-            desiredRunning = false;
-            status.setText("Cannot start X11: " + error.getMessage());
+        try { X11Service.start(this); }
+        catch (RuntimeException error) { status.setText("无法启动 X11：" + error.getMessage()); }
+    }
+    private void showWindows() {
+        windows.removeAllViews();
+        if (snapshot.isEmpty()) {
+            LinearLayout empty = new LinearLayout(this);
+            empty.setOrientation(LinearLayout.VERTICAL);
+            empty.setPadding(dp(16), dp(20), dp(16), dp(20));
+            empty.setBackground(Ui.shape(this, theme.card, 16, 1, theme.line));
+            TextView title = Ui.text(this, "暂无应用窗口", 16, theme.ink);
+            title.setTypeface(Typeface.create("sans-serif-medium", 0));
+            empty.addView(title);
+            TextView hint = Ui.text(this, "请在 Ubuntu 终端中使用 DISPLAY=:9 启动图形应用。\n离开此页不会停止 X11 服务。", 13, theme.muted);
+            hint.setPadding(0, dp(8), 0, 0);
+            hint.setLineSpacing(dp(3), 1f);
+            empty.addView(hint);
+            addEntry(windows, empty);
+        }
+        for (Bundle info : snapshot) {
+            String title = info.getString("title", "X11 应用");
+            if (title == null || title.trim().isEmpty()) title = "X11 应用";
+            int width = info.getInt("width"), height = info.getInt("height");
+            String dimensions = width > 0 && height > 0 ? width + " × " + height : "尺寸未知";
+            String detail = dimensions + (readOnly ? " · 只读预览" : " · 点击打开，长按显示键盘");
+            String popup = X11Service.popupDescription(info.getString("popupState"));
+            if (!popup.isEmpty()) detail += "\n" + popup;
+            LinearLayout card = new LinearLayout(this);
+            card.setGravity(Gravity.CENTER_VERTICAL);
+            card.setMinimumHeight(dp(80));
+            card.setPadding(dp(14), dp(14), dp(14), dp(14));
+            card.setBackground(Ui.shape(this, theme.card, 16, 1, theme.line));
+            card.setForeground(Ui.ripple(this, android.graphics.Color.TRANSPARENT, 16, theme.ink));
+            ImageView icon = new ImageView(this);
+            icon.setImageDrawable(Ui.icon(this, R.drawable.ic_workbench, theme.accent));
+            icon.setPadding(dp(9), dp(9), dp(9), dp(9));
+            icon.setBackground(Ui.shape(this, theme.accentSoft, 12, 0));
+            icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            card.addView(icon, new LinearLayout.LayoutParams(dp(39), dp(39)));
+            LinearLayout labels = new LinearLayout(this);
+            labels.setOrientation(LinearLayout.VERTICAL);
+            TextView name = Ui.text(this, title, 15, theme.ink);
+            name.setTypeface(Typeface.create("sans-serif-medium", 0));
+            labels.addView(name);
+            TextView description = Ui.text(this, detail, 12, theme.muted);
+            description.setPadding(0, dp(6), 0, 0);
+            labels.addView(description);
+            labels.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(0, -2, 1);
+            labelParams.leftMargin = dp(12);
+            card.addView(labels, labelParams);
+            card.setContentDescription(title + "，" + detail);
+            if (Build.VERSION.SDK_INT >= 26) card.setTooltipText(title + "，" + detail);
+            card.setFocusable(true);
+            card.setOnClickListener(view -> {
+                Ui.click(view);
+                WindowActivity.open(this, session, info, readOnly);
+            });
+            if (!readOnly) card.setOnLongClickListener(view -> {
+                Ui.click(view);
+                WindowActivity.openKeyboard(this, session, info);
+                return true;
+            });
+            addEntry(windows, card);
         }
     }
-
-    private void stopDisplay() {
-        if (stopping || display == null) return;
-        desiredRunning = false;
-        stopping = true;
-        running = false;
-        attachmentRequested = false;
-        display.disconnect();
-        startButton.setEnabled(false);
-        stopButton.setEnabled(false);
-        status.setText("Stopping X11…");
-        if (server != null) send(X11Service.STOP);
-        else {
-            // Same explicit action used by the notification. It never starts a second Xorg thread.
-            startService(new Intent(this, X11Service.class).setAction(X11Service.ACTION_STOP));
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent); setIntent(intent);
+        readOnly = intent.getBooleanExtra(EXTRA_READ_ONLY, false); buildContent();
+        client.setReadOnly(readOnly);
+    }
+    @Override protected void onStart() { super.onStart(); if (client != null) client.start(); }
+    @Override protected void onStop() { if (client != null) client.stop(); super.onStop(); }
+    @Override public void reply(int what, Bundle data) {
+        session = data.getString("session");
+        if (what == X11Service.STATUS) status.setText(data.getString("status"));
+        else if (what == X11Service.WINDOWS) {
+            ArrayList<Bundle> next = data.getParcelableArrayList("windows");
+            snapshot = next == null ? new ArrayList<>() : next; showWindows();
         }
     }
-
-    private void requestAttachment() {
-        if (!visible || !running || stopping || display == null || display.isConnected() || attachmentRequested || server == null) return;
-        attachmentRequested = true;
-        send(X11Service.ATTACH);
+    @Override public void disconnected() {
+        session = null; snapshot.clear(); showWindows();
+        status.setText("正在重新连接 X11 服务…");
     }
-
-    private void send(int command) {
-        if (server == null) return;
-        Message request = Message.obtain(null, command, token, 0);
-        request.replyTo = replies;
-        try { server.send(request); }
-        catch (RemoteException error) { serverExited(); }
-    }
-
-    private boolean handleReply(Message response) {
-        Bundle data = response.getData();
-        data.setClassLoader(ParcelFileDescriptor.class.getClassLoader());
-        ParcelFileDescriptor descriptor = response.what == X11Service.CONNECTION ? data.getParcelable("fd") : null;
-        try {
-            if (!visible || response.arg1 != token || display == null) return true;
-            if (response.what == X11Service.STATUS) {
-                running = response.arg2 == 1;
-                boolean serverStopping = data.getBoolean("stopping");
-                if (serverStopping) {
-                    desiredRunning = false;
-                    stopping = true;
-                    display.disconnect();
-                    attachmentRequested = false;
-                }
-                status.setText(data.getString("status", "X11"));
-                startButton.setEnabled(!stopping && !data.getBoolean("starting"));
-                stopButton.setEnabled(!stopping && (running || data.getBoolean("starting")));
-                requestAttachment();
-            } else if (response.what == X11Service.CONNECTION && descriptor != null) {
-                attachmentRequested = false;
-                if (!stopping && running && !display.isConnected()) display.attachConnection(descriptor);
-            }
-        } finally {
-            if (descriptor != null) try { descriptor.close(); } catch (IOException ignored) { }
-        }
-        return true;
-    }
-
-    private void serverExited() {
-        server = null;
-        running = false;
-        attachmentRequested = false;
-        desiredRunning = false;
-        if (display != null) display.disconnect();
-        if (!stopping) status.setText("X11 server exited. Tap Start / Show to restart.");
-        stopping = false;
-        startButton.setEnabled(display != null);
-        stopButton.setEnabled(false);
-    }
-
-    /** Called by native ALooper HUP handling, on the UI thread. */
-    public void clientConnectedStateChanged() {
-        attachmentRequested = false;
-        if (visible && !stopping) {
-            status.setText("X11 renderer disconnected");
-            requestAttachment();
-        }
-    }
-    void onRendererReady() {
-        if (visible && running && !stopping) status.setText("Running :9 · display connected");
-    }
-    void clearModifiers() {
-        if (ctrlButton != null) ctrlButton.setChecked(false);
-        if (altButton != null) altButton.setChecked(false);
-    }
-
-    @Override public boolean dispatchKeyEvent(KeyEvent event) {
-        if (display != null && display.handleKey(event)) return true;
-        return super.dispatchKeyEvent(event);
-    }
-
-    @Override protected void onStop() {
-        visible = false;
-        if (display != null) display.disconnect();
-        send(X11Service.DETACH);
-        server = null;
-        attachmentRequested = false;
-        if (bound) { unbindService(connection); bound = false; }
-        super.onStop();
-    }
-    @Override protected void onDestroy() {
-        if (display != null) display.destroy();
-        super.onDestroy();
-    }
-    @Override protected void onSaveInstanceState(Bundle out) {
-        out.putBoolean("running", desiredRunning);
-        super.onSaveInstanceState(out);
-    }
-
-    private HorizontalScrollView scroll(LinearLayout row) {
-        HorizontalScrollView scroll = new HorizontalScrollView(this);
-        scroll.setHorizontalScrollBarEnabled(false);
-        scroll.addView(row);
-        return scroll;
-    }
-    private Button button(LinearLayout row, String label, View.OnClickListener action) {
-        Button button = new Button(this);
-        button.setText(label);
-        button.setFocusable(false);
-        button.setOnClickListener(action);
-        row.addView(button, new LinearLayout.LayoutParams(-2, -2));
-        return button;
-    }
-    private ToggleButton modifier(LinearLayout row, String label) {
-        ToggleButton button = new ToggleButton(this);
-        button.setTextOn(label + " ON"); button.setTextOff(label); button.setChecked(false);
-        button.setFocusable(false);
-        row.addView(button, new LinearLayout.LayoutParams(-2, -2));
-        return button;
-    }
-    private void key(LinearLayout row, String label, int code) {
-        button(row, label, v -> { if (display != null) display.tapKey(code); });
-    }
+    // Compatibility callbacks for the pinned LorieView ABI; rootless UI never constructs it.
+    void onRendererReady() { status.setText("X11 渲染器已连接"); }
+    void onGeometryError(String message) { status.setText("X11 画面尺寸错误：" + message); }
 }

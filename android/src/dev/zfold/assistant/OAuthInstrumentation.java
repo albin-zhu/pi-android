@@ -16,7 +16,7 @@ import org.json.*;
 
 /** Emulator only: synthetic provider events and a loopback MCP issuer; no real accounts. */
 public final class OAuthInstrumentation extends Instrumentation implements PiRuntime.Listener {
-  private MainActivity chat;private PiRuntime runtime;private ProviderAuthDialog panel;private ConnectorActivity connector;
+  private SettingsActivity chat;private PiRuntime runtime;private ProviderAuthDialog panel;private ConnectorActivity connector;
   private final ArrayList<JSONObject> commands=new ArrayList<>();private final BlockingQueue<JSONObject> results=new LinkedBlockingQueue<>();private final Set<String> created=new HashSet<>();
   private volatile JSONObject connectors;private ActivityMonitor browserMonitor;private File config;private byte[] saved;private boolean captured;
   @Override public void onCreate(Bundle args){start();}
@@ -25,7 +25,7 @@ public final class OAuthInstrumentation extends Instrumentation implements PiRun
     try{
       if(!Build.HARDWARE.contains("ranchu")&&!Build.HARDWARE.contains("goldfish"))throw new IllegalStateException("Emulator only");
       PiRuntime.testMode=true;config=new File(CredentialStore.directory(getTargetContext()),"connectors.json");saved=config.isFile()?Files.readAllBytes(config.toPath()):null;captured=true;
-      EmulatorChecks.shell(this,"am start --windowingMode 1 -n dev.zfold.assistant/.MainActivity");await(()->MainActivity.current()!=null&&MainActivity.current().runtime.ready,"Runtime did not start");chat=MainActivity.current();runtime=chat.runtime;runtime.listen(this);
+      chat=(SettingsActivity)startActivitySync(new Intent(getTargetContext(),SettingsActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));runtime=PiRuntime.get(chat);await(()->runtime.ready,"Runtime did not start");runtime.listen(this);
       runOnMainSync(()->AuthSessionService.update(chat,PiRuntime.json("requestId","qa-auth-lifetime","state","started","active",true)));await(AuthSessionService::running,"OAuth foreground lifetime missing");
       runOnMainSync(()->AuthSessionService.update(chat,PiRuntime.json("requestId","qa-auth-lifetime","state","success","active",false)));await(()->!AuthSessionService.running(),"OAuth foreground lifetime not released");report.putBoolean("loginHasBoundedBackgroundLifetime",true);
       IntentFilter browser=new IntentFilter(Intent.ACTION_VIEW);browser.addDataScheme("https");browser.addDataScheme("http");browserMonitor=addMonitor(browser,new ActivityResult(Activity.RESULT_CANCELED,null),true);
@@ -69,7 +69,7 @@ public final class OAuthInstrumentation extends Instrumentation implements PiRun
   }
   private JSONObject providers(JSONArray flows){return PiRuntime.json("type","auth_state","state","providers","providers",new JSONArray().put(PiRuntime.json("id","openai-codex","name","OpenAI","oauthLogin",true)),"availableProviders",new JSONArray(),"flows",flows);}
   private JSONObject flow(String id,String state){return PiRuntime.json("type","auth_state","requestId",id,"provider","openai-codex","authType","oauth","state",state,"active",true);}
-  private void openPanel(){runOnMainSync(()->{panel=new ProviderAuthDialog(chat.overflowButton,null,commands::add);panel.open();});}
+  private void openPanel(){runOnMainSync(()->{panel=new ProviderAuthDialog(chat.getWindow().getDecorView(),null,commands::add);panel.open();});}
   private void deliver(JSONObject event){runOnMainSync(()->panel.event(event));}
   private JSONObject lastCommand(){return commands.get(commands.size()-1);}
   private int countCancels(){return (int)commands.stream().filter(c->c.optString("action").equals("cancel")).count();}

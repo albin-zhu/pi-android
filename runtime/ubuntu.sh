@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# App-owned Linux user space; Android permissions stay in the phone tool service.
+# App-owned Linux user space; shared storage still obeys Android permissions.
 set -eu
 fail() { printf 'ubuntu: %s\n' "$*" >&2; exit 1; }
 [ -n "${PREFIX:-}" ] || fail '请从应用终端启动，以加载运行环境。'
@@ -23,17 +23,31 @@ chmod 700 "$x11" "$x11/tmp" "$x11/tmp/.X11-unix"
 # Android asset extraction does not preserve executable bits.
 [ ! -f "$runtime/phone-tools/bin/windows" ] || chmod 700 "$runtime/phone-tools/bin/windows"
 [ "$#" -gt 0 ] || set -- /bin/bash -l
-exec "$proot" --link2symlink --kill-on-exit -0 -r "$rootfs" \
+# The Android launcher supplies a validated guest directory as data, never a command.
+# A missing or inaccessible directory must fail rather than drop into /root.
+guest_cwd="${ZFOLD_UBUNTU_CWD:-/workspace}"
+case "$guest_cwd" in /workspace|/workspace/*) ;; *) fail '启动目录不在共享工作区内。';; esac
+set -- --link2symlink --kill-on-exit -0 -r "$rootfs" \
   -b /dev -b /proc \
   -b "$runtime/phone-tools:/opt/pi-phone" \
   -b "$x11:/run/zfold-x11" \
   -b "$x11/tmp/.X11-unix:/tmp/.X11-unix" \
-  -b "$ZFOLD_AGENT_ROOT:/workspace" -w /workspace \
+  -b "$ZFOLD_AGENT_ROOT:/workspace" -w "$guest_cwd" \
   /usr/bin/env -i HOME=/root TMPDIR=/tmp PATH=/opt/pi-phone/bin:/usr/local/bin:/usr/bin:/bin \
   DISPLAY=:9 XAUTHORITY=/run/zfold-x11/Xauthority \
   LANG=C.UTF-8 TERM="${TERM:-xterm-256color}" COLORTERM=truecolor \
+  ZFOLD_GAMEPAD="${ZFOLD_GAMEPAD:-1}" \
   PI_FORCE_IMAGE_PROTOCOL="${PI_FORCE_IMAGE_PROTOCOL:-}" \
   PI_FORCE_HYPERLINKS="${PI_FORCE_HYPERLINKS:-}" PI_NO_HYPERLINKS="${PI_NO_HYPERLINKS:-}" \
   ZFOLD_PHONE_SOCKET="$ZFOLD_PHONE_SOCKET" \
   ZFOLD_PHONE_PATH_MAP="{\"hostRoot\":\"$ZFOLD_AGENT_ROOT\",\"guestRoot\":\"/workspace\"}" \
-  "$@"
+  /bin/sh -c 'cd -- "$1" || exit; shift; exec /bin/sh /opt/pi-phone/gamepad.sh "$@"' zfold-workspace "$guest_cwd" "$@"
+# Older environment snapshots do not include the primary shared-storage path.
+# Quote the complete bind argument: spaces and shell metacharacters are path data.
+shared_storage="${ZFOLD_SHARED_STORAGE:-/sdcard}"
+if [ -d "$shared_storage" ] && [ -r "$shared_storage" ] && [ -x "$shared_storage" ]; then
+  set -- -b "$shared_storage:/sdcard" "$@"
+else
+  printf 'ubuntu: 共享存储不可访问，未挂载 /sdcard；仍可使用 /workspace。访问受 Android 权限限制。\n' >&2
+fi
+exec "$proot" "$@"

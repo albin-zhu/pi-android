@@ -24,7 +24,7 @@ public final class PhoneToolInstrumentation extends Instrumentation {
       PhoneToolPolicy.setAlwaysAllow(getTargetContext(),false);
       try(Client client=new Client()){
         check(client.ready.getInt("protocol")==1&&client.ready.getString("workspaceRoot").equals(PiRuntime.agentRoot(getTargetContext()).getCanonicalPath()),"Handshake roots/protocol");
-        JSONArray tools=client.ready.getJSONArray("tools");check(tools.length()==18&&!tools.toString().contains("runtime_exec"),"Phone-only allowlist");
+        JSONArray tools=client.ready.getJSONArray("tools");check(!tools.toString().contains("runtime_exec"),"Runtime execution advertised as phone tool");
         JSONObject device=client.call("device","device_info",new JSONObject()).getJSONObject("result");
         check(Build.MODEL.equals(device.getString("model"))&&getTargetContext().getPackageName().equals(device.getString("packageName")),"device_info must describe this real Android device");
         check(client.call("capabilities","phone_capabilities",new JSONObject()).getJSONObject("result").has("telephony"),"Real phone capabilities");
@@ -35,6 +35,20 @@ public final class PhoneToolInstrumentation extends Instrumentation {
 
         getTargetContext().startActivity(new android.content.Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
         waitPackage("com.android.settings");
+        check(PhoneToolDispatcher.readOnly("x11_server",PiRuntime.json("action","status")),"X11 status must be read-only");
+        check(!PhoneToolDispatcher.readOnly("x11_server",PiRuntime.json("action","start")),"X11 start must not be read-only");
+        for(String action:new String[]{"status","start"}){
+          client.request("x11-denied-"+action,"x11_server",PiRuntime.json("action",action));waitButton("拒绝");click("拒绝");
+          check(client.result("x11-denied-"+action).optString("error").contains("拒绝"),"X11 "+action+" bypassed Android consent");
+          waitPackage("com.android.settings");
+        }
+        client.request("x11-status","x11_server",PiRuntime.json("action","status"));waitButton("仅允许这一次");click("仅允许这一次");
+        JSONObject x11=client.result("x11-status").getJSONObject("result");
+        check(x11.getString("display").equals(":9"),"X11 status queried a different display");
+        check(!x11.getBoolean("ready")||x11.getBoolean("running"),"Stopped X11 server reported ready");
+        waitPackage("com.android.settings");
+        check(!PhoneToolDispatcher.phoneBusy(),"X11 status acquired phone screen control");
+        report.putBoolean("x11StatusAndStartConsentAndReadOnlyState",true);
         client.request("private-read","screen_read",new JSONObject());waitButton("拒绝");click("拒绝");
         check(client.result("private-read").optString("error").contains("拒绝"),"Sensitive read bypassed Android consent");
         waitPackage("com.android.settings"); // Denying consent must not steal target focus.
@@ -76,6 +90,7 @@ public final class PhoneToolInstrumentation extends Instrumentation {
         check(status.optString("status").equals("not_found")&&!status.optBoolean("performed"),"Always-allow did not execute actual read-only SMS status");
         check(!button("仅允许这一次",false),"Always-allow still prompted");
         check(client.call("trusted-forbidden","runtime_exec",new JSONObject()).has("error"),"Always-allow bypassed tool allowlist");
+        check(client.call("x11-stop","x11_server",PiRuntime.json("action","stop")).has("error"),"Unrequested X11 stop action accepted");
         PhoneToolPolicy.setAlwaysAllow(getTargetContext(),false);
         client.request("revoked","phone_sms",PiRuntime.json("action","status","operationId","missing"));
         waitButton("拒绝");click("拒绝");

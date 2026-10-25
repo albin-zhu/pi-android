@@ -18,16 +18,43 @@
  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
  <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
  <uses-permission android:name="android.permission.VIBRATE" />
- <queries><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent><intent><action android:name="android.speech.RecognitionService"/></intent><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent><intent><action android:name="android.intent.action.DIAL"/><data android:scheme="tel"/></intent><intent><action android:name="android.intent.action.CALL"/><data android:scheme="tel"/></intent><intent><action android:name="android.intent.action.SENDTO"/><data android:scheme="smsto"/></intent></queries>
+ <queries>
+  <intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent>
+  <intent><action android:name="android.speech.RecognitionService"/></intent>
+  <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>
+  <intent><action android:name="android.intent.action.DIAL"/><data android:scheme="tel"/></intent>
+  <intent><action android:name="android.intent.action.CALL"/><data android:scheme="tel"/></intent>
+  <intent><action android:name="android.intent.action.SENDTO"/><data android:scheme="smsto"/></intent>
+  <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="content" android:mimeType="text/*"/></intent>
+  <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="content" android:mimeType="application/markdown"/></intent>
+  <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="content" android:mimeType="application/x-markdown"/></intent>
+  <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="content" android:mimeType="application/json"/></intent>
+  <intent><action android:name="android.intent.action.VIEW"/><data android:scheme="content" android:mimeType="application/ld+json"/></intent>
+ </queries>
  <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@style/AppTheme"
   android:resizeableActivity="true" android:debuggable="true" android:allowBackup="false" android:extractNativeLibs="true" android:usesCleartextTraffic="true">
-  <activity android:name=".MainActivity" android:enableOnBackInvokedCallback="true" android:exported="true" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden">
+  <activity android:name=".LauncherActivity" android:exported="true" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" android:taskAffinity="" android:noHistory="true">
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
    <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
   </activity>
-  <activity android:name=".UsageActivity" android:exported="false" />
+  <activity android:name=".SettingsActivity" android:enableOnBackInvokedCallback="true" android:exported="false" android:launchMode="singleTop" android:windowSoftInputMode="adjustResize" />
+  <activity android:name=".UsageActivity" android:exported="false" android:enableOnBackInvokedCallback="true" />
+  <activity android:name=".PreviewActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:enableOnBackInvokedCallback="true" />
+  <activity android:name=".MarkdownEntryActivity" android:exported="true" android:theme="@style/WorkScreenTheme">
+   <intent-filter>
+    <action android:name="android.intent.action.VIEW"/>
+    <category android:name="android.intent.category.DEFAULT"/>
+    <data android:scheme="content"/>
+    <data android:mimeType="text/*"/>
+    <data android:mimeType="application/markdown"/>
+    <data android:mimeType="application/x-markdown"/>
+    <data android:mimeType="application/json"/>
+    <data android:mimeType="application/ld+json"/>
+   </intent-filter>
+  </activity>
   <receiver android:name=".UsageWidget" android:exported="true" android:label="橙橙模型用量"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_usage" /></receiver>
   <receiver android:name=".ShortcutsWidget" android:exported="true" android:label="橙橙快捷入口"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_shortcuts" /></receiver>
+  <receiver android:name=".VirtualScreenWidget" android:exported="false" android:label="橙橙虚拟屏 · 原生 :9 只读" android:icon="@drawable/ic_screen_share"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_virtual_screen" /></receiver>
   <activity android:name=".CircleEntryActivity" android:exported="true" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" android:taskAffinity="" android:noHistory="true" />
   <activity android:name=".ProcessTextActivity" android:exported="true" android:label="@string/ask_chengcheng" android:icon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:excludeFromRecents="true" android:taskAffinity="" android:documentLaunchMode="always" android:finishOnTaskLaunch="true">
    <intent-filter android:label="@string/ask_chengcheng">
@@ -45,6 +72,11 @@
     <category android:name="android.intent.category.DEFAULT"/>
     <data android:mimeType="image/*"/>
    </intent-filter>
+   <intent-filter android:label="@string/ask_chengcheng">
+    <action android:name="android.intent.action.SEND"/>
+    <category android:name="android.intent.category.DEFAULT"/>
+    <data android:mimeType="text/*"/>
+   </intent-filter>
   </activity>
   <activity android:name=".OverlayEntryActivity" android:taskAffinity="" android:exported="true" android:theme="@style/TransparentTheme" android:excludeFromRecents="true">
    <intent-filter><action android:name="android.intent.action.ASSIST"/><category android:name="android.intent.category.DEFAULT"/></intent-filter>
@@ -56,22 +88,24 @@
   <receiver android:name=".SmsSentReceiver" android:exported="false" />
   <activity android:name=".PhoneTaskFixtureActivity" android:exported="false" />
   <activity android:name=".FilePickActivity" android:exported="false" android:theme="@style/TransparentTheme" android:excludeFromRecents="true" />
-  <activity android:name=".AvatarEditorActivity" android:exported="false" />
- <activity android:name=".RuntimePackageManagerActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
- <activity android:name=".TerminalActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.terminal" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
- <activity android:name=".ConnectorActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.connectors" android:windowSoftInputMode="adjustResize" />
- <activity android:name=".WorkbenchActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.workbench" />
- <activity android:name=".GraphicsRuntimeActivity" android:exported="false" android:theme="@style/WorkScreenTheme" />
- <activity android:name="com.termux.x11.MainActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.x11" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+  <activity android:name=".AvatarEditorActivity" android:exported="false" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".RuntimePackageManagerActivity" android:exported="false" android:windowSoftInputMode="adjustResize" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".TerminalActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.terminal" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".ConnectorActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.connectors" android:windowSoftInputMode="adjustResize" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".WorkbenchActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.workbench" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".GraphicsRuntimeActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:enableOnBackInvokedCallback="true" />
+ <activity android:name=".VirtualScreenActivity" android:exported="false" android:label="虚拟屏" android:theme="@style/WorkScreenTheme" android:supportsPictureInPicture="true" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.mirror" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" android:enableOnBackInvokedCallback="true" />
+ <activity android:name="com.termux.x11.MainActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:supportsPictureInPicture="true" android:launchMode="singleTop" android:taskAffinity="dev.zfold.assistant.x11" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" android:enableOnBackInvokedCallback="true" />
+<activity android:name="com.termux.x11.WindowActivity" android:exported="false" android:theme="@style/WorkScreenTheme" android:supportsPictureInPicture="true" android:resizeableActivity="true" android:documentLaunchMode="intoExisting" android:launchMode="standard" android:taskAffinity="dev.zfold.assistant.x11.windows" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" android:enableOnBackInvokedCallback="false" />
  <service android:name="com.termux.x11.X11Service" android:process=":x11server" android:exported="false" android:foregroundServiceType="specialUse">
    <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-started local X11 display for Linux and Windows applications" />
  </service>
  <activity android:name=".ConnectorOAuthActivity" android:exported="true">
    <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="dev.zfold.assistant" android:host="connector-oauth"/></intent-filter>
  </activity>
-  <activity android:name=".VoiceCallActivity" android:theme="@style/WorkScreenTheme" android:exported="false" android:launchMode="singleTop"
+  <activity android:name=".VoiceCallActivity" android:theme="@style/WorkScreenTheme" android:exported="false" android:launchMode="singleTop" android:enableOnBackInvokedCallback="true"
    android:showWhenLocked="true" android:turnScreenOn="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
-  <activity android:name=".UserQuestionActivity" android:theme="@style/WorkScreenTheme" android:exported="false" android:launchMode="singleTop" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+  <activity android:name=".UserQuestionActivity" android:theme="@style/WorkScreenTheme" android:exported="false" android:launchMode="singleTop" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" android:enableOnBackInvokedCallback="true" />
   <service android:name=".PhoneAccessibility" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
    <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
    <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility"/>
@@ -101,27 +135,19 @@
  </application>
  <instrumentation android:name=".PhoneToolInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold same-UID phone socket and Android consent (no model requests)" />
  <instrumentation android:name=".PackageCliInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold package CLI check (emulator only)" />
- <instrumentation android:name=".WindowEntryInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold direct system window entry (emulator only)" />
  <instrumentation android:name=".SpeechProviderInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng speech providers (emulator only)" />
  <instrumentation android:name=".AudioRouteInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng call audio routes (emulator only, no microphone)" />
- <instrumentation android:name=".SessionManagementInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng session management (isolated emulator only)" />
  <instrumentation android:name=".OAuthInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng OAuth UI and callback (isolated emulator fixtures)" />
  <instrumentation android:name=".UserQuestionInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng structured user questions (isolated emulator fixture)" />
- <instrumentation android:name=".ToolGroupInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng consecutive tool disclosures (emulator only)" />
- <instrumentation android:name=".InterruptionInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng interruption history and retry visibility (isolated emulator only)" />
  <instrumentation android:name=".WakePipelineInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Chengcheng wake word and ready cue (emulator only, synthetic WAV)" />
  <instrumentation android:name=".VideoCallInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold video call check (emulator only)" />
- <instrumentation android:name=".MinimapInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold conversation minimap check (emulator only)" />
  <instrumentation android:name=".PhoneActionsInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold phone capability check (emulator only, no calls or SMS)" />
  <instrumentation android:name=".SmokeInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold native Pi integration check" />
- <instrumentation android:name=".ToolUiInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold tool timeline check" />
  <instrumentation android:name=".JevInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold live Jev acceptance" />
  <instrumentation android:name=".SnapshotInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold snapshot guard check" />
  <instrumentation android:name=".VisualInputInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold visual input check" />
  <instrumentation android:name=".WeChatSearchInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold contact search check" />
  <instrumentation android:name=".ControlInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold phone control check" />
- <instrumentation android:name=".FloatingInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold floating phone control check" />
- <instrumentation android:name=".KeyboardInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold floating keyboard geometry check" />
  <instrumentation android:name=".LassoInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold freehand image check" />
  <instrumentation android:name=".SpeechProbeInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold local speech capability check" />
  <instrumentation android:name=".VadInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold local VAD model check" />
@@ -130,7 +156,6 @@
  <instrumentation android:name=".BargeEchoInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold barge echo rejection check" />
  <instrumentation android:name=".HudInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold phone HUD check" />
  <instrumentation android:name=".WakeTtsInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold synthesized wake check" />
-    <instrumentation android:name=".ScreenShareInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold shared screen chat check" />
     <instrumentation android:name=".SandboxInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold Node sandbox check" />
     <instrumentation android:name=".RuntimeExecInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold writable binary execution check" />
     <instrumentation android:name=".RuntimeResponsivenessInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold runtime main-thread responsiveness check" />
@@ -139,18 +164,15 @@
     <instrumentation android:name=".VoiceAvatarInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold avatar voice interruption check" />
     <instrumentation android:name=".TerminalInteractionInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold terminal interaction check" />
     <instrumentation android:name=".ConnectorInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold connector workflow check" />
-    <instrumentation android:name=".InteractionInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold workbench and floating interaction check" />
     <instrumentation android:name=".TerminalAcceptanceInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold terminal first-run and lifecycle acceptance" />
-    <instrumentation android:name=".SystemEntryInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold Android assistant handoff acceptance" />
     <instrumentation android:name=".CircleInteractionInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold freehand selection through accessibility overlay" />
-    <instrumentation android:name=".FloatingBoundsInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold floating safe-area acceptance" />
     <instrumentation android:name=".RuntimePackInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold runtime pack install and execution check" />
     <instrumentation android:name=".PackageManagerInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold package manager install and execution check" />
     <instrumentation android:name=".PtyInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold Termux PTY check" />
     <instrumentation android:name=".OpenToolInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold native open tool check" />
- <instrumentation android:name=".SystemWindowInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold system window acceptance" />
- <instrumentation android:name=".SwipeNavigationInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Zfold swipe and Back navigation acceptance" />
  <instrumentation android:name=".TerminalScrollInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Terminal history under live TUI repaint (emulator only)" />
  <instrumentation android:name=".TerminalGlyphInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Terminal glyph aspect and cell geometry (Android Canvas pixels)" />
  <instrumentation android:name=".TerminalImageInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Inline PNG/JPEG through real terminal PTY (emulator only)" />
+ <instrumentation android:name=".TerminalWorkspaceInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Terminal workspace real PTY acceptance (dedicated test package)" />
+ <instrumentation android:name=".TerminalCircleInstrumentation" android:targetPackage="dev.zfold.assistant" android:functionalTest="true" android:label="Circle draft to real terminal acceptance (dedicated test package)" />
 </manifest>

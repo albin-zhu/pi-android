@@ -72,7 +72,6 @@ final class UnifiedOverlay {
       return true;
     }
     removeLocked();
-    CircleOverlay.suspendForCompact();
 
     Context host = service != null ? service : app;
     WindowManager wm = (WindowManager) host.getSystemService(Context.WINDOW_SERVICE);
@@ -88,7 +87,7 @@ final class UnifiedOverlay {
     View mark = Ui.agentMark(app, runtime==null?null:runtime.agentAvatar, 30);
     if(value==Mode.CALL){
       android.widget.FrameLayout avatar=new android.widget.FrameLayout(app);avatar.addView(mark,new android.widget.FrameLayout.LayoutParams(Ui.dp(app,30),Ui.dp(app,30),Gravity.CENTER));
-      avatar.setBackground(Ui.ripple(app,Color.TRANSPARENT,24,0xffe8eff8));avatar.setContentDescription("点击头像打断语音");avatar.setFocusable(true);avatar.setOnClickListener(v->{Ui.click(v);VoiceTurnController controller=MainActivity.activeVoice();if(controller!=null)controller.forceInterrupt();});body.addView(avatar,new LinearLayout.LayoutParams(Ui.dp(app,48),Ui.dp(app,48)));
+      avatar.setBackground(Ui.ripple(app,Color.TRANSPARENT,24,0xffe8eff8));avatar.setContentDescription("点击头像打断语音");avatar.setFocusable(true);avatar.setOnClickListener(v->{Ui.click(v);VoiceTurnController controller=VoiceCoordinator.current();if(controller!=null)controller.forceInterrupt();});body.addView(avatar,new LinearLayout.LayoutParams(Ui.dp(app,48),Ui.dp(app,48)));
     }else body.addView(mark, new LinearLayout.LayoutParams(Ui.dp(app, 30), Ui.dp(app, 30)));
 
     LinearLayout labels = new LinearLayout(app);
@@ -107,25 +106,25 @@ final class UnifiedOverlay {
 
     if (value == Mode.TASK && !takeoverMode) {
       body.addView(new Ui.Action(app, R.drawable.ic_microphone, "", "语音接管当前任务", 0xffe8eff8, Color.TRANSPARENT,
-          () -> {PhoneToolDispatcher.stopExternal();AssistantOverlay.showForVoice(app);}), new LinearLayout.LayoutParams(Ui.dp(app, 48), Ui.dp(app, 48)));
+          () -> {PhoneToolDispatcher.stopExternal();VoiceCallActivity.show(app);}), new LinearLayout.LayoutParams(Ui.dp(app, 48), Ui.dp(app, 48)));
       body.addView(new Ui.Action(app, R.drawable.ic_x, "", "停止当前手机操作", 0xffe8eff8, Color.TRANSPARENT,
           () -> PhoneToolDispatcher.stopPhone(app)), new LinearLayout.LayoutParams(Ui.dp(app, 48), Ui.dp(app, 48)));
-      body.setOnClickListener(view -> {PhoneToolDispatcher.stopExternal();hideLocked(); AssistantOverlay.show(app);});
-      body.setContentDescription("Zfold 正在操作手机。点主体展开助手；右侧可用语音接管或停止。");
+      body.setOnClickListener(view -> {PhoneToolDispatcher.stopExternal();hideLocked();TerminalActivity.open(app);});
+      body.setContentDescription("Zfold 正在操作手机。点主体回到终端；右侧可用语音接管或停止。");
     } else if (value == Mode.CALL) {
       if (runtime!=null&&runtime.busy) body.addView(new Ui.Action(app, R.drawable.ic_x, "", "停止当前手机操作", 0xffe8eff8, Color.TRANSPARENT,
           () -> PhoneToolDispatcher.stopPhone(app)), new LinearLayout.LayoutParams(Ui.dp(app, 48), Ui.dp(app, 48)));
       body.addView(new Ui.Action(app, R.drawable.ic_x, "", "结束实时通话", 0xffff4553, Color.TRANSPARENT,
           () -> {
-            VoiceTurnController controller = MainActivity.activeVoice();
+            VoiceTurnController controller = VoiceCoordinator.current();
             if (controller != null) controller.stopSession(false);
             hideLocked();
           }), new LinearLayout.LayoutParams(Ui.dp(app, 48), Ui.dp(app, 48)));
       body.setOnClickListener(view -> {hideLocked(); VoiceCallActivity.show(app);});
       body.setContentDescription("实时通话已转到后台。点按返回通话，右侧按钮结束。");
     } else {
-      body.setOnClickListener(view -> {takeover = false; hideLocked(); AssistantOverlay.show(app);});
-      body.setContentDescription("Zfold 任务已由用户接管。点这里回到助手继续。");
+      body.setOnClickListener(view -> {takeover = false; hideLocked();TerminalActivity.open(app);});
+      body.setContentDescription("Zfold 任务已由用户接管。点这里回到终端继续。");
     }
 
     int type = service != null ? WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
@@ -163,7 +162,6 @@ final class UnifiedOverlay {
     mode = null;
     takeover = false;
     try {active.removeView(old);} catch (Exception ignored) {}
-    CircleOverlay.resumeAfterCompact(old.getContext());
   }
 
   private static void removeLocked() {hideLocked();}

@@ -29,7 +29,7 @@ final class ScreenContext {
     if(context instanceof android.app.Activity&&((android.app.Activity)context).isInMultiWindowMode()&&Build.VERSION.SDK_INT<34){callback.done(null,null,"当前 Android 版本不支持单独读取旁边的应用窗口");return;}
     busy=true;int request=generation;long started=SystemClock.uptimeMillis();
     ArrayList<View> hidden=new ArrayList<>();
-    for(View view:new View[]{AssistantOverlay.currentPanel(),AssistantSessionService.currentPanel(),CircleOverlay.captureView(),UnifiedOverlay.captureView()}){
+    for(View view:new View[]{UnifiedOverlay.captureView()}){
       if(view!=null&&view.getVisibility()==View.VISIBLE){view.setVisibility(View.INVISIBLE);hidden.add(view);}
     }
     final boolean[] finished={false};final Runnable[] timeout={null};

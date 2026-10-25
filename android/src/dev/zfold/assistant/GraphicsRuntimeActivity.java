@@ -1,6 +1,5 @@
 package dev.zfold.assistant;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -11,7 +10,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 /** Linux X11 display and optional Windows programs, independent of chat runs. */
-public final class GraphicsRuntimeActivity extends Activity {
+public final class GraphicsRuntimeActivity extends NavigableActivity {
   private Ui.Theme theme;
   private LinearLayout content;
   private EditText executable,arguments;
@@ -23,9 +22,11 @@ public final class GraphicsRuntimeActivity extends Activity {
     content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(20),dp(20),dp(20),dp(24));
     content.setBackgroundColor(theme.page);scroll.addView(content);setContentView(scroll);
     TextView title=Ui.text(this,"图形应用 · X11 / Wine",22,theme.ink);title.setTypeface(Typeface.create("sans-serif-medium",0));content.addView(title);
-    text("X11 显示独立于终端和聊天。先打开显示，再回到终端启动 Linux 图形程序或 Windows 程序；离开显示页面不会结束会话。");
-    button("打开 X11 显示",()->com.termux.x11.MainActivity.open(this));
-    text("新 Ubuntu 终端自动连接 DISPLAY=:9。已有终端请重新进入 ubuntu，以加载显示 socket、授权文件和 windows 命令。");
+    text("所有图形应用共用一个 X11 :9 服务，每个主窗口单独显示为 Android 窗口，可在最近任务中切换。先启动显示，再回到终端运行程序；返回或隐藏窗口不会结束程序。");
+    button("虚拟屏 · :9 只读窗口",()->VirtualScreenActivity.open(this,null));
+    button("打开 X11 应用窗口（可交互）",()->com.termux.x11.MainActivity.open(this));
+    button("Xvfb/JPEG 兼容预览 · 选择旧显示",()->VirtualScreenActivity.openXvfb(this,null));
+    text("新 Ubuntu 终端自动连接 DISPLAY=:9。只读入口可选择应用窗口或查看整个桌面，不转发输入和剪贴板，也不改变远端尺寸。交互窗口调整大小只影响当前应用；旧 Xvfb 任务仍从兼容预览查看。");
     status=Ui.text(this,"",13,theme.muted);content.addView(status);
     text("Wine 为可选下载：固定版本 Box64 + Wine WoW64，支持尝试运行 32/64 位 Windows 程序。不是安全沙箱；只运行你信任的程序。首次安装会在新终端展示来源并请求确认，不包含游戏文件。");
     button("在终端安装 Wine",()->terminal("安装 Wine","install"));
@@ -60,7 +61,7 @@ public final class GraphicsRuntimeActivity extends Activity {
     ArrayList<String> argv=new ArrayList<>(Arrays.asList(ubuntu.getPath(),"/bin/bash","-c",
       "windows \"$@\"; code=$?; printf '\\nWindows 命令退出码：%s\\n' \"$code\"; exec /bin/bash -l","windows"));
     argv.addAll(Arrays.asList(arguments));
-    try{TerminalSessions.get(this).createCommand(argv.toArray(new String[0]),title);TerminalActivity.open(this);}
+    try{TerminalSessions.get(this).createCommand(argv.toArray(new String[0]),title,true);TerminalActivity.open(this);}
     catch(RuntimeException error){Toast.makeText(this,error.getMessage(),Toast.LENGTH_LONG).show();}
   }
   private void text(String value){TextView label=Ui.text(this,value,14,theme.muted);label.setPadding(0,dp(12),0,dp(8));label.setLineSpacing(dp(3),1);label.setTextIsSelectable(true);content.addView(label);}

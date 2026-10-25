@@ -6,7 +6,7 @@ public final class OverlayEntryActivity extends Activity {
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
     if(CircleAskPrefs.assistInvokesCircle(this))CircleOverlay.beginOnCurrentScreen(getApplicationContext());
-    else SystemWindowNavigation.showChat(this,false);
+    else TerminalActivity.open(this);
     finish();overridePendingTransition(0,0);
   }
 }

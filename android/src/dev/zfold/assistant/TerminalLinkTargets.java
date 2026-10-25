@@ -1,5 +1,7 @@
 package dev.zfold.assistant;
 
+import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 
@@ -18,5 +20,22 @@ final class TerminalLinkTargets {
     if(!value.startsWith("/")&&!new URI(value).isAbsolute())throw new IllegalArgumentException("文件链接必须使用绝对路径");
     if(value.equals("/workspace")||value.startsWith("/workspace/"))return workspaceRoot+value.substring("/workspace".length());
     return value;
+  }
+
+  /** Common local-open boundary, also used after terminal links have been decoded. */
+  static File localFile(String target,File sharedRoot)throws IOException,URISyntaxException {
+    File root=sharedRoot.getCanonicalFile();
+    String value=androidTarget(target,root.getPath());
+    for(String alias:new String[]{"/storage/pi","/sdcard/pi","/storage/emulated/0/pi"}){
+      if(value.equals(alias)||value.startsWith(alias+"/")){
+        value=root.getPath()+value.substring(alias.length());
+        break;
+      }
+    }
+    File file=new File(value);
+    if(!file.isAbsolute())throw new IOException("文件链接必须使用绝对路径");
+    file=file.getCanonicalFile();
+    if(!file.equals(root)&&!file.getPath().startsWith(root.getPath()+File.separator))throw new IOException("只能打开共享目录内的文件：Ubuntu /workspace 对应 Android "+root.getPath()+"；/root、/tmp 等私有目录不共享");
+    return file;
   }
 }

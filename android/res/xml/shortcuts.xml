@@ -10,4 +10,34 @@
       android:targetPackage="dev.zfold.assistant"
       android:targetClass="dev.zfold.assistant.CircleEntryActivity" />
   </shortcut>
+  <shortcut
+    android:shortcutId="ubuntu_terminal"
+    android:enabled="true"
+    android:shortcutShortLabel="@string/ubuntu_terminal_short"
+    android:shortcutLongLabel="@string/ubuntu_terminal_long">
+    <intent
+      android:action="dev.zfold.assistant.OPEN_UBUNTU_TERMINAL"
+      android:targetPackage="dev.zfold.assistant"
+      android:targetClass="dev.zfold.assistant.LauncherActivity" />
+  </shortcut>
+  <shortcut
+    android:shortcutId="android_terminal"
+    android:enabled="true"
+    android:shortcutShortLabel="@string/android_terminal_short"
+    android:shortcutLongLabel="@string/android_terminal_long">
+    <intent
+      android:action="dev.zfold.assistant.OPEN_ANDROID_TERMINAL"
+      android:targetPackage="dev.zfold.assistant"
+      android:targetClass="dev.zfold.assistant.LauncherActivity" />
+  </shortcut>
+  <shortcut
+    android:shortcutId="virtual_screen"
+    android:enabled="true"
+    android:shortcutShortLabel="@string/virtual_screen_short"
+    android:shortcutLongLabel="@string/virtual_screen_long">
+    <intent
+      android:action="dev.zfold.assistant.OPEN_VIRTUAL_SCREEN"
+      android:targetPackage="dev.zfold.assistant"
+      android:targetClass="dev.zfold.assistant.LauncherActivity" />
+  </shortcut>
 </shortcuts>

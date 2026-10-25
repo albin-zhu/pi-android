@@ -38,7 +38,7 @@ final class ProviderAuthDialog implements PiRuntime.Listener {
 
   void open(){
     Context context=anchor.getContext();
-    if(!(context instanceof android.app.Activity)){context.startActivity(new Intent(context,MainActivity.class).putExtra("open_provider_auth",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));return;}
+    if(!(context instanceof android.app.Activity)){context.startActivity(new Intent(context,SettingsActivity.class).putExtra("open_provider_auth",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));return;}
     frame=new FrameLayout(context);frame.setFocusableInTouchMode(true);
     frame.setOnKeyListener((v,key,event)->{if(event.getAction()==KeyEvent.ACTION_UP&&key==KeyEvent.KEYCODE_BACK){close();return true;}return false;});
     View scrim=new View(context);scrim.setBackgroundColor(0x74000000);scrim.setContentDescription("关闭供应商登录");scrim.setClickable(true);scrim.setOnClickListener(v->close());

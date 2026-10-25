@@ -102,8 +102,7 @@ public final class PiRuntime {
     this.context=context;this.testing=testMode;
     new Thread(() -> {
       try {
-        File runtime=new File(context.getFilesDir(),"runtime"); runtime.mkdirs();
-        for(String name:context.getAssets().list("runtime"))copyAssetTree(context,"runtime/"+name,new File(runtime,name));
+        File runtime=RuntimeAssets.prepare(context);
         deleteTree(new File(runtime,"lark-api.SKILL.md"));deleteTree(new File(runtime,"node-worker-entry.cjs"));deleteTree(new File(runtime,"npm"));deleteTree(new File(runtime,"npm-cache"));
         System.loadLibrary("node"); System.loadLibrary("zfold");
         if(!prepare(context.getCacheDir().getAbsolutePath())) throw new IOException("无法建立本机通信");
@@ -120,16 +119,6 @@ public final class PiRuntime {
         dispatch(json("type","error","message","本地运行时启动失败："+e.getMessage()));
       }
     },"pi-node").start();
-  }
-  private static void copyAssetTree(Context context,String asset,File target) throws IOException {
-    String[] children=context.getAssets().list(asset);
-    if(children==null||children.length==0) {
-      target.getParentFile().mkdirs();
-      try(InputStream in=context.getAssets().open(asset); OutputStream out=new FileOutputStream(target)) { byte[] buffer=new byte[32768];int n;while((n=in.read(buffer))!=-1)out.write(buffer,0,n); }
-      return;
-    }
-    target.mkdirs();
-    for(String child:children)copyAssetTree(context,asset+"/"+child,new File(target,child));
   }
   private void readLoop() {
     ByteArrayOutputStream line=new ByteArrayOutputStream();
@@ -184,7 +173,6 @@ public final class PiRuntime {
       if(type.equals("tool_execution")) {lastTools.put(event.optString("id"),event);PhoneToolDispatcher.embeddedProgress(context,event);}
       if(type.equals("delta")) lastResponse+=event.optString("text");
       if(type.equals("turn_end")||type.equals("error")) {busy=false;UserQuestions.endTurn(context,event.optString("turnId"));PhoneToolDispatcher.embeddedEnd();}
-      if(type.equals("turn_start")||type.equals("turn_end")||type.equals("error"))CircleOverlay.setBusy(busy);
       if(type.equals("phone_halt"))PhoneToolDispatcher.embeddedStop(activeTurnId);
       if(type.equals("probe")) Log.i("ZfoldPi",event.toString());
       if(type.equals("tool_request")) {

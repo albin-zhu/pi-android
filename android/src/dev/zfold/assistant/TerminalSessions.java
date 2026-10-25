@@ -21,18 +21,47 @@ final class TerminalSessions implements TerminalSessionClient {
   private WeakReference<Listener> listener=new WeakReference<>(null);
   private String selected;
   private int nextOrdinal=1;
+  private final SharedPreferences lifecycle;
+  boolean interrupted;
   static synchronized TerminalSessions get(Context context){if(instance==null)instance=new TerminalSessions(context.getApplicationContext());return instance;}
-  private TerminalSessions(Context context){this.context=context;}
+  private TerminalSessions(Context context){
+    this.context=context;
+    lifecycle=context.getSharedPreferences(PiRuntime.testMode?"test-terminal-lifecycle":"terminal-lifecycle",Context.MODE_PRIVATE);
+    interrupted=lifecycle.getBoolean("hadSessions",false);
+    lifecycle.edit().putBoolean("hadSessions",false).apply();
+  }
   void observe(Listener value){listener=new WeakReference<>(value);}
   void detach(Listener value){if(listener.get()==value)listener.clear();}
-  Job current(){Job job=jobs.get(selected);return job!=null?job:create();}
-  Job create(){
-    if(liveCount()>=4)throw new IllegalStateException("已有 4 个运行中的终端，请先结束一个会话");
-    Job job=new Job(this,nextOrdinal++);jobs.put(job.session.mHandle,job);selected=job.session.mHandle;return job;
+  Job selected(){return jobs.get(selected);}
+  Job create(){return create(workspace());}
+  Job create(TerminalWorkspaces.Entry workspace){return create(null,workspace.ubuntu,workspace);}
+  private TerminalWorkspaces.Entry workspace(){
+    try{return TerminalWorkspaces.get(context).selected();}
+    catch(IOException error){throw new IllegalStateException(error.getMessage(),error);}
   }
-  Job createCommand(String[] arguments,String title){
+  Job interactive(boolean ubuntu){
+    TerminalWorkspaces.Entry workspace=workspace();
+    Job current=jobs.get(selected);
+    if(matchesInteractive(current,ubuntu,workspace.id))return current;
+    for(Job job:jobs.values())if(matchesInteractive(job,ubuntu,workspace.id)){select(job);return job;}
+    return create(null,ubuntu,workspace);
+  }
+  private static boolean matchesInteractive(Job job,boolean ubuntu,String workspaceId){
+    return job!=null&&job.command==null&&job.ubuntu==ubuntu&&job.workspace.id.equals(workspaceId)&&!job.closing&&job.session.isRunning();
+  }
+  private Job create(String[] command,boolean ubuntu,TerminalWorkspaces.Entry workspace){
+    if(liveCount()>=4)throw new IllegalStateException("已有 4 个运行中的终端，请先结束一个会话；不会自动关闭已有标签。");
+    if(ubuntu){String reason=StartupPreferences.ubuntuUnavailable(context);if(reason!=null)throw new IllegalStateException(reason);}
+    try{TerminalWorkspaces.get(context).directory(workspace);}
+    catch(IOException error){throw new IllegalStateException(error.getMessage(),error);}
+    Job job=new Job(this,nextOrdinal++,command,ubuntu,workspace);
+    jobs.put(job.session.mHandle,job);selected=job.session.mHandle;interrupted=false;
+    lifecycle.edit().putBoolean("hadSessions",true).apply();
+    return job;
+  }
+  Job createCommand(String[] arguments,String title,boolean ubuntu){
     if(arguments==null||arguments.length==0)throw new IllegalArgumentException("缺少终端命令");
-    Job job=create();job.command=arguments.clone();rename(job,title);return job;
+    Job job=create(arguments.clone(),ubuntu,workspace());rename(job,title);return job;
   }
   void select(Job job){if(jobs.get(job.session.mHandle)==job)selected=job.session.mHandle;}
   int liveCount(){int count=0;for(Job job:jobs.values())if(job.session.isRunning())count++;return count;}
@@ -51,6 +80,7 @@ final class TerminalSessions implements TerminalSessionClient {
     }
     jobs.remove(job.session.mHandle);
     if(job.session.mHandle.equals(selected))selected=neighbor==null?null:neighbor.session.mHandle;
+    lifecycle.edit().putBoolean("hadSessions",!jobs.isEmpty()).apply();
     Listener target=listener.get();if(target!=null)target.removed(job,jobs.get(selected));
   }
   void closeAll(){for(Job job:new ArrayList<>(jobs.values()))job.close();}
@@ -59,33 +89,45 @@ final class TerminalSessions implements TerminalSessionClient {
     final TerminalSessions owner;final TerminalSession session;
     final ExecutorService writer=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"terminal-input");t.setDaemon(true);return t;});
     volatile int id;volatile boolean closing;String name,status="正在启动…",cwd="",shell="";
-    String[] command;
-    Job(TerminalSessions owner,int ordinal){this.owner=owner;name="终端 "+ordinal;session=new TerminalSession(this,owner);session.mSessionName=name;}
+    final String[] command;final boolean ubuntu;
+    final TerminalWorkspaces.Entry workspace;
+    int topRow;boolean ctrl;
+    Job(TerminalSessions owner,int ordinal,String[] command,boolean ubuntu,TerminalWorkspaces.Entry workspace){
+      this.owner=owner;this.command=command;this.ubuntu=ubuntu;this.workspace=workspace;name="终端 "+ordinal;
+      session=new TerminalSession(this,owner);session.mSessionName=name;
+    }
     public void start(TerminalSession ignored,int columns,int rows){
       if(closing){session.finish(143);return;}
       try{owner.context.startForegroundService(new Intent(owner.context,TerminalKeepAliveService.class));}catch(RuntimeException error){Log.w("ZfoldTerminal","Foreground terminal service",error);}
       writer.execute(()->{
         try{
           System.loadLibrary("zfold");
-          File bash=PiPackageManager.prepareBash(owner.context);
-          File fish=null;
-          try{fish=PiPackageManager.executable(owner.context,"fish");}catch(IOException unreachable){fish=null;}
-          boolean modern=owner.context.getApplicationInfo().targetSdkVersion==28;
-          boolean useFish=modern&&fish!=null&&fish.canExecute();
-          boolean useBash=!useFish&&modern&&bash!=null&&bash.canExecute();
-          File executable=useFish?fish:useBash?bash:new File("/system/bin/sh");
-          shell=useFish?"Fish":useBash?"Bash":"系统 Shell";
-          String[] argv=useBash?new String[]{executable.getPath(),"--noprofile"}:new String[]{executable.getPath()};
-          if(command!=null){argv=command;shell=name;}
+          File executable;String[] argv;boolean useFish=false,useBash=false;
+          if(command!=null){executable=new File(command[0]);argv=command;shell=name;}
+          else if(ubuntu){executable=new File(owner.context.getFilesDir(),"runtime/bin/ubuntu");argv=new String[]{executable.getPath()};shell="Ubuntu";}
+          else{
+            File bash=PiPackageManager.prepareBash(owner.context);
+            File fish=null;
+            try{fish=PiPackageManager.executable(owner.context,"fish");}catch(IOException unreachable){fish=null;}
+            boolean modern=owner.context.getApplicationInfo().targetSdkVersion==28;
+            useFish=modern&&fish!=null&&fish.canExecute();
+            useBash=!useFish&&modern&&bash!=null&&bash.canExecute();
+            executable=useFish?fish:useBash?bash:new File("/system/bin/sh");
+            shell=useFish?"Fish":useBash?"Bash":"系统 Shell";
+            argv=useBash?new String[]{executable.getPath(),"--noprofile"}:new String[]{executable.getPath()};
+          }
           Map<String,String> environment=new ProcessBuilder("true").environment();
           RuntimeEnvironment.apply(environment,RuntimeEnvironment.forExecutable(owner.context,executable),null);
-          if(!useBash&&!useFish)environment.putIfAbsent("ENV",new File(environment.get("HOME"),".mkshrc").getPath());
+          if(command==null&&!ubuntu&&!useBash&&!useFish)environment.putIfAbsent("ENV",new File(environment.get("HOME"),".mkshrc").getPath());
           environment.put("TERM","xterm-256color");environment.put("COLORTERM","truecolor");
           environment.put("PI_FORCE_IMAGE_PROTOCOL","iterm2");
           environment.put("PI_FORCE_HYPERLINKS","1");
-          if(!useFish)environment.put("PS1",useBash?"\\[\\e[38;5;114m\\]\\W\\[\\e[0m\\] $ ":"$ ");
-          cwd=RuntimeEnvironment.workingDirectory(owner.context,null).getPath();
-          id=PiRuntime.ptyOpen(argv,cwd,environment.entrySet().stream().map(entry->entry.getKey()+"="+entry.getValue()).toArray(String[]::new),rows,columns);
+          if(command==null&&!ubuntu&&!useFish)environment.put("PS1",useBash?"\\[\\e[38;5;114m\\]\\W\\[\\e[0m\\] $ ":"$ ");
+          TerminalWorkspaces workspaces=TerminalWorkspaces.get(owner.context);
+          String hostCwd=workspaces.directory(workspace).getPath();
+          cwd=ubuntu?workspaces.ubuntuDirectory(workspace):hostCwd;
+          if(ubuntu)environment.put("ZFOLD_UBUNTU_CWD",cwd);
+          id=PiRuntime.ptyOpen(argv,hostCwd,environment.entrySet().stream().map(entry->entry.getKey()+"="+entry.getValue()).toArray(String[]::new),rows,columns);
           if(closing){PiRuntime.ptyClose(id);session.finish(143);writer.shutdown();return;}
           owner.main.post(()->{status=shell+" · 运行中";owner.changed(this);TerminalKeepAliveService.refresh(owner.context);});
           Thread reader=new Thread(this::read,"terminal-output-"+id);reader.setDaemon(true);reader.start();
@@ -120,7 +162,7 @@ final class TerminalSessions implements TerminalSessionClient {
   }
   public void onTextChanged(TerminalSession session){Job job=find(session);if(job!=null)changed(job);}
   public void onTitleChanged(TerminalSession session){onTextChanged(session);}
-  public void onSessionFinished(TerminalSession session){Job job=find(session);if(job!=null){job.status="已结束 · 退出码 "+session.getExitStatus();remove(job);}TerminalKeepAliveService.refresh(context);}
+  public void onSessionFinished(TerminalSession session){Job job=find(session);if(job!=null){if(!job.status.startsWith("启动失败：")&&!job.status.startsWith("读取中断："))job.status="已结束 · 退出码 "+session.getExitStatus();remove(job);}TerminalKeepAliveService.refresh(context);}
   public void onCopyTextToClipboard(TerminalSession session,String text){((ClipboardManager)context.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("终端",text));}
   public void onPasteTextFromClipboard(TerminalSession session){Job job=find(session);Listener target=listener.get();if(job!=null&&target!=null)target.paste(job);}
   public void onBell(TerminalSession session){}

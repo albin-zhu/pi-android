@@ -64,17 +64,17 @@ public class WakePipelineInstrumentation extends Instrumentation {
     return false;
   }finally{stream.release();}}
   private void coldVoiceView(Context context,Bundle report)throws Exception{
-    EmulatorChecks.shell(this,"am start --windowingMode 1 -n dev.zfold.assistant/.MainActivity");
-    for(int i=0;i<150&&(MainActivity.current()==null||!MainActivity.current().runtime.ready);i++)Thread.sleep(100);
-    MainActivity chat=MainActivity.current();check(chat!=null&&chat.runtime.ready,"Main runtime did not initialize");Thread.sleep(500);
-    VoiceCoordinator coordinator=VoiceCoordinator.get(context);PiRuntime runtime=chat.runtime;boolean configured=runtime.configured;
+    VoiceCoordinator[] holder=new VoiceCoordinator[1];runOnMainSync(()->holder[0]=VoiceCoordinator.get(context));
+    VoiceCoordinator coordinator=holder[0];PiRuntime runtime=PiRuntime.get(context);
+    for(int i=0;i<150&&!runtime.ready;i++)Thread.sleep(100);
+    check(runtime.ready,"Voice runtime did not initialize");boolean configured=runtime.configured;
     java.lang.reflect.Field pending=VoiceWakeService.class.getDeclaredField("handoff");pending.setAccessible(true);WakeHandoff buffer=(WakeHandoff)pending.get(null);
     java.lang.reflect.Field view=VoiceCallActivity.class.getDeclaredField("active");view.setAccessible(true);
     runtime.unlisten(coordinator);int played=VoiceReadyCue.completedPlays;
     try{
-      runOnMainSync(()->VoiceCallActivity.show(chat));for(int i=0;i<80&&!VoiceCallActivity.isForeground();i++)Thread.sleep(50);check(VoiceCallActivity.isForeground(),"Voice view did not open");waitForIdleSync();
+      runOnMainSync(()->VoiceCallActivity.show(context));for(int i=0;i<80&&!VoiceCallActivity.isForeground();i++)Thread.sleep(50);check(VoiceCallActivity.isForeground(),"Voice view did not open");waitForIdleSync();
       Activity original=(Activity)view.get(null);long id=buffer.begin(Collections.emptyList(),SystemClock.elapsedRealtime());buffer.finish(id);
-      runOnMainSync(()->{runtime.configured=false;coordinator.requestWake(id);SystemWindowNavigation.showWake(context,id);});Thread.sleep(300);
+      runOnMainSync(()->{runtime.configured=false;SystemWindowNavigation.showWake(context,id);});Thread.sleep(300);
       check(view.get(null)==original&&coordinator.ownsWake(id)&&!coordinator.controller.sessionActive(),"Pending wake recreated UI or started an unready input");
       check(VoiceReadyCue.completedPlays==played,"Unready connection played a cue");report.putBoolean("pendingWakeKeepsOneVoiceViewWithoutFalseCue",true);
     }finally{

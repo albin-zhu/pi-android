@@ -70,6 +70,7 @@ public final class TerminalView extends View {
 
     /** The top row of text to display. Ranges from -activeTranscriptRows to 0. */
     int mTopRow;
+    private BaseInputConnection mInputConnection;
     int[] mDefaultSelectors = new int[]{-1,-1,-1,-1};
 
     float mScaleFactor = 1.f;
@@ -286,6 +287,14 @@ public final class TerminalView extends View {
      */
     public boolean attachSession(TerminalSession session) {
         if (session == mTermSession) return false;
+        // Preserve composing text on tab switches, but never commit it when detaching a closed PTY.
+        if (mInputConnection != null) {
+            if (session == null) mInputConnection.getEditable().clear();
+            mInputConnection.finishComposingText();
+        }
+        mInputConnection = null;
+        mScroller.abortAnimation();
+        stopTextSelectionMode();
         mTopRow = 0;
         mContentDownTime = -1;
         mTouchedLink = null;
@@ -296,6 +305,7 @@ public final class TerminalView extends View {
         mCombiningAccent = 0;
 
         updateSize();
+        ((android.view.inputmethod.InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).restartInput(this);
 
         // Wait with enabling the scrollbar until we have a terminal to get scroll position from.
         setVerticalScrollBarEnabled(true);
@@ -338,7 +348,8 @@ public final class TerminalView extends View {
         // keyboard on Android TV (see https://github.com/termux/termux-app/issues/221).
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN;
 
-        return new BaseInputConnection(this, true) {
+        final TerminalSession inputSession = mTermSession;
+        mInputConnection = new BaseInputConnection(this, true) {
 
             @Override
             public boolean finishComposingText() {
@@ -366,6 +377,11 @@ public final class TerminalView extends View {
             }
 
             @Override
+            public boolean sendKeyEvent(KeyEvent event) {
+                return inputSession != null && inputSession == mTermSession && super.sendKeyEvent(event);
+            }
+
+            @Override
             public boolean deleteSurroundingText(int leftLength, int rightLength) {
                 if (TERMINAL_VIEW_KEY_LOGGING_ENABLED) {
                     mClient.logInfo(LOG_TAG, "IME: deleteSurroundingText(" + leftLength + ", " + rightLength + ")");
@@ -377,6 +393,7 @@ public final class TerminalView extends View {
             }
 
             void sendTextToTerminal(CharSequence text) {
+                if (inputSession == null || inputSession != mTermSession) return;
                 stopTextSelectionMode();
                 final int textLengthInChars = text.length();
                 for (int i = 0; i < textLengthInChars; i++) {
@@ -433,6 +450,7 @@ public final class TerminalView extends View {
             }
 
         };
+        return mInputConnection;
     }
 
     @Override

@@ -1,6 +1,10 @@
-# Zfold — 手机本地 Pi 助手
+# Zfold — Android TUI 工作台
 
-独立 Android APK。Pi 1.0.4 依赖嵌入式 Node 引擎并在应用进程中运行，界面与系统权限使用原生 Android API，通过匿名管道/JNI 连接 Pi。用户侧 `node/npm/npx` 不再内置；需要时通过 Runtime 包管理安装。没有本机 HTTP 控制端口，不依赖 Termux App、Office、电脑端 Agent 或 root。电脑只用于构建和测试。
+独立 Android APK，承载 Ubuntu／Android 终端、工作区、文件预览、X11 应用窗口和本机手机工具。默认进入 TUI，不再提供原生文字聊天页。独立语音及其模型配置仍按需使用内嵌 Pi 1.0.4／Node；与终端中 omp 等 CLI 的模型和会话分开管理。用户侧 `node/npm/npx` 通过 Runtime 包管理安装。没有本机 HTTP 控制端口，不依赖 Termux App、Office、电脑端 Agent 或 root。
+
+## 当前工作方向：TUI 工作台
+
+优先围绕终端、Ubuntu/omp、文件预览和图形运行窗口形成连续的本地开发体验。定位、源码边界、阶段范围与验收标准见 [TUI 产品设计](TUI_PRODUCT_DESIGN.md)。0.2.90 移除旧原生聊天及聊天气泡，保留独立设置、语音和手机能力；工作区直接提供图形应用／Wine 入口。开发固定使用当前工作目录，不再复制仓库或运行环境。构建、签名及真机验收状态见 [验证记录](VERIFICATION.md)，不以源码实现代替设备验收。
 
 ## 许可证与对应源码
 
@@ -12,13 +16,63 @@ Copyright (C) 2026 pi-android contributors. 本项目及集成 X11 后的组合�
 
 ## 产品基线
 
-[产品与系统策划案](PRODUCT_PLAN.md)规定目标、状态归属、入口矩阵与验收门槛；[现状核对清单](PRODUCT_AUDIT.md)保留 0.2.72 源码基线。0.2.74 已接入视频对话与单一语音所有者；旧文本聊天入口下线、直接系统小窗、“橙橙”唤醒与接通音仍有待实施部分。
+[产品与系统策划案](PRODUCT_PLAN.md)和 [现状核对清单](PRODUCT_AUDIT.md)保留早期助手方向的设计与核对基线；当前 TUI 方向及已完成范围以 [TUI 产品设计](TUI_PRODUCT_DESIGN.md)、本页最新版本和验证记录为准。
 
 ## 当前版本
 
 以下版本条目是历史交付记录；实际能力与未完成项结合“明确的当前边界”、核对清单及 VERIFICATION.md 阅读。
 
 自定义网关模型保存时保留已有协议和其他模型属性；指定网关的已核实容量快照、适用范围和限制见 [模型参数说明](MODEL_LIMITS.md)。
+
+### 0.2.93 输入布局增量包
+
+- X11 可交互窗口增加一个小输入按钮，选择 Xbox 手柄、鼠标键盘或收起；新窗口默认收起，不恢复大工具栏，不创建系统悬浮层。只读窗口不显示输入控件。
+- Xbox 提供双摇杆、模拟扳机、十字键、ABXY、肩键及功能键；鼠标键盘提供相对触控板、左右键、双指滚轮、常用按键／修饰键和系统键盘入口。切换、失焦、隐藏和窗口尺寸变化释放输入；返回先收起布局。
+- 手柄走真实用户态 evdev／joydev 和 Wine XInput 协议，不映射成 WASD。支持范围、新终端要求和关闭方式见下方“窗口内输入布局”；共享 `:9` 和每个应用独立系统 task 不变。
+- 已生成原签名 `input-controls` APK，实际协议与构建证据见 `VERIFICATION.md`；未安装新版，真机多指操作、键鼠和系统小窗适配仍待验收。
+
+### 0.2.93 TXT／JSON 纯文本预览
+
+- 文件管理器的打开入口接入 `text/*`、`application/json` 和 `application/ld+json`。保留原入口组件身份，不再将普通 TXT 拒绝为“非 Markdown”。
+- TXT、JSON 等文档使用原生等宽文本视图，可选择复制，保留原始内容；不格式化 JSON、不执行文本中的 HTML／脚本。Markdown 继续使用原有渲染器。
+- 授权文件夹列表和 Markdown 相对文档链接支持纯文本，沿用读取授权、历史返回、2 MiB 上限及 UTF-8／带 BOM UTF-16 检查。缺失或通用 MIME 仅在名称能识别为支持的文本类型时回退。
+- 编译、文件策略检查及原签名验证已通过；按用户要求停止后续真机验收，实际设备覆盖范围见 `VERIFICATION.md`。
+
+### 0.2.92 窗口内软键盘手势
+
+- 在可交互 X11 应用画面内，三指同时轻点后松开，显示／收起系统软键盘；不增加常驻按钮或悬浮操作条。原有窗口列表长按入口保留。
+- 单指鼠标、双指滚动仍走原输入路径；拖动、长按、四指、取消或失焦不触发键盘。只读预览不响应该手势。
+- 第一指仍会发送原有鼠标按下，建议在应用空白处操作；手势不是“完全不向应用发送点击”。真机已通过触控事件注入验证系统 IME 显示／收起，物理三指与三星系统手势冲突尚需手动确认。
+
+### 0.2.91 纯 X11 应用窗口
+
+- 独立应用窗口只显示 X11 画面，移除应用内标题、连接状态、快捷键和工具按钮；拖动、缩放、最小化及关闭窗口使用三星系统窗框，不另画悬浮控件。
+- 窗口列表仍从「工作区 → 全部 X11 窗口」进入。点击窗口项恢复画面，长按交互窗口项打开系统软键盘；只读预览不启用输入。实体键盘、鼠标、触控和剪贴板链路保留。
+- 返回隐藏显示窗口，不停止共享 `:9`；Linux 应用自身退出后，对应窗口任务移除。API、后台自动弹窗与每个主窗口独立 task 的规则不变。
+
+### 0.2.90 TUI 主入口与系统应用窗口
+
+- 删除原生 GUI 文字聊天、旧聊天面板／气泡及恢复路径。启动器进入终端，配置与权限集中到独立设置页；普通终端和设置导航不启动 Pi 模型引擎。独立语音／相机、手机任务状态与停止能力保留。
+- 系统文字／图片分享改为终端草稿，和圈选共用明确的接收标签与“切换并插入”流程；不自动回车、不覆盖已有草稿。已有 Pi 凭据、历史与 Wine 安装不删除，也不强制转换成 omp 会话。
+- 共享 X11 `:9` 发现新主窗口时默认请求独立、可交互的系统弹出视图；普通元数据更新不重新弹窗。菜单／关联对话框仍由原生 X11 归属逻辑合成，不另开一套 server。
+- 系统小窗是否成立由实际 Activity 状态确认。系统拒绝或无法确认时，保留通知和窗口列表入口，不声称已弹出，不改用自绘悬浮层。
+- 新增 `x11_server` 的 `status`／`start` API，供 AI 和 phone CLI 查询及启动唯一共享 server；启动成功须认证就绪且 renderer 已连接，无需先进入图形页面。用法见下方 X11／Wine 一节。
+
+### 0.2.89 圈选到终端
+
+- 长按桌面图标的圈选入口、快捷设置磁贴、无障碍圈选及默认助手的圈选模式统一改为“圈选到终端”：确认选区后保存透明 PNG，并自动切到终端工作台，不再进入旧 Pi 圈选提问。
+- 工作台显示图片预览、问题和接收标签。默认保留圈选时选中的终端；点击“切换并插入”才向该 PTY 粘贴图片路径与问题，保留已有输入、清除 Ctrl、不自动回车、不自动启动 omp。请确认目标是智能体输入区而不是 Shell 命令行。
+- 路径按目标 Android／Ubuntu 环境映射，复用现有附件目录。问题里的换行和制表符变为空格，其他终端控制字符会被拒绝，避免粘贴时直接执行。
+- 没有终端时先明确选择目录和环境创建；原目标关闭时必须重新选择，不能自动改投其他标签。“稍后”保留草稿，可从终端横条继续；已插入的草稿不重放，图片保留供模型读取。“丢弃草稿”仅清理本次保存的图片。
+- APK 与实际验收边界见 [验证记录](VERIFICATION.md)。本版未添加 ADB 自动发现，也不要求为圈选打开无线调试。
+
+### 0.2.88 TUI 工作台首阶段
+
+- 终端左侧入口打开工作区抽屉。保存最近目录、名称和 Android／Ubuntu 启动偏好；选择工作区不改变已运行终端，也不执行命令。
+- 新建终端先确认工作区及环境，再启动真实 PTY。Ubuntu 使用同一 rootfs，将工作区目录映射至 `/workspace` 下；缺少环境或目录不可用时报错，不偷偷改用其他环境。最多保留 4 个运行终端。
+- 标签显示环境与工作区；按标签保存滚动位置和 Ctrl 状态。详情中的路径明确是启动目录，不宣称追踪 Shell 后续的 `cd`。无终端时显示创建入口；进程丢失后不重放历史命令。
+- 抽屉可进入本地预览、全局 X11 窗口、运行环境和原 GUI；返回保留现有终端。普通终端启动只准备共用资产，不启动 Pi 聊天引擎。独立文件浏览器、自动追踪窗口所属项目及跨进程恢复 PTY 不在首阶段实现范围。
+- 已通过宿主机边界检查、Markdown 实际渲染、Android 编译、原证书签名验证及 APK 对齐检查。产物为 `artifacts/Zfold-0.2.88-compat28-tui.apk`。本轮按用户要求不安装、不执行真机 UI／PTY 验收；安装前先保存当前终端和图形程序中的工作。
 
 ### 0.2.87 中断记录、重试进度与 SDK 版本校验
 
@@ -534,12 +588,12 @@ Pi 现在启用标准 `read/write/edit/ls/bash`。`bash` 使用 Android 自带 t
 
 ## 使用
 
-安装 `artifacts/Zfold-0.2.58-debug.apk` 后：
+安装 `artifacts/Zfold-0.2.93-compat28-text-preview.apk` 后（更新 APK 会结束应用内现有进程，先保存工作）：
 
-1. 在“模型”中填写自己的接口，例如 `https://your-provider.example/v1`，以及模型 ID、API Key。保存只表示配置加载成功，不代表已验证服务连通性。
-2. 点击“看看手机的状态”，验证真实模型能调用 Android 工具。
-3. 在“手机能力”中按需选择默认助手、启用 Zfold 无障碍服务、授予悬浮窗权限。
-4. 在目标 App 上唤起助手，点卡片里的“圈选”，完成后回到同一卡片输入处理要求。系统助手入口的圈选与最小化保留在系统助手窗口内；独立悬浮入口仍受目标 App 隐藏悬浮层的限制。
+1. 从终端左侧工作区面板选择目录，明确选择 Ubuntu／Android 后新建终端；运行 omp 或其他 CLI。已有存活标签不会随工作区选择而改变目录。
+2. 在“设置与手机工具”中按需开启无障碍、默认助手等能力。这里的模型配置服务于保留的内嵌运行时／独立语音，不替代终端 CLI 自己的配置。
+3. 圈选或通过系统分享文字／图片后，检查终端草稿的目标标签，再点击“切换并插入”。仅粘贴，不回车；请确认目标是模型输入区而非 Shell 命令行。
+4. 图形程序共用 `:9`；可由 AI 的 `x11_server` 启动，也可从“全部 X11 窗口”启动。Wine 的安装／状态／设置入口位于“图形应用与 Wine”。
 
 会话和 Skills 在拥有共享存储权限时使用 `/storage/emulated/0/pi`，否则使用私有 `no_backup/agent`。从 0.2.65 起，`auth.json`、`models.json`、Jev、Agent 身份、系统提示词和头像统一使用私有 `no_backup/credentials`；模型入口选择仍在私有 `no_backup/model.json`。测试使用独立 `agent-smoke-credentials`。
 
@@ -549,18 +603,22 @@ Pi 现在启用标准 `read/write/edit/ls/bash`。`bash` 使用 Android 自带 t
 
 当前脚本支持 macOS / Linux 主机，产物面向 arm64 Android，使用 JDK、SDK 35、Build Tools 35.0.0 和 NDK 28.0.13004108，不需要 Gradle。Linux 或自定义 JDK 通过 `JAVA_HOME` 指定；Android SDK 通过 `ANDROID_SDK_ROOT` 或 `ANDROID_HOME` 指定。
 
+运行时 bundle 现在还需要 Python 3.11+、面向 **AArch64 Linux glibc** 的 GCC，以及 Clang／LLD／llvm-dlltool（CI 固定 LLVM 18）。Ubuntu 24.04 可安装 `gcc-aarch64-linux-gnu libc6-dev-arm64-cross clang-18 lld-18 llvm-18`；不能拿 Android NDK 的 Bionic 编译器代替访客 glibc 编译器。macOS 或非标准安装位置通过 `ZFOLD_INPUT_CC`、`ZFOLD_INPUT_CLANG`、`ZFOLD_INPUT_LINK`、`ZFOLD_INPUT_DLLTOOL` 指定对应工具。`scripts/input_controls.py` 按源码、编译器和产物哈希验证缓存；验证用 PE 程序留在 `.build/input-controls/probes/`，不进入 APK。
+
 ```sh
 npm ci --ignore-scripts
 npm run bundle
 npm test
 ZFOLD_TARGET_SDK=28 npm run build
-adb install --no-incremental -r artifacts/Zfold-0.2.65-compat28-debug.apk
-adb shell am start -n dev.zfold.assistant/.MainActivity
+adb install --no-incremental -r artifacts/Zfold-0.2.90-compat28-debug.apk
+adb shell am start -n dev.zfold.assistant/.LauncherActivity
 ```
 
-构建下载固定版本的 Node Android 运行时，并校验 SHA-256；来源与许可见 `THIRD_PARTY_NOTICES.md`。开发签名保存在 `.build/debug.keystore`，保留它才能无损更新已有安装。
+构建下载固定版本的 Node Android 运行时，并校验 SHA-256；来源与许可见 `THIRD_PARTY_NOTICES.md`。原签名密钥固定保存在本地忽略文件 `.build/debug.keystore`，不得提交 Git，清理缓存时须保留。缺失时构建立即报错，不再自动生成新签名；恢复位置与证书指纹见 `SIGNING.md`。
 
 GitHub Actions 与 Fold7 本机编译已接入同一份主应用签名；Secret 配置、证书校验及手机构建命令见 [SIGNING.md](SIGNING.md)。
+
+项目级打包 Agent 为 [`zfold-packager`](.omp/agents/zfold-packager.md)。在本目录的 OMP 会话中说“让 zfold-packager 打包当前源码，只打包、不安装”即可委派；调用方式、构建与交付契约见 [打包 Scratch](.omp/scratch/zfold-packaging.md)，工具链和缓存位置见 [本机环境 Scratch](.omp/scratch/zfold-build-environment.md)。它默认生成 arm64 compat28 APK，校验原签名与产物，不修改业务代码，不自动升级版本、安装或做真机测试。密钥仍是本地忽略文件，不随 Agent 定义进入 Git。
 
 构建默认使用不含凭据的 `runtime/defaults.example.mjs`，模型在 App 中配置。`runtime/defaults.local.mjs` 不进入 Git，也不再自动参与构建；仅显式设置 `ZFOLD_DEFAULTS_FILE` 才使用个人调试默认配置，该配置会随 APK 打包。省略 `ZFOLD_TARGET_SDK` 构建 modern 通道，工具目录会标明不支持的执行能力。
 
@@ -574,7 +632,7 @@ Android 原生集成测试也采用确定性模型端点；Pi 和 Android 工具
 node scripts/model-fixture.mjs
 # 另一终端
 adb reverse tcp:18868 tcp:18868
-adb shell am instrument -w dev.zfold.assistant/.SmokeInstrumentation
+adb shell am instrument -w dev.zfold.assistant/.TerminalCircleInstrumentation
 adb shell am instrument -w dev.zfold.assistant/.LassoInstrumentation
 adb shell am instrument -w dev.zfold.assistant/.VadInstrumentation
 adb shell am instrument -w dev.zfold.assistant/.BargeEchoInstrumentation
@@ -593,12 +651,12 @@ adb reverse --remove tcp:18868
 
 `node scripts/provision-speech.mjs --serial <真机序列号>` 将 `.env` 中的语音 Key 写入应用私有 `no_backup/credentials/speech.json`，权限 600，并回读校验；保留已有选项、不重启应用。Fold7 已导入 Key；导入本身不改变 ASR/TTS 服务选择，需升级至支持设置的版本后明确选择在线服务。
 
-以 0.2.79 为当前代码版本；PRODUCT_AUDIT.md 保留 0.2.72 的系统核对基线，后续产品目标见 PRODUCT_PLAN.md。
+当前 TUI 交付为 0.2.90；PRODUCT_AUDIT.md 保留 0.2.72 的历史系统核对基线，当前产品方向见 TUI_PRODUCT_DESIGN.md。
 
 - 本机 Pi/Node 主运行时仍与 UI 在同一 app 进程。已有会话持久化、工具心跳和取消，不等于独立 supervisor、全天候后台或进程死亡后的完整任务恢复。
 - 已有真实 PTY、共享执行环境、包管理和 MCP 客户端。MCP 的网络/stdio 连接、认证与工具调用已实现；对外提供手机 MCP server 是另一项后续能力。
-- 主聊天已适配系统小窗和手势，语音已有单一 VoiceCoordinator，语音入口进入同一通话界面；旧 AssistantPanel 的文本聊天仍存在，单一文本 UI 的迁移尚未完成。
-- 应用内“系统小窗”现在会请求系统切换，并验证窗口状态；直接切换已有 task 的模拟器测试通过。Fold7 该完整按钮路径及删除 task 后的几何重建仍需分别验证，不能用已有小窗的恢复替代。
+- 原生 GUI 文字聊天及旧聊天浮层已移除；独立语音由 VoiceCoordinator 管理，手机任务状态／停止提示仍保留。圈选与文字／图片分享进入终端草稿，不自动发送给模型。
+- X11 新主窗口自动请求系统小窗，并检查真实窗口状态；三星实际小窗与 API 就绪已有本轮记录。后台、锁屏与其他 OEM 仍受系统限制，具体已测范围见 VERIFICATION.md，不把启动请求等同于成功。
 - “橙橙”已接入实际 KWS、实时语音入口与输入就绪提示音，并更新到 Fold7；显示名称与固定唤醒词分别管理，设置显示真实生效的唤醒词。已通过合成音模型与就绪状态检查，不能据此宣称所有真人口音、噪声、蓝牙或锁屏路径均已验收。
 - 视频对话已有相机权限、预览、前后切换和按请求取帧。图像理解仍取决于所选模型的图片能力；自定义接口声明支持图片不代表服务端已验证支持。实机覆盖范围以 VERIFICATION.md 为准。
 - ASR/TTS 可分别选择系统或豆包；系统 ASR 优先本机识别，缺模型时仍可能使用联网系统识别。云端主链路已接入，但真人麦克风、插话回声和蓝牙仍需真机联测。本机运行不等于所选模型或全部语音链路离线。
@@ -610,15 +668,18 @@ adb reverse --remove tcp:18868
 
 `feat/omp-termux-app` 已接入同 App UID 的独立手机工具桥：Ubuntu 内 omp 通过工具扩展调用 Android，权限、按次确认、取消和用户接管仍由 App 执行。实验安装器与任意目录可用的 `ubuntu` 入口见 [架构与验收记录](docs/TERMUX_OMP_ASSESSMENT.md)。
 
-已在隔离 Android ARM64 模拟器完成读屏/拍照回合，并在 Zfold 真机完成安装及 guest 手机状态调用。本轮不迁移凭据、不切换 GUI，也不更改内嵌 Pi 1.0.4 / Node 24.21.0。
+早期已在隔离 Android ARM64 模拟器完成读屏／拍照回合，并在 Zfold 真机完成安装及 guest 手机状态调用。0.2.90 将原生主界面收口为 TUI，不迁移用户凭据；保留的独立语音运行时仍使用 Pi 1.0.4／Node 24.21.0。
 
 ### 通用图形应用：X11 / Wine
 
-工作台和工具中心新增「图形应用」，不依赖 Pi 或 omp 会话。先打开 X11，再进入**新的** `ubuntu` 终端；旧终端不会自动获得新增挂载和命令。
+终端工作区提供「全部 X11 窗口」和「图形应用与 Wine」，不依赖 Pi 或 omp 会话。AI 可直接调用 `x11_server`，也可使用以下 phone CLI；`status` 不启动服务，`start` 等待认证与 renderer 就绪，重复启动不另建 server。权限确认沿用手机工具策略；取消等待不停止已启动的共享服务。
 
 ```sh
-ubuntu
-windows install             # 显示下载来源与系统依赖，确认后安装
+phone call x11_server '{"action":"status"}'
+phone call x11_server '{"action":"start"}'
+# ready=true 后，在已配置 DISPLAY=:9 的 Ubuntu 终端启动图形程序：
+windows status
+windows install             # 仅未安装时需要：展示来源与依赖，确认后安装
 windows winecfg
 windows run notepad.exe
 windows run '/workspace/workspace/My App/app.exe'
@@ -626,9 +687,44 @@ windows --prefix /root/my-prefix run app.exe
 windows stop                # 只结束所选 prefix 内的 Windows 程序
 ```
 
-Linux 图形程序直接使用 `DISPLAY=:9`。显示页面支持触摸、鼠标、键盘和输入法；离开页面保留 X11，点「Stop X11」会断开其全部图形客户端，但不结束聊天或普通终端。需要桌面窗口管理时，可自行在 Ubuntu 安装并启动 Openbox 等窗口管理器；X11 本身不是完整桌面。
+Linux 图形程序直接使用 `DISPLAY=:9`。新主窗口自动成为独立系统窗口，可触摸、使用鼠标、键盘和输入法；隐藏／返回不关闭远端程序，停止全局 X11 会断开全部图形客户端，但不结束普通终端。现有 rootless 后端负责主窗口和所属菜单／对话框，通常不需要另起桌面窗口管理器；X11 本身不是完整桌面。首次升级新增挂载／命令后需新开 Ubuntu 终端，旧终端不会获得挂载热更新。
 
 X11 引擎随 APK 提供，独立服务进程运行；使用私有 Unix socket 和每次启动重新生成的 Xauthority cookie，不开放 TCP 显示或上游重连端口。Wine 为可选的固定版本 Wine 10.0 WoW64 + Box64 下载，不注册系统 binfmt、不替换系统 Wine。首次创建 prefix 可能弹出 Mono 安装窗口，应回到 X11 处理。
+
+#### 窗口内输入布局
+
+点击画面顶部的小输入按钮选择布局；菜单可收起，返回也先收起布局。透明区域仍交给应用画面，控制区按 pointer ID 分配触点，摇杆和按键可组合操作。修饰键可锁定，鼠标按钮可按住拖动；鼠标键盘布局中的键盘入口调出系统输入法。三指轻点和窗口列表长按的原入口保留。以上是新版实现，实际触控／OEM 窗口验收状态以 `VERIFICATION.md` 为准。
+
+Xbox 是共享的一个虚拟手柄：只有当前获得输入焦点的可交互窗口能写入，但访客应用读取的是同一份手柄状态，不是每个应用隔离一个设备。X11 服务持有独占状态文件并发心跳；窗口释放输入时归零，服务退出／心跳失效后消费者不能保留按住状态。
+
+- **Linux ARM64 glibc**：新 Ubuntu 终端自动带上 `LD_PRELOAD` 适配器与 `SDL_JOYSTICK_DEVICE`。SDL 通过真实 GameController API 读取标准 Xbox 360 身份；也提供 `/run/zfold-x11/gamepad/event0`、`js0` 的用户态设备接口。没有创建内核 `/dev/input` 设备或 udev 热插拔；静态程序、直接系统调用或仅依赖 udev 枚举的引擎不保证发现手柄。
+- **Wine**：经内置 `windows` 启动器配置 32／64 位 `xinput1_1`、`xinput1_2`、`xinput1_3`、`xinput1_4`、`xinput9_1_0`。只替换所选 prefix 中缺失的 DLL、可确认的 Wine 内置 DLL或先前安装的本桥接，保留原件并拒绝覆盖自定义 DLL。只保证 XInput，不包含 DirectInput、震动、耳机和所有游戏兼容性。
+- **升级与关闭**：更新后新建 Ubuntu 终端、重新启动目标应用。单程序可用 `ZFOLD_GAMEPAD=0 程序命令` 关闭；`ZFOLD_GAMEPAD=0 windows run app.exe` 会恢复该 prefix 的原始 XInput 文件。已加载 DLL 的 Windows 进程需退出后重启，不做热替换。
+
+#### 已配置手机上的原生 Agent 浏览器
+
+当前 Ubuntu 已安装单份 Linux ARM64 Chrome for Testing 156.0.8078.4（Playwright 1.64.1 配套构建）及原生 `agent-browser` 0.39.1。不是 Wine，也不走 Snap；这是当前手机环境的安装，不会随 APK 自动安装到其他设备。
+
+```sh
+phone call x11_server '{"action":"start"}'  # AI 确保共享 :9 就绪，无需手动打开图形页面
+agent-browser open https://example.com    # 默认有界面，自动成为系统小窗
+agent-browser snapshot -i                 # 读取当前可交互元素及引用
+agent-browser tab new https://example.org # 同一浏览器窗口的新标签
+agent-browser tab list
+```
+
+点击时使用本次快照实际返回的 `@e…`，不要复用旧页面引用；触发导航后先用 `wait --url` 或 `wait --load domcontentloaded` 等待，再读取结果。普通命令复用当前默认会话，不为每条命令另起浏览器。`agent-browser close` 会关闭这个 Agent 浏览器。
+
+默认配置在 `~/.agent-browser/config.json`，独立资料目录为 `/root/.local/share/zfold/browser-profile`；不使用 Android Chrome 的个人资料。浏览器位于 `/root/.cache/ms-playwright/chromium-1248/`，控制工具入口为 `/usr/local/bin/agent-browser`。
+
+**安全边界：**本机 PRoot 缺少 `/dev/shm`，当前 root 身份启动要求 `--no-sandbox`，因此配置了 `--disable-dev-shm-usage` 和 `--no-sandbox`。独立资料目录不是安全沙箱，不建议登录敏感账号或访问不可信内容。没有关闭 HTTPS 证书校验；CDP 与流式控制端点仅使用本地地址，实测本机非回环 IPv4 连接被拒绝。GPU 加速、长期后台与所有手动输入路径未在本轮验收，实际证据见 [验证记录](VERIFICATION.md)。
+
+
+#### 只读查看 Agent 虚拟屏
+
+默认「虚拟屏」使用原生 `:9` 只读窗口列表，可查看应用窗口或整个桌面，不转发输入、剪贴板或尺寸变化。也可明确选择 Xvfb/JPEG 兼容预览，查看其他显示号；关闭预览不停止 Xvfb 或其中的程序。
+
+Xvfb 兼容预览需要 compat28 与已安装的 Ubuntu，使用 `x11-utils`、`ffmpeg` 或 `xwd`／ImageMagick；原生 `:9` 不经过这条 JPEG 抓帧链路。
 
 Ubuntu/Wine 执行需要 compat28；PRoot 和 Wine **不是安全沙箱**。已在 Fold7 显示 Linux 时钟、Wine 设置和记事本，并通过 Android 键盘输入保存文件；后续在主应用验证了冰封王座 1.27b 主菜单和 Adreno 830 硬件 OpenGL。早期 32 位命令曾异常退出，不代表所有 Windows 程序均稳定兼容。未验证 Direct3D/Vulkan、游戏帧率或硬件模式完整对局；游戏音频仍初始化失败。详细过程与限制见 [验证记录](VERIFICATION.md)，上游组件与再分发要求见 [第三方声明](THIRD_PARTY_NOTICES.md)。
 

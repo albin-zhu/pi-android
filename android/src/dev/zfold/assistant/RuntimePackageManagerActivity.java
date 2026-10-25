@@ -1,6 +1,5 @@
 package dev.zfold.assistant;
 
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.os.Bundle;
 import android.text.Editable;
@@ -18,7 +17,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.ArrayList;
 
-public final class RuntimePackageManagerActivity extends Activity {
+public final class RuntimePackageManagerActivity extends NavigableActivity {
   private EditText search;
   private ListView list;
   private TextView status;

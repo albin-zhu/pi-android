@@ -22,9 +22,12 @@ final class TerminalTabs extends LinearLayout {
   private final LinearLayout strip;
   private final LinkedHashMap<String,Tab> tabs=new LinkedHashMap<>();
 
-  TerminalTabs(Context context,TerminalSessions sessions,Consumer<TerminalSessions.Job> select,Consumer<TerminalSessions.Job> menu,Runnable create,Runnable options){
+  TerminalTabs(Context context,TerminalSessions sessions,Consumer<TerminalSessions.Job> select,Consumer<TerminalSessions.Job> menu,Runnable create,Runnable options,Runnable workspace){
     super(context);this.sessions=sessions;this.select=select;this.menu=menu;
     setOrientation(HORIZONTAL);setGravity(Gravity.CENTER_VERTICAL);setBackgroundColor(0xff17212c);
+    Ui.Action projects=new Ui.Action(context,R.drawable.ic_sidebar,"","工作区",INK,Color.TRANSPARENT,workspace);
+    projects.setCompact(true);projects.setTooltipText("工作区");
+    addView(projects,new LayoutParams(Ui.dp(context,48),Ui.dp(context,48)));
     scroll=new HorizontalScrollView(context);scroll.setHorizontalScrollBarEnabled(false);
     strip=new LinearLayout(context);strip.setGravity(Gravity.CENTER_VERTICAL);scroll.addView(strip);
     addView(scroll,new LayoutParams(0,Ui.dp(context,48),1));
@@ -60,8 +63,8 @@ final class TerminalTabs extends LinearLayout {
     Tab active=current==null?null:tabs.get(current.session.mHandle);
     if(active!=null)scroll.post(()->{
       int left=active.view.getLeft(),right=active.view.getRight();
-      if(left<scroll.getScrollX())scroll.smoothScrollTo(left,0);
-      else if(right>scroll.getScrollX()+scroll.getWidth())scroll.smoothScrollTo(right-scroll.getWidth(),0);
+      if(left<scroll.getScrollX())scroll.scrollTo(left,0);
+      else if(right>scroll.getScrollX()+scroll.getWidth())scroll.scrollTo(right-scroll.getWidth(),0);
     });
   }
 
@@ -70,8 +73,8 @@ final class TerminalTabs extends LinearLayout {
     String title=job.session.getTitle();
     if(!tab.initialized||!Objects.equals(tab.title,title)||!Objects.equals(tab.name,job.name)){
       tab.initialized=true;tab.title=title;tab.name=job.name;
-      String label=job.name+(title==null||title.isBlank()?"":" · "+title);
-      tab.view.setText(label);tab.view.setContentDescription("切换到 "+label);
+      String label=(job.ubuntu?"Ubuntu":"Android")+" · "+job.name+" · "+job.workspace.name;
+      tab.view.setText(label);tab.view.setContentDescription("切换到 "+label+(title==null||title.isBlank()?"":"，"+title));
     }
     boolean selected=job==current;
     if(tab.view.isSelected()!=selected){

@@ -11,59 +11,46 @@ import android.widget.*;
 import java.util.ArrayList;
 
 public final class CircleOverlay {
-  static View captureView(){return bubble;}
-  static volatile String selectedImage;
-  static View bubble;static WindowManager manager;static boolean accessibilityBubble;
-  static int bubbleX=-1,bubbleY=280;private static DockingDrag drag;private static VoiceStatus.Listener voiceListener;private static boolean waitingForCompact;
-  interface Selected {void done(String image);}
-  static boolean hasBubble(){return bubble!=null;}
-  static void hideBubble(){waitingForCompact=false;removeBubble();}
-  static void suspendForCompact(){waitingForCompact|=hasBubble();removeBubble();}
-  static void resumeAfterCompact(Context context){if(waitingForCompact&&!AssistantOverlay.isShowing()&&!AssistantSessionService.isShowing()){waitingForCompact=false;ensureBubble(context);}}
-  private static void removeBubble(){VoiceStatus.stopListening(voiceListener);voiceListener=null;if(drag!=null){drag.dispose();drag=null;}if(bubble!=null){try{manager.removeView(bubble);}catch(IllegalArgumentException ignored){}bubble=null;manager=null;accessibilityBubble=false;}}
-  static void showBubble(Context c){if(hasBubble())hideBubble();else ensureBubble(c);}
-  static void ensureBubble(Context c){
-    if(UnifiedOverlay.captureView()!=null){waitingForCompact=true;return;}
-    if(bubble!=null)return;waitingForCompact=false;
-    PhoneAccessibility service=PhoneAccessibility.instance;
-    Context context=service!=null?service:c.getApplicationContext();
-    if(service==null&&!Settings.canDrawOverlays(context)){Toast.makeText(context,"请先允许 Zfold 显示悬浮窗",Toast.LENGTH_LONG).show();return;}
-    WindowManager wm=(WindowManager)context.getSystemService(Context.WINDOW_SERVICE);
-    Ui.Bubble view=new Ui.Bubble(context);view.setBusy(PiRuntime.get(context).busy);
-    int size=Math.round(52*context.getResources().getDisplayMetrics().density);
-    int type=service!=null?WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY:WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-    WindowManager.LayoutParams p=new WindowManager.LayoutParams(size,size,type,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);p.gravity=Gravity.TOP|Gravity.LEFT;p.y=bubbleY;p.x=bubbleX;p.setFitInsetsTypes(0);p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-    view.setOnClickListener(v->{Ui.click(v);AssistantOverlay.show(context);});
-    view.setOnLongClickListener(v->{v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);showActions(context,v);return true;});
-    DockingDrag controller=new DockingDrag(view,wm,p,(x,y)->{bubbleX=x;bubbleY=y;});controller.place();view.setOnTouchListener(controller);
-    try{
-      wm.addView(view,p);manager=wm;bubble=view;drag=controller;accessibilityBubble=service!=null;
-      voiceListener=(state,message,previous)->view.setVoiceState(state,message);VoiceStatus.listen(voiceListener);
-    }catch(RuntimeException error){controller.dispose();Toast.makeText(context,"悬浮入口未能显示，请检查手机能力",Toast.LENGTH_LONG).show();}
-  }
-  private static void showActions(Context context,View anchor){
-    PopupMenu menu=new PopupMenu(new ContextThemeWrapper(context,R.style.AppTheme),anchor);
-    menu.getMenu().add("展开助手").setOnMenuItemClickListener(item->{AssistantOverlay.show(context);return true;});
-    menu.getMenu().add("看屏幕").setOnMenuItemClickListener(item->{AssistantOverlay.show(context);AssistantPanel panel=AssistantOverlay.currentPanel();if(panel!=null&&!ScreenContext.enabled())panel.toggleScreenShare();return true;});
-    menu.getMenu().add("圈选屏幕").setOnMenuItemClickListener(item->{hideBubble();beginOnCurrentScreen(context);return true;});
-    menu.getMenu().add("工作台").setOnMenuItemClickListener(item->{WorkbenchActivity.open(context);return true;});
-    if(PiRuntime.get(context).busy)menu.getMenu().add("停止当前任务").setOnMenuItemClickListener(item->{PiRuntime.get(context).send(PiRuntime.json("type","stop"));return true;});
-    menu.getMenu().add("关闭悬浮入口").setOnMenuItemClickListener(item->{ScreenContext.setEnabled(false);hideBubble();return true;});menu.show();
-  }
-  static void setBusy(boolean busy){if(bubble instanceof Ui.Bubble)((Ui.Bubble)bubble).setBusy(busy);}
-  static void accessibilityConnected(Context context){if(bubble!=null&&!accessibilityBubble){hideBubble();ensureBubble(context);}}
-  static void accessibilityDisconnected(Context context){if(accessibilityBubble){hideBubble();if(Settings.canDrawOverlays(context))ensureBubble(context);}}
+  /** Receiver owns and must recycle the cropped bitmap. */
+  interface Selected {void done(Bitmap image);}
+  private static boolean circleSaving,circleSelecting,circleCapturing;
   static void begin(Context context){beginOnCurrentScreen(context);}
   static void beginOnCurrentScreen(Context context){
-    begin(context,data->SelectionAskOverlay.showImage(context,data),false);
+    if(resumeTerminalDraft(context)||circleSelecting||circleCapturing)return;
+    begin(context,image->saveToTerminal(context,image),false);
+  }
+  private static boolean resumeTerminalDraft(Context context){
+    if(circleSaving){Toast.makeText(context,"正在保存圈选图片",Toast.LENGTH_SHORT).show();return true;}
+    try{if(TerminalCircleDraft.load(context)==null)return false;}
+    catch(java.io.IOException error){Toast.makeText(context,error.getMessage(),Toast.LENGTH_LONG).show();}
+    TerminalActivity.open(context);return true;
+  }
+  static void selectForTerminal(Context context,Bitmap image){
+    if(resumeTerminalDraft(context)||circleSelecting||circleCapturing){image.recycle();return;}
+    showSelection(context,image,crop->saveToTerminal(context,crop));
+  }
+  private static void saveToTerminal(Context context,Bitmap image){
+    Context app=context.getApplicationContext();circleSaving=true;
+    new Thread(()->{
+      String failure=null;
+      try{TerminalCircleDraft.capture(app,image);}catch(Exception error){failure=error.getMessage();}
+      finally{image.recycle();}
+      String message=failure;
+      new Handler(Looper.getMainLooper()).post(()->{
+        circleSaving=false;
+        if(message!=null){Toast.makeText(app,message,Toast.LENGTH_LONG).show();resumeTerminalDraft(app);return;}
+        TerminalActivity.open(app);
+      });
+    },"circle-png-save").start();
   }
   static void begin(Context context,Selected selected){begin(context,selected,true);}
   static void begin(Context context,Selected selected,boolean hideCaller){
     PhoneAccessibility service=PhoneAccessibility.instance;if(service==null){Toast.makeText(context,"圈选需要先开启读屏与操作服务",Toast.LENGTH_LONG).show();context.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));return;}
-    hideBubble();
+    if(circleCapturing||circleSelecting)return;circleCapturing=true;
     if(hideCaller&&context instanceof Activity)((Activity)context).moveTaskToBack(true);
     new Handler(Looper.getMainLooper()).postDelayed(()->service.capture((bitmap,error)->{
-      if(error!=null){Toast.makeText(context,error,Toast.LENGTH_LONG).show();return;}
+      circleCapturing=false;
+      if(error!=null||bitmap==null){if(bitmap!=null&&!bitmap.isRecycled())bitmap.recycle();Toast.makeText(context,error==null?"未能取得屏幕图片":error,Toast.LENGTH_LONG).show();return;}
       showSelection(context,bitmap,selected);
     }),hideCaller?350:20);
   }
@@ -71,15 +58,17 @@ public final class CircleOverlay {
     Context app=context.getApplicationContext();PhoneAccessibility service=PhoneAccessibility.instance;
     if(service==null&&!Settings.canDrawOverlays(app)){bitmap.recycle();Toast.makeText(app,"读屏服务已断开，请重新开启后再圈选",Toast.LENGTH_LONG).show();return;}
     Context host=service!=null?service:app;WindowManager wm=(WindowManager)host.getSystemService(Context.WINDOW_SERVICE);
-    Selection view=new Selection(host,bitmap,wm,selected);WindowManager.LayoutParams p=new WindowManager.LayoutParams(-1,-1,service!=null?WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY:WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;wm.addView(view,p);
+    Selection view=new Selection(host,bitmap,wm,selected);view.dismissed=()->circleSelecting=false;
+    WindowManager.LayoutParams p=new WindowManager.LayoutParams(-1,-1,service!=null?WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY:WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+    try{wm.addView(view,p);circleSelecting=true;}catch(RuntimeException error){bitmap.recycle();Toast.makeText(app,"圈选浮层无法显示，请重新开启读屏服务",Toast.LENGTH_LONG).show();}
   }
   static class Selection extends FrameLayout {
     final Bitmap screenshot;final WindowManager wm;final Selected selected;Runnable dismissed=()->{};
     final RectF bounds=new RectF(),imageRect=new RectF();final Paint paint=new Paint(3);final Path trace=new Path();final ArrayList<PointF> points=new ArrayList<>();
     final View canvasView;final TextView instruction;Ui.Action accept,reset;boolean drawing,valid;
     int dp(float value){return Ui.dp(getContext(),value);}
-    void remove(){if(wm!=null)wm.removeView(this);else dismissed.run();}
-    void cancel(){remove();if(!screenshot.isRecycled())screenshot.recycle();}
+    void remove(){try{if(wm!=null)wm.removeView(this);}finally{dismissed.run();}}
+    void cancel(){valid=false;try{remove();}finally{if(!screenshot.isRecycled())screenshot.recycle();}}
     Selection(Context context,Bitmap bitmap,WindowManager manager,Selected selected){
       super(context);this.screenshot=bitmap;wm=manager;this.selected=selected;setFocusableInTouchMode(true);requestFocus();
       canvasView=new View(context){
@@ -129,7 +118,9 @@ public final class CircleOverlay {
       return output;
     }
     void commit(){
-      if(!valid)return;Bitmap crop=maskedCrop(screenshot,trace,bounds,imageRect);String data=PhoneAccessibility.encode(crop);remove();if(!screenshot.isRecycled())screenshot.recycle();selected.done(data);
+      if(!valid)return;valid=false;accept.setEnabled(false);Bitmap crop=null;
+      try{crop=maskedCrop(screenshot,trace,bounds,imageRect);remove();selected.done(crop);crop=null;}
+      finally{if(crop!=null&&!crop.isRecycled())crop.recycle();if(!screenshot.isRecycled())screenshot.recycle();}
     }
     @Override public boolean onKeyDown(int key,android.view.KeyEvent event){if(key==android.view.KeyEvent.KEYCODE_BACK){cancel();return true;}return super.onKeyDown(key,event);}
   }

@@ -20,7 +20,6 @@ public final class VoiceAvatarInstrumentation extends Instrumentation {
     Bundle result=new Bundle();String error="";AtomicBoolean active=new AtomicBoolean(true);VoiceTurnController[] controller=new VoiceTurnController[1];
     try{
       EmulatorChecks.accessibility(this);
-      Field foreground=MainActivity.class.getDeclaredField("foregroundVoice");foreground.setAccessible(true);
       Field mode=VoiceTurnController.class.getDeclaredField("mode");mode.setAccessible(true);
       Field utterance=VoiceTurnController.class.getDeclaredField("activeUtterance");utterance.setAccessible(true);
       Field taskVoice=VoiceTurnController.class.getDeclaredField("taskVoice");taskVoice.setAccessible(true);
@@ -28,7 +27,7 @@ public final class VoiceAvatarInstrumentation extends Instrumentation {
       PiRuntime runtime=PiRuntime.get(getTargetContext());
       runOnMainSync(()->{
         controller[0]=VoiceCoordinator.get(getTargetContext()).controller;coordinatorActive(true);
-        try{mode.set(controller[0],VoiceTurnController.Mode.SPEAKING);utterance.set(controller[0],"synthetic-utterance");foreground.set(null,controller[0]);}
+        try{mode.set(controller[0],VoiceTurnController.Mode.SPEAKING);utterance.set(controller[0],"synthetic-utterance");}
         catch(Exception failure){throw new RuntimeException(failure);}
         runtime.busy=true;runtime.stopped=false;
       });
@@ -45,28 +44,24 @@ public final class VoiceAvatarInstrumentation extends Instrumentation {
         // Disable the fixture before the recognizer's delayed start.
         active.set(false);coordinatorActive(false);runtime.busy=false;
       });
-      boolean[] extra=new boolean[2];
+      boolean[] extra=new boolean[1];
       runOnMainSync(()->{
         try{
           active.set(true);coordinatorActive(true);runtime.busy=true;mode.set(controller[0],VoiceTurnController.Mode.SPEAKING);utterance.set(controller[0],"mini-utterance");
           UnifiedOverlay.call(getTargetContext(),"测试语音状态");View mini=findNamed(UnifiedOverlay.captureView(),"点击头像打断语音");
           extra[0]=mini!=null&&mini.performClick()&&controller[0].listeningForInput()&&!controller[0].speaking();active.set(false);coordinatorActive(false);UnifiedOverlay.forceHide();
-          AssistantPanel panel=new AssistantPanel(getTargetContext(),new AssistantPanel.Host(){public void close(){}public void minimize(){}public void select(){}public void toggleExpansion(){}});
-          coordinatorActive(true);panel.speakingMode=true;runtime.busy=true;mode.set(panel.voice,VoiceTurnController.Mode.SPEAKING);utterance.set(panel.voice,"panel-utterance");panel.updateControls();
-          extra[1]=panel.identityBadge.performClick()&&panel.voice.listeningForInput()&&!panel.voice.speaking()&&Boolean.FALSE.equals(queue.invoke(panel.voice,"旧回答"));
-          coordinatorActive(false);panel.speakingMode=false;panel.dispose();runtime.busy=false;
+          runtime.busy=false;
         }catch(Exception failure){throw new RuntimeException(failure);}
       });
-      result.putBoolean("miniAvatarInterrupts",extra[0]);result.putBoolean("panelAvatarInterrupts",extra[1]);for(boolean check:extra)if(!check)throw new IllegalStateException("Floating avatar binding failed");
+      result.putBoolean("miniAvatarInterrupts",extra[0]);if(!extra[0])throw new IllegalStateException("Floating avatar binding failed");
       Bitmap screenshot=getUiAutomation(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).takeScreenshot();
       if(screenshot!=null)try(FileOutputStream out=new FileOutputStream(new File(getTargetContext().getCacheDir(),"voice-avatar-check.png"))){screenshot.compress(Bitmap.CompressFormat.PNG,100,out);screenshot.recycle();}
       result.putBoolean("accessibleAvatar",checks[0]);result.putBoolean("avatarInterrupts",checks[1]);result.putBoolean("busyTurnCanListen",checks[2]);result.putBoolean("oldSpeechSuppressed",checks[3]);
       for(boolean check:checks)if(!check)throw new IllegalStateException("Avatar interruption contract failed");
-      foreground.set(null,null);
     }catch(Throwable failure){error=failure.toString();result.putString("error",error);}
     finally{
       active.set(false);coordinatorActive(false);
-      runOnMainSync(()->{MainActivity.clearForegroundVoice();VoiceCallActivity.onControllerState(false,false);if(activity!=null)activity.finish();});
+      runOnMainSync(()->{if(controller[0]!=null)controller[0].stopSession(false);VoiceCallActivity.onControllerState(false,false);if(activity!=null)activity.finish();});
     }
     finish(error.isEmpty()?-1:0,result);
   }

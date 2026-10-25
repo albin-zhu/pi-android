@@ -26,7 +26,7 @@ final class UserQuestions {
       if(!runtime.busy||!next.sessionId.equals(runtime.sessionId)||!next.turnId.equals(runtime.activeTurnId()))throw new IllegalStateException("提问所属任务已经改变");
       if(pending!=null)throw new IllegalStateException("已有待回答的问题，请等待用户回答");
       pending=next;QuestionSessionService.begin(context,next.turnId);changed();poll(context,next);
-      Activity visible=VoiceCallActivity.foregroundActivity();if(visible==null&&MainActivity.current()!=null&&MainActivity.current().hasWindowFocus())visible=MainActivity.current();if(visible!=null)show(visible);
+      Activity visible=VoiceCallActivity.foregroundActivity();if(visible!=null)show(visible);
     }catch(Exception error){result.done(null,error.getMessage());}
   });}
   private static void poll(Context context,Request request){main.postDelayed(()->{if(pending!=request)return;PiRuntime runtime=PiRuntime.get(context);if(NativeToolExecution.isCancelled(request.id)||!runtime.busy||!request.turnId.equals(runtime.activeTurnId())||!request.sessionId.equals(runtime.sessionId)){finish(context,request,null,"提问已随任务停止或切换而取消");return;}poll(context,request);},250);}

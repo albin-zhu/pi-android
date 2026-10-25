@@ -1,6 +1,6 @@
 # APK 签名与原地更新
 
-现有主应用使用 Mac 上 `.build/debug.keystore` 的 `zfold` 别名。构建机器可以变化，签名密钥必须保持一致，才能覆盖安装并保留应用数据。当前证书 SHA-256：
+主应用使用固定签名密钥的 `zfold` 别名。构建机器可以变化，签名密钥必须保持一致，才能覆盖安装并保留应用数据。当前证书 SHA-256：
 
 ```text
 192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530
@@ -10,7 +10,7 @@
 
 仓库配置两项：Secret `ANDROID_DEBUG_KEYSTORE_BASE64` 保存 keystore 的 Base64；Variable `ANDROID_DEBUG_CERT_SHA256` 保存上述公开证书指纹。Secret 由 Mac 通过标准输入上传，没有进入源码或命令参数。
 
-`push` 和 `workflow_dispatch` 构建先恢复 `.build/debug.keystore`，再构建 compat28 / modern APK，核对产物证书后才上传。缺少 Secret 或证书不一致时失败，避免产生无法更新现有主应用的安装包。Pull request 构建使用临时测试签名，产物名称带 `-pr-test`，不能用于覆盖现有主应用。
+`push` 和 `workflow_dispatch` 构建先恢复 `.build/debug.keystore`，再构建 compat28 / modern APK，核对产物证书后才上传。缺少 Secret 或证书不一致时失败，避免产生无法更新现有主应用的安装包。Pull request 工作流显式生成独立临时测试签名，产物名称带 `-pr-test`，不能用于覆盖现有主应用；通用构建脚本不再自动生成缺失的密钥。
 
 现有构建脚本使用 Android debug keystore 的密码 `android`，别名 `zfold`；更换密码或签名方案时需要同步修改构建脚本。私钥只放在 Secret 或本机忽略目录，不提交 keystore、不上传为 Actions artifact。
 
@@ -31,3 +31,17 @@ sh /sdcard/pi/workspace/ondevice-build.sh 28
 `--dev` 继续使用手机原来的 `zfolddev` 签名，保留分身的独立更新路径。也可以通过 `ZFOLD_KEYSTORE` 指定主应用 keystore 路径。手机私有源码目录 `files/runtime/dev/src/pi-android/.build/debug.keystore` 链接到同一私钥，供通用构建脚本使用。
 
 已核对 Mac、手机原安装 APK 和手机签名探针的证书一致，私钥副本逐字节一致。未卸载或更新手机上的应用，也未修改模型或语音凭据。
+
+## 当前 Ubuntu 仓库的固定本地副本
+
+经用户确认，原签名密钥已复制到当前仓库的默认构建位置：
+
+```text
+/workspace/workspace/pi-android/.build/debug.keystore
+```
+
+相对路径为 `.build/debug.keystore`，别名 `zfold`，密码沿用现有构建约定的 `android`。该文件受 `.gitignore` 的 `.build/` 和 `*.keystore` 规则排除，不加入 Git，也不随源码推送。`scripts/build.py` 在下载或编译前检查此文件；缺失则报错并指向本文，不再生成另一把 key。清理构建缓存时务必保留这个文件。
+
+原有 `/workspace/debug.keystore`（手机 `/sdcard/pi/debug.keystore`）保留不动，可用于恢复本地副本；恢复前后核对上方公开证书指纹。无需重新要求 ADB 配对或再次导出密钥。CI 继续通过既有 Secret 恢复同一路径，本地 keystore 不替代远端备份。
+
+本仓库位于 Android 共享存储：请求文件权限 600 后实际仍显示为 660，不能将 Git 忽略或 chmod 视作私钥隔离。`android` 也不是保密口令；需要更强保护时应使用上方 Android 私有目录。未经用户确认，不移动或删除原副本，不将 keystore 加入源码、APK 或公开构建产物。

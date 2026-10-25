@@ -6,10 +6,10 @@ import android.widget.RemoteViews;
 public final class ShortcutsWidget extends AppWidgetProvider {
   @Override public void onUpdate(Context c,AppWidgetManager manager,int[] ids){
     for(int id:ids){RemoteViews views=new RemoteViews(c.getPackageName(),R.layout.widget_shortcuts);
-      int[] buttons={R.id.widget_chat,R.id.widget_circle,R.id.widget_voice,R.id.widget_sessions};
+      int[] buttons={R.id.widget_terminal,R.id.widget_circle,R.id.widget_voice,R.id.widget_settings};
       for(int i=0;i<buttons.length;i++){
-        Intent intent=i==1?CircleEntryActivity.intent(c):new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        intent.setAction("widget-entry-"+id+"-"+i);if(i==2)intent.putExtra("open_voice",true);if(i==3)intent.putExtra("open_sessions",true);
+        Intent intent=i==1?CircleEntryActivity.intent(c):new Intent(c,i==2?VoiceCallActivity.class:i==3?SettingsActivity.class:TerminalActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        intent.setAction("widget-entry-"+id+"-"+i);
         views.setOnClickPendingIntent(buttons[i],PendingIntent.getActivity(c,id*10+i,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE));
       }
       manager.updateAppWidget(id,views);

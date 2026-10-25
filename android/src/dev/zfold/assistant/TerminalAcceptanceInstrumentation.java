@@ -16,7 +16,9 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class TerminalAcceptanceInstrumentation extends Instrumentation implements Application.ActivityLifecycleCallbacks {
   private volatile TerminalActivity activity;private TerminalView view;private TerminalSessions.Job job;private boolean fresh;
   private ClipData clipboard;private float scale=1;private String error="";
-  @Override public void onCreate(Bundle args){PiRuntime.testMode=true;fresh=Boolean.parseBoolean(args.getString("fresh","false"));start();}
+  private Bundle launchOptions;
+  private final java.util.List<TerminalSessions.Job> owned=new java.util.ArrayList<>();
+  @Override public void onCreate(Bundle args){PiRuntime.testMode=true;fresh=args!=null&&Boolean.parseBoolean(args.getString("fresh","false"));launchOptions=TerminalWorkspaceInstrumentation.launchOptions(args);start();}
   @Override public void onActivityCreated(Activity value,Bundle state){if(value instanceof TerminalActivity)activity=(TerminalActivity)value;}
   @Override public void onActivityResumed(Activity value){if(value instanceof TerminalActivity)activity=(TerminalActivity)value;}
   @Override public void onActivityDestroyed(Activity value){if(value==activity)activity=null;}
@@ -26,11 +28,12 @@ public final class TerminalAcceptanceInstrumentation extends Instrumentation imp
       require(Build.HARDWARE.contains("ranchu")||Build.HARDWARE.contains("goldfish"),"Emulator only");getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);EmulatorChecks.cancelPointer(this);
       scale=Settings.System.getFloat(getTargetContext().getContentResolver(),Settings.System.FONT_SCALE,1);
       File bash=new File(PiPackageManager.root(getTargetContext()),"usr/bin/bash");if(fresh)require(!bash.exists(),"Fresh acceptance must start without Bash");
-      launch();waitView();job=current();
-      if(fresh){require(job.shell.equals("系统 Shell"),"Fresh install did not fall back to system shell");send("printf 'FRESH_%s\\n' SYSTEM\n");waitFor("FRESH_SYSTEM");report.putBoolean("systemShellFirstLaunch",true);
-        int systemId=job.id;click("安装 Bash 并打开新终端");long until=System.currentTimeMillis()+600000;
-        while(System.currentTimeMillis()<until){TerminalSessions.Job candidate=current();if(candidate!=null&&candidate.id>0&&candidate.id!=systemId&&candidate.shell.equals("Bash")){job=candidate;break;}Thread.sleep(250);}
-        require(job.id!=systemId&&job.shell.equals("Bash"),"Bash install did not open a new shell");report.putBoolean("installBashFromUI",true);
+      runOnMainSync(()->{job=TerminalSessions.get(getTargetContext()).create();owned.add(job);});launch();waitView();job=current();
+      if(fresh){require(!job.ubuntu,"Fresh acceptance requires an Android workspace");send("printf 'FRESH_%s\\n' ANDROID\n");waitFor("FRESH_ANDROID");report.putBoolean("androidShellBeforeBashInstall",true);
+        int systemId=job.id;click("终端选项");click("安装 / 更新 Bash");long until=System.currentTimeMillis()+600000;
+        while(System.currentTimeMillis()<until){if(bash.canExecute()){click("创建终端");break;}Thread.sleep(250);}
+        waitView();for(int i=0;i<150;i++){TerminalSessions.Job candidate=current();if(candidate!=null&&candidate.id>0&&candidate.id!=systemId){job=candidate;owned.add(job);break;}Thread.sleep(100);}
+        require(bash.canExecute()&&job.id!=systemId,"Bash install and explicit creation did not open a new shell");report.putBoolean("installBashFromUI",true);
       }
       send("bash\n");Thread.sleep(250);send("printf 'BARE_%s\\n' BASH; exit\n");waitFor("BARE_BASH");require(!transcript().toLowerCase().contains("permission denied"),"Bare Bash still has a startup permission error");report.putBoolean("bareBash",true);
       int id=job.id;send("sleep 3; printf 'BACKGROUND_%s\\n' OK\n");getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES).performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);Thread.sleep(3800);launch();waitView();require(current().id==id,"Home/return replaced the live terminal");waitFor("BACKGROUND_OK");report.putBoolean("ordinaryBackground",true);
@@ -44,14 +47,16 @@ public final class TerminalAcceptanceInstrumentation extends Instrumentation imp
       int columns=job.session.getEmulator().mColumns;runOnMainSync(()->activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE));waitColumns(columns,true);require(current().id==id,"Rotation replaced the PTY");send("printf 'ROTATE_%s\\n' OK\n");waitFor("ROTATE_OK");Thread.sleep(3000);Rect visible=new Rect();boolean[] readable={false};runOnMainSync(()->readable[0]=view.getGlobalVisibleRect(visible)&&visible.height()>=Ui.dp(getTargetContext(),30));require(readable[0],"Landscape keyboard left no readable terminal viewport");require((job.session.getEmulator().getCursorRow()+1)*view.mRenderer.getFontLineSpacing()<=view.getHeight(),"Shell cursor fell below visible landscape viewport");EmulatorChecks.screenshot(this,"terminal-landscape.png");report.putBoolean("rotation",true);
       runOnMainSync(()->activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT));waitColumns(columns,false);int before=job.session.getEmulator().mColumns;
       EmulatorChecks.shell(this,"settings put system font_scale 1.3");Thread.sleep(800);waitView();job=current();for(int i=0;i<60&&job.session.getEmulator().mColumns>=before;i++)Thread.sleep(100);require(job.id==id&&job.session.getEmulator().mColumns<before,"Large font did not resize the same terminal");EmulatorChecks.screenshot(this,"terminal-large-font.png");report.putBoolean("largeFont",true);
-      click("切换终端会话");click("＋ 新建终端");TerminalSessions.Job original=job;for(int i=0;i<60&&current().id==id;i++)Thread.sleep(100);job=current();require(job.id!=id,"Session picker did not create a terminal");TerminalSessions.Job additional=job;
-      click("切换终端会话");click(original.name+" · Bash");job=current();require(job.id==id,"Session picker did not reattach the selected PTY");
-      click("终端选项");click("结束当前会话及进程");for(int i=0;i<60&&job.session.isRunning();i++)Thread.sleep(100);require(!job.session.isRunning()&&additional.session.isRunning(),"Explicit close did not isolate the chosen session");report.putBoolean("sessionPickerAndClose",true);
+      click("新建终端");click("创建终端");TerminalSessions.Job original=job;
+      for(int i=0;i<150;i++){TerminalSessions.Job candidate=current();if(candidate!=null&&candidate.id>0&&candidate.id!=id){job=candidate;break;}Thread.sleep(100);}
+      require(job.id!=id,"New-terminal dialog did not create a terminal");TerminalSessions.Job additional=job;owned.add(additional);
+      runOnMainSync(()->TerminalSessions.get(getTargetContext()).select(original));runOnMainSync(activity::finish);launch();waitView();job=current();require(job.id==id,"Returning did not reattach the selected PTY");
+      click("终端选项");click("结束当前会话及进程");click("结束进程");for(int i=0;i<60&&job.session.isRunning();i++)Thread.sleep(100);require(!job.session.isRunning()&&additional.session.isRunning(),"Explicit close did not isolate the chosen session");report.putBoolean("newDialogAndClose",true);
     }catch(Throwable failure){error=failure.toString();report.putString("error",error);try{EmulatorChecks.screenshot(this,"terminal-acceptance-failure.png");}catch(Exception ignored){}}
-    finally{EmulatorChecks.cancelPointer(this);try{EmulatorChecks.shell(this,"settings put system font_scale "+scale);}catch(Exception ignored){}runOnMainSync(()->{ClipboardManager manager=(ClipboardManager)getTargetContext().getSystemService(Context.CLIPBOARD_SERVICE);if(clipboard!=null)manager.setPrimaryClip(clipboard);TerminalSessions.get(getTargetContext()).closeAll();if(activity!=null)activity.finishAndRemoveTask();});app.unregisterActivityLifecycleCallbacks(this);}
+    finally{EmulatorChecks.cancelPointer(this);try{EmulatorChecks.shell(this,"settings put system font_scale "+scale);}catch(Exception ignored){}runOnMainSync(()->{ClipboardManager manager=(ClipboardManager)getTargetContext().getSystemService(Context.CLIPBOARD_SERVICE);if(clipboard!=null)manager.setPrimaryClip(clipboard);for(TerminalSessions.Job created:owned)created.close();if(activity!=null)activity.finishAndRemoveTask();});app.unregisterActivityLifecycleCallbacks(this);}
     finish(error.isEmpty()?-1:0,report);
   }
-  private void launch(){getTargetContext().startActivity(new Intent(getTargetContext(),TerminalActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
+  private void launch(){getTargetContext().startActivity(new Intent(getTargetContext(),TerminalActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),launchOptions);}
   private void waitView()throws Exception{for(int i=0;i<150;i++){runOnMainSync(()->{if(activity!=null)view=find(activity.getWindow().getDecorView());});if(activity!=null&&view!=null&&view.isAttachedToWindow()&&view.isLaidOut()&&current()!=null&&current().id>0)return;Thread.sleep(100);}throw new IllegalStateException("Terminal not ready");}
   private TerminalSessions.Job current(){AtomicReference<TerminalSessions.Job> result=new AtomicReference<>();runOnMainSync(()->{if(view!=null&&view.getCurrentSession()!=null)result.set(TerminalSessions.get(getTargetContext()).find(view.getCurrentSession()));});return result.get();}
   private String transcript(){AtomicReference<String> value=new AtomicReference<>("");runOnMainSync(()->{if(job!=null&&job.session.getEmulator()!=null)value.set(job.session.getEmulator().getScreen().getTranscriptText());});return value.get();}

@@ -108,7 +108,7 @@ def main():
     args = parser.parse_args()
     dns = str(ipaddress.ip_address(args.dns))
     device = Device(args.serial)
-    device.shell(['/system/bin/am', 'start', '-W', '-n', PACKAGE + '/.MainActivity'], app=False)
+    device.shell(['/system/bin/am', 'start', '-W', '-n', PACKAGE + '/.LauncherActivity', '-a', PACKAGE + '.OPEN_ANDROID_TERMINAL'], app=False)
     # The environment file is written only after both servers are listening.
     # A previous process's file is not readiness for this process.
     deadline = time.monotonic() + 20

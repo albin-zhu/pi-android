@@ -1,0 +1,478 @@
+{
+  "schema": 1,
+  "source_commit": "fa3a8b430e2896a19f44c99a9cb056254615ae06",
+  "submodule_archives": [
+    {
+      "path": "lorie/src/main/cpp/bzip2",
+      "commit": "6a8690fc8d26c815e798c588f796eabe9d684cf0",
+      "url": "https://gitlab.com/bzip2/bzip2/-/archive/6a8690fc8d26c815e798c588f796eabe9d684cf0/bzip2-6a8690fc8d26c815e798c588f796eabe9d684cf0.tar.gz",
+      "sha256": "bc40651201886d3e126a8fff33163076e65918d422ce1f18749362984a8ce01d"
+    },
+    {
+      "path": "lorie/src/main/cpp/libepoxy",
+      "commit": "c84bc9459357a40e46e2fec0408d04fbdde2c973",
+      "url": "https://codeload.github.com/anholt/libepoxy/tar.gz/c84bc9459357a40e46e2fec0408d04fbdde2c973",
+      "sha256": "f12bdba216b7188717376212e524ee03264a643563d71cc1b71bfa93a6f5c024"
+    },
+    {
+      "path": "lorie/src/main/cpp/libfontenc",
+      "commit": "780d1f6f192a331de7b298a96e23ebc44d2a884b",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libfontenc/-/archive/780d1f6f192a331de7b298a96e23ebc44d2a884b/libfontenc-780d1f6f192a331de7b298a96e23ebc44d2a884b.tar.gz",
+      "sha256": "37a15d116ee36ab1fb50d919371740d55994d1379e9fe3cc52a7b04e284f6c41"
+    },
+    {
+      "path": "lorie/src/main/cpp/libtirpc",
+      "commit": "5ca4ca92f629d9d83e83544b9239abaaacf0a527",
+      "url": "https://codeload.github.com/alisw/libtirpc/tar.gz/5ca4ca92f629d9d83e83544b9239abaaacf0a527",
+      "sha256": "569a85e367d032210a7039dd2fb2e2a852eb993ef56449b2827d40ae8aec6663"
+    },
+    {
+      "path": "lorie/src/main/cpp/libx11",
+      "commit": "6c75545a1deb51f5903992c52af6bc35cc9bc103",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libx11/-/archive/6c75545a1deb51f5903992c52af6bc35cc9bc103/libx11-6c75545a1deb51f5903992c52af6bc35cc9bc103.tar.gz",
+      "sha256": "a84aee00f0b8239c4587aaaaf496298769cbbf2fb2852e70396b8c17dc91f866"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxau",
+      "commit": "a9c65683e68b3a4349afee5d7673b393fb924d2e",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxau/-/archive/a9c65683e68b3a4349afee5d7673b393fb924d2e/libxau-a9c65683e68b3a4349afee5d7673b393fb924d2e.tar.gz",
+      "sha256": "44c8733baa048222c4ee4830fd5e53ec7f653ee8d8fd89f953394574e9b6a7f4"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxcvt",
+      "commit": "dd8631c61465cc0de5e476c7a98e56528d62b163",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxcvt/-/archive/dd8631c61465cc0de5e476c7a98e56528d62b163/libxcvt-dd8631c61465cc0de5e476c7a98e56528d62b163.tar.gz",
+      "sha256": "909c852d953351f6c63b035c14636560c0d80af6b527b2b78a592be7ff9ff831"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxdmcp",
+      "commit": "1192d3bc407348ff316bd3bffc791b3ac73f591b",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxdmcp/-/archive/1192d3bc407348ff316bd3bffc791b3ac73f591b/libxdmcp-1192d3bc407348ff316bd3bffc791b3ac73f591b.tar.gz",
+      "sha256": "cf69b9d5d8af0b20a1008252475f283ffbe2c03a3c29e0b319c71e9802e3560c"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxfont",
+      "commit": "975cc6526e892c6fad8fa49d0fef58565fbaa003",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxfont/-/archive/975cc6526e892c6fad8fa49d0fef58565fbaa003/libxfont-975cc6526e892c6fad8fa49d0fef58565fbaa003.tar.gz",
+      "sha256": "0271c64728b59def358d525ec08a1dbee52091a65315e3f09596202a1a8b515e"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxkbfile",
+      "commit": "42e5dedd7fd3c7c73f3870a8751893c03c1afc69",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxkbfile/-/archive/42e5dedd7fd3c7c73f3870a8751893c03c1afc69/libxkbfile-42e5dedd7fd3c7c73f3870a8751893c03c1afc69.tar.gz",
+      "sha256": "45aaffea04615ce5b338ec7a068241a98c3d8938f5b7b8176c0f32d81901e453"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxshmfence",
+      "commit": "89f064748554e11832a3ec783945e1f4c7fe846e",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxshmfence/-/archive/89f064748554e11832a3ec783945e1f4c7fe846e/libxshmfence-89f064748554e11832a3ec783945e1f4c7fe846e.tar.gz",
+      "sha256": "f43780d8bf06c8dde5ab46d5f5d24bba0843b4890489db8ce0f43f9e0081e468"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxtrans",
+      "commit": "cf05ba4a10c90da2c63805a5375e983b174e28b0",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxtrans/-/archive/cf05ba4a10c90da2c63805a5375e983b174e28b0/libxtrans-cf05ba4a10c90da2c63805a5375e983b174e28b0.tar.gz",
+      "sha256": "6c8a717ff820da278ea16deea0432ecf56b3961c950ba2f94f12efd28c4da002"
+    },
+    {
+      "path": "lorie/src/main/cpp/pixman",
+      "commit": "9cc163c9da0fb4da430641715313d95a6ec466d9",
+      "url": "https://gitlab.freedesktop.org/pixman/pixman/-/archive/9cc163c9da0fb4da430641715313d95a6ec466d9/pixman-9cc163c9da0fb4da430641715313d95a6ec466d9.tar.gz",
+      "sha256": "1b9c00ff8498e120c52147bd42adf51c0456b7e23d053179621d26bd005a17db"
+    },
+    {
+      "path": "lorie/src/main/cpp/xkbcomp",
+      "commit": "2c7789785981ad1fce3858c726615b49293f7de0",
+      "url": "https://gitlab.freedesktop.org/xorg/app/xkbcomp/-/archive/2c7789785981ad1fce3858c726615b49293f7de0/xkbcomp-2c7789785981ad1fce3858c726615b49293f7de0.tar.gz",
+      "sha256": "f3566b787a477255b7d6396f78581018c25888cc2e86177269a2845fdcea9031"
+    },
+    {
+      "path": "lorie/src/main/cpp/xorgproto",
+      "commit": "6d3907b6d5dc4aa7d7ee6ee5d7d8714e7466630b",
+      "url": "https://gitlab.freedesktop.org/xorg/proto/xorgproto/-/archive/6d3907b6d5dc4aa7d7ee6ee5d7d8714e7466630b/xorgproto-6d3907b6d5dc4aa7d7ee6ee5d7d8714e7466630b.tar.gz",
+      "sha256": "2f41108995a0e85fc3f8bb8ca2e5649b827052d3d18135766ad50e248fb142b3"
+    },
+    {
+      "path": "lorie/src/main/cpp/xserver",
+      "commit": "65d790bd208ec380b196eb98f144abb0b32e334d",
+      "url": "https://gitlab.freedesktop.org/xorg/xserver/-/archive/65d790bd208ec380b196eb98f144abb0b32e334d/xserver-65d790bd208ec380b196eb98f144abb0b32e334d.tar.gz",
+      "sha256": "666312b59198ccd251192bda947b2eabbf18e43083688e2caf592d48840c87d5"
+    }
+  ],
+  "android_api": 30,
+  "host": "Ubuntu 24.04 aarch64, clang-18, lld-18, binutils, gcc, Python 3.12",
+  "packages": [
+    {
+      "name": "ndk-sysroot",
+      "version": "30",
+      "kind": "termux",
+      "url": "https://packages.termux.dev/apt/termux-main/pool/main/n/ndk-sysroot/ndk-sysroot_30_aarch64.deb",
+      "sha256": "73502f9b04fce210c430c83bf9ae2b8e332ba5c319f3eb94a61ba5cef090f787"
+    },
+    {
+      "name": "libc++",
+      "version": "30",
+      "kind": "termux",
+      "url": "https://packages.termux.dev/apt/termux-main/pool/main/libc/libc++/libc++_30_aarch64.deb",
+      "sha256": "53d0b84a7ba7459024257cb94d5b136fe13ef858567f65a8064b35950799f2ca"
+    },
+    {
+      "name": "libcompiler-rt",
+      "version": "21.1.8-3",
+      "kind": "termux",
+      "url": "https://packages.termux.dev/apt/termux-main/pool/main/libc/libcompiler-rt/libcompiler-rt_21.1.8-3_aarch64.deb",
+      "sha256": "89de02f642e34fa6494ad16105bd08510bd1dbdbe4fdb2b297aaa4f4e8e534b6"
+    },
+    {
+      "name": "cmake",
+      "version": "3.28.3-1build7",
+      "kind": "host",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/c/cmake/cmake_3.28.3-1build7_arm64.deb",
+      "sha256": "0bf2a58f636ad286e7f4552e709dfd1209a4d70056548a6c0c4965d7067e95a5"
+    },
+    {
+      "name": "cmake-data",
+      "version": "3.28.3-1build7",
+      "kind": "host",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/c/cmake/cmake-data_3.28.3-1build7_all.deb",
+      "sha256": "20a3b644211ce82f35c24f1f5052199adeb0ac159978a8740fd6c0959611557f"
+    },
+    {
+      "name": "ninja-build",
+      "version": "1.11.1-2",
+      "kind": "host",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/universe/n/ninja-build/ninja-build_1.11.1-2_arm64.deb",
+      "sha256": "b261a758b0c07e7ffa0d56b34e577d5c2d0122aa14f806a176e9b2609b2706b0"
+    },
+    {
+      "name": "bison",
+      "version": "2:3.8.2+dfsg-1build2",
+      "kind": "host",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/b/bison/bison_3.8.2+dfsg-1build2_arm64.deb",
+      "sha256": "eb2edb78bfff22e9eccc568741c8b8265806f320196640b0ce6ea26cd9e67474"
+    },
+    {
+      "name": "patch",
+      "version": "2.7.6-7build3",
+      "kind": "host",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/p/patch/patch_2.7.6-7build3_arm64.deb",
+      "sha256": "29c96f8e8cd1f6470c7a13cfd76d4127a977d849f83d616648369fd87c0a6907"
+    },
+    {
+      "name": "m4",
+      "version": "1.4.19-4build1",
+      "kind": "host",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/m/m4/m4_1.4.19-4build1_arm64.deb",
+      "sha256": "89605f10d3b94cf4a171747839d5a411587734f2be715cb8dd17bde923c937ed"
+    },
+    {
+      "name": "libjsoncpp25",
+      "version": "1.9.5-6build1",
+      "kind": "host",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libj/libjsoncpp/libjsoncpp25_1.9.5-6build1_arm64.deb",
+      "sha256": "2ddcee633e150bd656b149bc687507bdc276080d91a2fe1f508898db20d130bc"
+    },
+    {
+      "name": "librhash0",
+      "version": "1.4.3-3build1",
+      "kind": "host",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/r/rhash/librhash0_1.4.3-3build1_arm64.deb",
+      "sha256": "5406df3423dc0ce53a4f6ff0b786a597c7b5ad3b8e3a51a04bec85d5fe1ab82f"
+    },
+    {
+      "name": "libuv1t64",
+      "version": "1.48.0-1.1build1",
+      "kind": "host",
+      "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libu/libuv1/libuv1t64_1.48.0-1.1build1_arm64.deb",
+      "sha256": "28bd1e33e5ff44f1878e757c42951bfafd26e92a5865b72ad33622e1251f45c2"
+    }
+  ],
+  "platform_stubs": {
+    "url": "https://dl.google.com/android/repository/android-ndk-r29-linux.zip",
+    "ndk_version": "29.0.14206865",
+    "archive_size": 783549481,
+    "members": [
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libmediandk.so",
+        "offset": 426165365,
+        "compressed_size": 19407,
+        "compression": 8,
+        "size": 63776,
+        "sha256": "0ebcb68ff484c577f244c3def4d8428cb71bc4567e7b508f4517dc32c5484096"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libnativewindow.so",
+        "offset": 426184943,
+        "compressed_size": 3472,
+        "compression": 8,
+        "size": 14296,
+        "sha256": "94c4eb13a74f54935a8667ea3d52c630c081667b45c20e2b33e4b35913ed4123"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/crt_pad_segment.o",
+        "offset": 426188585,
+        "compressed_size": 292,
+        "compression": 8,
+        "size": 920,
+        "sha256": "e5b2e0970f88aeca363bd16f045d74e6552e84272dc25fb358a02a3470e4a613"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libOpenMAXAL.so",
+        "offset": 426189045,
+        "compressed_size": 4089,
+        "compression": 8,
+        "size": 19656,
+        "sha256": "2f141c48bf408a13f37d51532e234fa4e1aea2baafc882ded37ba210eab84597"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libsync.so",
+        "offset": 426193297,
+        "compressed_size": 1868,
+        "compression": 8,
+        "size": 11928,
+        "sha256": "15f57dc7784c618696e8d55c71bf3efd155d6607bedbe800329c87889995908d"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libm.so",
+        "offset": 426195325,
+        "compressed_size": 17018,
+        "compression": 8,
+        "size": 53704,
+        "sha256": "b9399e8d5e054f8fc5052c354500470e857950cc88f45816c6c46b9ebab454aa"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/crtbegin_static.o",
+        "offset": 426212513,
+        "compressed_size": 1204,
+        "compression": 8,
+        "size": 3712,
+        "sha256": "f86f2d81a30bf916a1e1b62f341cded56c97d972e0ec096b8fc7898949156687"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libz.so",
+        "offset": 426213877,
+        "compressed_size": 6978,
+        "compression": 8,
+        "size": 23200,
+        "sha256": "0c5c6c292a86ae0c7c1833013415bea90f1246175709b65cdc250d2d9b5789de"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libc++.a",
+        "offset": 426221016,
+        "compressed_size": 26,
+        "compression": 8,
+        "size": 28,
+        "sha256": "b57fd21d04be2aee1ef23d5a916acfd60f51236fb5c14de430e72e39900444eb"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libbinder_ndk.so",
+        "offset": 426221211,
+        "compressed_size": 7471,
+        "compression": 8,
+        "size": 28760,
+        "sha256": "3a7e2157eedc0ec156d4ff4ba85a9bad33863ffc7d20b04994a379987debbaa6"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libOpenSLES.so",
+        "offset": 426228849,
+        "compressed_size": 4680,
+        "compression": 8,
+        "size": 20744,
+        "sha256": "28795248394ae01178d2da31bf8cf1fc752b009ca2b20b069bbf600842c6634f"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/crtend_android.o",
+        "offset": 426233698,
+        "compressed_size": 228,
+        "compression": 8,
+        "size": 832,
+        "sha256": "4a73856c6b87bfaa7b6fc5963796f21941f85f9bb3de36f688f70b5c5ceca44b"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libc.so",
+        "offset": 426234086,
+        "compressed_size": 81419,
+        "compression": 8,
+        "size": 240296,
+        "sha256": "73ff2a95bf0d41580e916bcbd3098e9caf37ea92801a41a820f187370a70c2de"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libdl.so",
+        "offset": 426315666,
+        "compressed_size": 2623,
+        "compression": 8,
+        "size": 12808,
+        "sha256": "6b7c20127519af57a28f6e033c1edd4462401c9b683147225926669d34366f46"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/liblog.so",
+        "offset": 426318451,
+        "compressed_size": 2854,
+        "compression": 8,
+        "size": 13400,
+        "sha256": "09822fd7d316b4df5575c90d2b011be58615632cdd4c3a55c66a0325fe02d2d9"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libneuralnetworks.so",
+        "offset": 426321478,
+        "compressed_size": 5932,
+        "compression": 8,
+        "size": 22856,
+        "sha256": "d2c62447392d97ca7f24463a0dcd94d09cda7ac78428a70ecea70b464dfc8123"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libc++.so",
+        "offset": 426327572,
+        "compressed_size": 19,
+        "compression": 0,
+        "size": 19,
+        "sha256": "f5e33f488b74ee4efb1b398bbb72e0c14b9006f9c0e6db62c5c967e1e9336955"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/crtbegin_dynamic.o",
+        "offset": 426327762,
+        "compressed_size": 1335,
+        "compression": 8,
+        "size": 3896,
+        "sha256": "612cf67a324667367e78f99c4f42116d9f0ae94dd1bed72303c0b989d87facac"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/crtbegin_so.o",
+        "offset": 426329263,
+        "compressed_size": 1068,
+        "compression": 8,
+        "size": 3632,
+        "sha256": "aaa5d5199d576751f243949e1404bb3b691f6022a4f2952cedf527df950c9240"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libjnigraphics.so",
+        "offset": 426330501,
+        "compressed_size": 3493,
+        "compression": 8,
+        "size": 14312,
+        "sha256": "0e94078c332578621b74a7022bdad8ff1e0cb329ebbe442fe053e6e5090040ce"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/crtend_so.o",
+        "offset": 426334158,
+        "compressed_size": 228,
+        "compression": 8,
+        "size": 832,
+        "sha256": "4a73856c6b87bfaa7b6fc5963796f21941f85f9bb3de36f688f70b5c5ceca44b"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libandroid.so",
+        "offset": 426334552,
+        "compressed_size": 20976,
+        "compression": 8,
+        "size": 64712,
+        "sha256": "75fbed2712d0e001a8131e4c477b9c57d58e2ce9198b34a40c5c76d2ea9ca925"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libcamera2ndk.so",
+        "offset": 426355697,
+        "compressed_size": 5864,
+        "compression": 8,
+        "size": 22744,
+        "sha256": "89db328516ac7368fae8dcd6e564c03b6063b7d2c75c30b3c8c11a07956fa0be"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libstdc++.so",
+        "offset": 426361726,
+        "compressed_size": 2701,
+        "compression": 8,
+        "size": 16896,
+        "sha256": "937f2abd1e266eeb7f9a221cb1f6e5f5908be072a3fc263d74c29daa701fe143"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libGLESv2.so",
+        "offset": 426364592,
+        "compressed_size": 14424,
+        "compression": 8,
+        "size": 46216,
+        "sha256": "3a7f491b81d4980e9261c74b11fd1e04b7d07bf3432860fa1989263fd8a81413"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libEGL.so",
+        "offset": 426379178,
+        "compressed_size": 6169,
+        "compression": 8,
+        "size": 22416,
+        "sha256": "2a1ca063a732cec0e0134547a281505c7000e7ef364d8ee0ebb579261bd61ab3"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libaaudio.so",
+        "offset": 426385512,
+        "compressed_size": 5516,
+        "compression": 8,
+        "size": 21888,
+        "sha256": "d8d0a1909177aa7d12a839d6596c4109a234d850f707b331c732b13b988b4c40"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libvulkan.so",
+        "offset": 426391193,
+        "compressed_size": 12653,
+        "compression": 8,
+        "size": 41288,
+        "sha256": "e43e08fb56170110b7652a5a05e4f6ea5583e9c2b87af8abb55db159b55b1259"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libGLESv3.so",
+        "offset": 426404011,
+        "compressed_size": 26771,
+        "compression": 8,
+        "size": 81944,
+        "sha256": "0357704483b0d553f474c5240ab9bb38f1b2905f501693946e1dceef0ac8949b"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libamidi.so",
+        "offset": 426430946,
+        "compressed_size": 2691,
+        "compression": 8,
+        "size": 13080,
+        "sha256": "63d561277902fdfade2ddb52632b6e229aa0fde4b4d156db3f52797ab4ef4f42"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/30/libGLESv1_CM.so",
+        "offset": 426433805,
+        "compressed_size": 18871,
+        "compression": 8,
+        "size": 56552,
+        "sha256": "06e09de920516ce195ea2811eeb12ee9bd286dac87b4bbc90a904f1ea947611f"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++abi.a",
+        "offset": 413078404,
+        "compressed_size": 1402329,
+        "compression": 8,
+        "size": 4877212,
+        "sha256": "44ecebe37ac8fe7495d35374aee70273fefc11cacc28fc95a087eaab65a207ae"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_static.a",
+        "offset": 419112622,
+        "compressed_size": 6853728,
+        "compression": 8,
+        "size": 24112434,
+        "sha256": "e5743581dcb88324662ada5adae6036d8ad3568e834eb0f59d5f4e329764d6ab"
+      },
+      {
+        "member": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/lib/clang/21/lib/linux/aarch64/libunwind.a",
+        "offset": 285843020,
+        "compressed_size": 23091,
+        "compression": 8,
+        "size": 92452,
+        "sha256": "c52c8462134a1610e93d873e9d992f4804027d0c73115b2ea4c21b0aed5cbe65"
+      }
+    ]
+  },
+  "platform_headers": {
+    "url": "https://dl.google.com/android/repository/android-ndk-r29-linux.zip",
+    "archive_size": 783549481,
+    "offset": 444899245,
+    "compressed_size": 6124240,
+    "sha256": "626343f7b109c4e8c9a371053adfd4bd1498aca7755710099823d33f3831b074",
+    "member_prefix": "android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/",
+    "file_count": 3671
+  }
+}

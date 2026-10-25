@@ -18,12 +18,12 @@ public final class PhoneAccessibility extends AccessibilityService {
   private long generation=0;
   private long frameSequence=0;long inputEpoch=0;private VisualFrame visualFrame;private FocusedInput focusedInput;
   private volatile long injectedUntil;
-  @Override protected void onServiceConnected(){instance=this;focusedInput=new FocusedInput(this);CircleOverlay.accessibilityConnected(this);WorkbenchActivity.capabilitiesChanged();}
+  @Override protected void onServiceConnected(){instance=this;focusedInput=new FocusedInput(this);WorkbenchActivity.capabilitiesChanged();}
   @Override public android.accessibilityservice.InputMethod onCreateInputMethod(){return new android.accessibilityservice.InputMethod(this){
     @Override public void onStartInput(android.view.inputmethod.EditorInfo editor,boolean restarting){super.onStartInput(editor,restarting);inputEpoch++;}
     @Override public void onFinishInput(){super.onFinishInput();inputEpoch++;}
   };}
-  @Override public void onDestroy(){instance=null;WorkbenchActivity.capabilitiesChanged();if(focusedInput!=null)focusedInput.close();AssistantOverlay.accessibilityDisconnected(getApplicationContext());CircleOverlay.accessibilityDisconnected(getApplicationContext());clearNodes();super.onDestroy();}
+  @Override public void onDestroy(){instance=null;WorkbenchActivity.capabilitiesChanged();if(focusedInput!=null)focusedInput.close();clearNodes();super.onDestroy();}
   @Override public void onInterrupt(){}
   public void onAccessibilityShortcut(){CircleOverlay.beginOnCurrentScreen(this);}
   public void onAccessibilityButtonClicked(){CircleOverlay.beginOnCurrentScreen(this);}

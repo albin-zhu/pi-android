@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   runtime:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -19,8 +19,23 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - name: Install guest gamepad toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross clang-18 lld-18 llvm-18
       - run: npm ci
       - run: npm run bundle
+      - name: Check gamepad protocol and descriptor semantics
+        run: |
+          mkdir -p .build/input-check
+          cc -std=c11 -O2 -Wall -Wextra -Werror tests/input-controls-state.c -o .build/input-check/state-check
+          .build/input-check/state-check
+          cc -std=c11 -O2 -Wall -Wextra -Werror -fPIC -shared -pthread native/input-controls/linux.c -ldl -o .build/input-check/libzfold-gamepad.so
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pthread tests/input-controls-linux.c -o .build/input-check/linux-check
+          LD_PRELOAD="$PWD/.build/input-check/libzfold-gamepad.so" ZFOLD_GAMEPAD=1 .build/input-check/linux-check
+          cc -std=c11 -O2 -Wall -Wextra -Werror -pthread tests/input-controls-files.c -o .build/input-check/files-check
+          LD_PRELOAD="$PWD/.build/input-check/libzfold-gamepad.so" .build/input-check/files-check open
+          LD_PRELOAD="$PWD/.build/input-check/libzfold-gamepad.so" .build/input-check/files-check lock
       - run: npm test
       - uses: actions/setup-java@v4
         with:
@@ -40,7 +55,7 @@ jobs:
   android:
     permissions:
       contents: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -61,6 +76,10 @@ jobs:
           packages: platform-tools
       - name: Install pinned Android toolchain
         run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;28.0.13004108'
+      - name: Install guest gamepad toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross clang-18 lld-18 llvm-18
       - run: npm ci
       - name: Restore the installed app signing key
         if: github.event_name != 'pull_request'
@@ -75,6 +94,12 @@ jobs:
           mkdir -p .build
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > .build/debug.keystore
           test -s .build/debug.keystore
+      - name: Create an isolated PR test signing key
+        if: github.event_name == 'pull_request'
+        run: |
+          umask 077
+          mkdir -p .build
+          keytool -genkeypair -keystore .build/debug.keystore -storepass android -keypass android -alias zfold -dname 'CN=Zfold PR Test' -keyalg RSA -keysize 2048 -validity 30
       - name: Build and verify debug APK
         env:
           ZFOLD_TARGET_SDK: ${{ matrix.target }}

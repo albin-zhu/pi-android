@@ -13,12 +13,14 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Real PTY output and renderer viewport: repaint, new history, bottom follow. Emulator only. */
 public final class TerminalScrollInstrumentation extends Instrumentation {
   private TerminalActivity activity;private TerminalView view;private TerminalSessions.Job job;private File fixture;
-  @Override public void onCreate(Bundle args){PiRuntime.testMode=true;start();}
+  private Bundle launchOptions;
+  @Override public void onCreate(Bundle args){PiRuntime.testMode=true;launchOptions=TerminalWorkspaceInstrumentation.launchOptions(args);start();}
   @Override public void onStart(){
     Bundle report=new Bundle();String failure="";
     try{
       check(Build.HARDWARE.contains("ranchu")||Build.HARDWARE.contains("goldfish"),"Emulator only");
-      activity=(TerminalActivity)startActivitySync(new Intent(getTargetContext(),TerminalActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+      runOnMainSync(()->job=TerminalSessions.get(getTargetContext()).create());
+      activity=(TerminalActivity)startActivitySync(new Intent(getTargetContext(),TerminalActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),launchOptions);
       runOnMainSync(()->view=find(activity.getWindow().getDecorView()));
       for(int i=0;i<100;i++){runOnMainSync(()->job=TerminalSessions.get(getTargetContext()).find(view.getCurrentSession()));if(job!=null&&job.id>0)break;Thread.sleep(100);}
       check(job!=null&&job.id>0,"Missing real shell");

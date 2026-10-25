@@ -13,6 +13,8 @@ Environment:
 Examples:
   node /absolute/runtime/phone-cli.mjs call device_info '{}'
   node /absolute/runtime/phone-cli.mjs call screen_capture '{"save":false}'
+  node /absolute/runtime/phone-cli.mjs call x11_server '{"action":"status"}'
+  node /absolute/runtime/phone-cli.mjs call x11_server '{"action":"start"}'
 
 Android owns system permissions and the independent-client approval setting.
 By default, every request except device_info, phone_capabilities, and app_list
@@ -20,6 +22,9 @@ requires individual confirmation. The user can explicitly select Always allow
 in the app's Phone capabilities settings; system permissions still apply.
 One external call may execute globally; busy requests fail rather than queue.
 This client never retries or replays calls.
+X11 status is read-only; start waits for the shared :9 server and renderer to be
+ready without opening its manager. Both follow the same Android approval policy.
+Cancelling the wait does not stop the shared X11 server.
 SIGINT/SIGTERM requests cancellation and waits for the real terminal receipt.
 A disconnected/unconfirmed request may already have changed the phone: inspect its
 actual state before retrying, especially calls, SMS, input, or taps.

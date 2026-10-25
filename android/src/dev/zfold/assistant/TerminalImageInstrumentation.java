@@ -35,10 +35,12 @@ public final class TerminalImageInstrumentation extends Instrumentation {
     private File directory;
     private String fixturePath;
     private int cellWidth, cellHeight, screenRows;
+    private Bundle launchOptions;
 
     @Override public void onCreate(Bundle args) {
         PiRuntime.testMode = true;
         fixturePath = args == null ? null : args.getString("fixture_path");
+        launchOptions = TerminalWorkspaceInstrumentation.launchOptions(args);
         start();
     }
 
@@ -47,7 +49,8 @@ public final class TerminalImageInstrumentation extends Instrumentation {
         String failure = "";
         try {
             check(Build.HARDWARE.contains("ranchu") || Build.HARDWARE.contains("goldfish"), "Emulator only");
-            activity = (TerminalActivity) startActivitySync(new Intent(getTargetContext(), TerminalActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            runOnMainSync(() -> job = TerminalSessions.get(getTargetContext()).create());
+            activity = (TerminalActivity) startActivitySync(new Intent(getTargetContext(), TerminalActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), launchOptions);
             runOnMainSync(() -> view = find(activity.getWindow().getDecorView()));
             check(view != null, "Terminal view missing");
             for (int i = 0; i < 150; i++) {

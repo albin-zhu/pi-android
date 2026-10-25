@@ -18,3 +18,9 @@ come from the upstream libraries.
 
 The view minimum is two terminal rows (supported by TerminalEmulator), so a
 landscape phone keyboard does not place the shell cursor below the visible view.
+
+TerminalView also stops fling/selection when switching sessions and binds each
+input connection to its original session. Switching tabs finishes composing text
+in that session; detaching clears it instead of executing it. Late IME commits
+and key events cannot be redirected into another session. The app restores each
+tab's viewport after the first layout and keeps Ctrl state with the terminal job.

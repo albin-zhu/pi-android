@@ -10,7 +10,7 @@ import java.util.*;
 import org.json.*;
 
 /** Task-bound form. Dismissing the view preserves the unanswered request and draft. */
-public final class UserQuestionActivity extends Activity {
+public final class UserQuestionActivity extends NavigableActivity {
   private String requestId;private UserQuestions.Request rendered;private LinearLayout body;private TextView status;private Ui.Theme theme;
   private final ArrayList<EditText> inputs=new ArrayList<>();private final Runnable changed=this::refresh;
   static void show(Context context,String id){
@@ -36,7 +36,7 @@ public final class UserQuestionActivity extends Activity {
   private View action(String label,String description,boolean primary,Runnable run){Ui.Action button=new Ui.Action(this,R.drawable.ic_check,label,description,primary?theme.onAccent:theme.muted,primary?theme.accent:0,run);button.image.setVisibility(View.GONE);((LinearLayout.LayoutParams)button.label.getLayoutParams()).leftMargin=0;button.setPadding(dp(4),dp(6),dp(4),dp(6));return button;}
   private int dp(int value){return Ui.dp(this,value);}
   @Override protected void onStart(){super.onStart();UserQuestions.listen(changed);}
-  @Override protected void onResume(){super.onResume();VoiceMiniOverlay.hide();CircleOverlay.hideBubble();}
+  @Override protected void onResume(){super.onResume();VoiceMiniOverlay.hide();}
   @Override protected void onStop(){UserQuestions.unlisten(changed);super.onStop();}
   @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);requestId=intent.getStringExtra("question_request_id");rendered=null;refresh();}
   private void refresh(){
@@ -62,5 +62,5 @@ public final class UserQuestionActivity extends Activity {
     body.setFocusableInTouchMode(true);body.requestFocus();
   }
   private void submit(boolean declined){try{UserQuestions.submit(this,requestId,declined);finish();}catch(Exception error){status.setTextColor(theme.error);status.setText(error.getMessage());}}
-  @Override public void onBackPressed(){finish();}
+  @Override public void onBackPressed(){navigateUp();}
 }

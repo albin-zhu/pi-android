@@ -1,7 +1,6 @@
 package dev.zfold.assistant;
 
 import android.animation.ValueAnimator;
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -27,11 +26,11 @@ import android.graphics.RectF;
 import org.json.JSONObject;
 
 /** Immersive, real-time voice conversation surface. */
-public final class VoiceCallActivity extends Activity implements PiRuntime.Listener {
+public final class VoiceCallActivity extends NavigableActivity implements PiRuntime.Listener {
   private static volatile VoiceCallActivity active;
   private static volatile boolean foreground;
   private final Handler main=new Handler(Looper.getMainLooper());
-  private PiRuntime runtime;private Ui.Theme theme;
+  private PiRuntime runtime;private Ui.Theme theme;private VoiceCoordinator coordinator;
   private CallOrb orb;private TextView stateText;private TextView liveText;
   private String assistantText="";private boolean session,speaking;
   private long startedAt;
@@ -56,20 +55,20 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
       .setOnDismissListener(d->target.frameDialogOpen=false).show();
   });}
 
-  static void show(Context context){SystemWindowNavigation.open(context,VoiceCallActivity.class,false);}
+  static void show(Context context){SystemWindowNavigation.open(context,VoiceCallActivity.class);}
   static void onControllerStatus(String text){VoiceMiniOverlay.status(text);VoiceCallActivity target=active;if(target!=null)target.main.post(()->target.setStateText(text));}
   static void onControllerState(boolean session,boolean speaking){controllerSession=session;controllerSpeaking=speaking;VoiceMiniOverlay.state(session,speaking);VoiceCallActivity target=active;if(target!=null)target.main.post(()->{target.session=session;target.speaking=speaking;target.setOrbState(!session?"ended":speaking?"speaking":"listening");});}
   static void onPrompt(String text){VoiceMiniOverlay.status("正在处理你的话");VoiceCallActivity target=active;if(target!=null)target.main.post(()->target.setStateText("正在处理你的话"));}
-  static void onSessionEnded(String reason){VoiceMiniOverlay.hide();VoiceCallActivity target=active;if(target!=null)target.main.post(()->{target.setOrbState("ended");target.setStateText(Ui.errorMessage(reason));});MainActivity.clearForegroundVoice();}
+  static void onSessionEnded(String reason){VoiceMiniOverlay.hide();VoiceCallActivity target=active;if(target!=null)target.main.post(()->{target.setOrbState("ended");target.setStateText(Ui.errorMessage(reason));});}
   static boolean isActive(){return active!=null;}
   static boolean isForeground(){return foreground&&active!=null;}
   static boolean hasLiveController(){return controllerSession;}
 
   @Override protected void onCreate(Bundle state){
-    super.onCreate(state);runtime=PiRuntime.get(getApplicationContext());theme=new Ui.Theme(this);active=this;camera=CameraCoordinator.get(this);VoiceCoordinator.get(this);
+    super.onCreate(state);runtime=PiRuntime.get(getApplicationContext());theme=new Ui.Theme(this);active=this;camera=CameraCoordinator.get(this);coordinator=VoiceCoordinator.get(this);
     setVolumeControlStream(android.media.AudioManager.STREAM_VOICE_CALL);
     getWindow().setStatusBarColor(0xff070b12);getWindow().setNavigationBarColor(0xff070b12);getWindow().getDecorView().setSystemUiVisibility(0);
-    AssistantSessionService.yieldToCall();if(AssistantOverlay.currentPanel()!=null)AssistantOverlay.preserveDraft(AssistantOverlay.currentPanel().draft());AssistantOverlay.hide();CircleOverlay.hideBubble();
+    AssistantSessionService.yieldToCall();
     LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setBackgroundColor(0xff070b12);root.setKeepScreenOn(true);
     getWindow().setDecorFitsSystemWindows(false);
     root.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets bars=insets.getInsets(android.view.WindowInsets.Type.systemBars());root.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;});
@@ -106,7 +105,7 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     audioOutput.setPadding(Ui.dp(this,12),0,Ui.dp(this,12),0);audioOutput.setBackground(Ui.ripple(this,0xff172235,22,0xffc5d3e5));audioOutput.setOnClickListener(v->showAudioOutputs());
     LinearLayout.LayoutParams audioParams=new LinearLayout.LayoutParams(-2,Ui.dp(this,44));audioParams.gravity=Gravity.CENTER_HORIZONTAL;root.addView(audioOutput,audioParams);
     LinearLayout controls=new LinearLayout(this);controls.setGravity(Gravity.CENTER);controls.setPadding(0,Ui.dp(this,8),0,0);
-    controls.addView(callAction(R.drawable.ic_chat_circle_text,"转文字","切换到文字对话",0xff223047,()->{startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}),new LinearLayout.LayoutParams(Ui.dp(this,72),Ui.dp(this,72)));
+    controls.addView(callAction(R.drawable.ic_chat_circle_text,"转文字","切换到终端",0xff223047,()->{startActivity(new Intent(this,TerminalActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}),new LinearLayout.LayoutParams(Ui.dp(this,72),Ui.dp(this,72)));
     cameraAction=callAction(R.drawable.ic_camera,"","开启摄像头",0xff223047,this::toggleCamera);cameraAction.setOnLongClickListener(v->{cameraMenu();return true;});controls.addView(cameraAction,new LinearLayout.LayoutParams(Ui.dp(this,72),Ui.dp(this,72)));
     FrameLayout.LayoutParams endParams=new FrameLayout.LayoutParams(Ui.dp(this,84),Ui.dp(this,84));endParams.setMargins(Ui.dp(this,24),0,Ui.dp(this,24),0);
     controls.addView(callAction(R.drawable.ic_x,"","结束实时通话",0xffff4553,this::endCall),endParams);
@@ -130,13 +129,14 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
     runtime.listen(this);
     VoiceMiniOverlay.hide();
     setLiveText("打开摄像头，每次提问附一张画面");
-    VoiceTurnController controller=MainActivity.activeVoice();
+    VoiceTurnController controller=coordinator.controller;
     if(controller!=null&&controller.sessionActive()){
       session=true;speaking=controller.speaking();setOrbState(speaking?"speaking":controller.listeningForInput()?"listening":"thinking");
       setStateText(speaking?"正在播报 · 点头像可打断":controller.listeningForInput()?"正在听…":"正在思考…");
     }else{setOrbState("preparing");setStateText("语音未开启 · 点麦克风开始");}
     if(runtime.agentAvatar!=null&&!runtime.agentAvatar.isEmpty()){orb.setAvatar(runtime.agentAvatar);videoOrb.setAvatar(runtime.agentAvatar);}
     startedAt=System.currentTimeMillis();
+    acceptWakeEntry();
   }
 
   private View callAction(int icon,String label,String description,int fill,Runnable action){
@@ -183,38 +183,44 @@ public final class VoiceCallActivity extends Activity implements PiRuntime.Liste
   @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);boolean granted=results.length>0&&results[0]==android.content.pm.PackageManager.PERMISSION_GRANTED;if(request==31){if(granted)toggleCamera();else setStateText("未允许相机，语音仍可继续");}else if(request==32){if(granted)tapMicrophone();else setStateText("未允许麦克风，可继续查看画面");}}
   private void tapMicrophone(){
     if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},32);return;}
-    VoiceTurnController controller=MainActivity.activeVoice();
-    if(controller==null){setStateText("语音控制器已释放，请从聊天重新开始");setOrbState("error");return;}
-    if(controller.sessionActive()){controller.forceInterrupt();}else controller.beginSession();
+    VoiceTurnController controller=coordinator.controller;
+    if(controller.sessionActive()){controller.forceInterrupt();return;}
+    if(!runtime.configured){setStateText("请先在设置中连接模型");SystemWindowNavigation.open(this,SettingsActivity.class);return;}
+    if(runtime.busy)controller.beginTaskVoice();else controller.beginSession();
   }
   private void endCall(){
     camera.endVideo(this);
-    VoiceTurnController controller=MainActivity.activeVoice();
-    if(controller!=null)controller.stopSession(false);
+    coordinator.controller.stopSession(false);
     finish();
   }
 
-  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);}
+  private void acceptWakeEntry(){
+    long id=getIntent().getLongExtra("wake_event_id",0);if(id<=0)return;getIntent().removeExtra("wake_event_id");
+    if(!VoiceWakeService.pending(id))return;
+    if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=android.content.pm.PackageManager.PERMISSION_GRANTED){VoiceWakeService.discard(id);setStateText("麦克风权限不可用，语音尚未接通");return;}
+    coordinator.requestWake(id);
+  }
+  @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);acceptWakeEntry();}
   @Override protected void onResume(){super.onResume();active=this;foreground=true;UserQuestions.listen(questionChanged);AudioModeOwner.listen(audioChanged);VoiceMiniOverlay.hide();getWindow().getDecorView().post(()->{if(active==this&&foreground)VoiceCoordinator.get(this).voiceViewReady(true);});if(video&&(!camera.owns(this)||!camera.ready())){cameraStatus.setText("摄像头已暂停，点击相机恢复");cameraAction.setContentDescription("恢复摄像头");}}
   @Override protected void onPause(){UserQuestions.unlisten(questionChanged);AudioModeOwner.unlisten(audioChanged);SystemWindowNavigation.remember(this);super.onPause();if(active==this){foreground=false;VoiceCoordinator.get(this).voiceViewReady(false);}if(!isFinishing())VoiceMiniOverlay.showIfCallActive(this);}
   @Override protected void onStop(){camera.pause(this);super.onStop();}
   @Override protected void onDestroy(){if(audioDialog!=null)audioDialog.dismiss();if(isFinishing())camera.endVideo(this);camera.detach(this);if(active==this)active=null;runtime.unlisten(this);super.onDestroy();}
-  @Override public void onBackPressed(){startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP));finish();}
+  @Override public void onBackPressed(){navigateUp();}
 
   @Override public void event(JSONObject event){
     String type=event.optString("type");
     if(type.equals("agent_identity")){main.post(()->{if(orb!=null)orb.setAvatar(runtime.agentAvatar);if(videoOrb!=null)videoOrb.setAvatar(runtime.agentAvatar);});return;}
     if(type.equals("turn_start")){main.post(()->{session=true;speaking=false;assistantText="";setLiveText(runtime.lastPromptText);setStateText("正在思考…");setOrbState("thinking");});return;}
     if(type.equals("assistant_start"))return;
-    if(type.equals("delta")){main.post(()->{VoiceTurnController vc=MainActivity.activeVoice();
+    if(type.equals("delta")){main.post(()->{VoiceTurnController vc=coordinator.controller;
       if(vc==null||!vc.listeningForInput()){session=true;speaking=vc!=null&&vc.speaking();setOrbState(speaking?"speaking":"thinking");if(speaking)setStateText(runtime.agentName+" 正在说话");}
       String latest=runtime.lastResponse;int cut=Math.max(0,latest.length()-200);
       setLiveText(cut>0?"…"+latest.substring(cut):latest);});return;}
     if(type.equals("tool_execution")){main.post(()->{
-      VoiceTurnController vc=MainActivity.activeVoice();
+      VoiceTurnController vc=coordinator.controller;
       if(vc==null||!vc.listeningForInput()){setStateText(PhoneHud.action(event));setOrbState("thinking");}
       });return;}
-    if(type.equals("turn_end")){main.post(()->{VoiceTurnController vc=MainActivity.activeVoice();session=vc!=null&&vc.sessionActive();speaking=vc!=null&&vc.speaking();assistantText=runtime.lastResponse;setOrbState(!session?"ended":speaking?"speaking":"listening");if(speaking)setStateText("播报完成后自动听你说话");});return;}
+    if(type.equals("turn_end")){main.post(()->{VoiceTurnController vc=coordinator.controller;session=vc.sessionActive();speaking=vc.speaking();assistantText=runtime.lastResponse;setOrbState(!session?"ended":speaking?"speaking":"listening");if(speaking)setStateText("播报完成后自动听你说话");});return;}
     if(type.equals("error")){main.post(()->{setStateText("通话出现错误，请看状态");setOrbState("error");});return;}
   }
 

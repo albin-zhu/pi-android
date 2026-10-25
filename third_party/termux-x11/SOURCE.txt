@@ -2,17 +2,29 @@ Termux:X11 embedded native engine and adapted Android JNI integration
 
 Upstream: https://github.com/termux/termux-x11
 Exact source: fa3a8b430e2896a19f44c99a9cb056254615ae06
-Official APK version: 1.03.01-fa3a8b4-06.10.26
+Upstream reference APK version: 1.03.01-fa3a8b4-06.10.26 (not the shipped native binary)
 License: GNU GPL version 3; see LICENSE.txt. Native dependencies also retain
  their respective upstream licenses in the source repositories.
 
-The full commit appears in the APK's classes.dex. The release body identifies
-that same commit. The release tag "nightly" is NOT an immutable source pin:
-scripts/x11_assets.py verifies the APK checksum, embedded commit string and
-extracted native checksum, and refuses a changed nightly artifact. sources.json
-records all observed artifact checksums, source archive checksum, dynamic
-libraries and exact submodule gitlinks. The source archive alone is incomplete:
-GitHub-generated archives omit submodule contents.
+This application ships a locally modified, source-built libXlorie.so. It does
+not extract its native engine from the upstream nightly APK. The repository's
+sources.json retains the upstream reference APK/native checksums, source archive
+checksum and exact submodule gitlinks; these are upstream provenance, not hashes
+of the modified binary. GitHub-generated source archives omit submodule contents.
+
+scripts/x11_native.py verifies the source archive and every pinned submodule
+archive against sources.json and build-inputs.json. Before using a materialized
+tree, it compares all files and symlinks against manifests derived directly from
+those verified archives; a writable cache marker alone is never trusted.
+It applies third_party/termux-x11/overrides/ relative to lorie/src/main/cpp and
+builds the Xlorie CMake target, including the rootless tracker and JNI bridge.
+The build fingerprint covers override hashes, builder and input pins, and tools.
+
+scripts/x11_assets.py generates artifact-specific sources.json for the APK:
+native.modified is true and native.sha256 identifies the actual shipped library.
+The upstream reference APK/native records are explicitly nested under
+upstream_artifacts. The accompanying native-build.json records the source commit,
+override hashes, build fingerprint, toolchain and resulting native checksum.
 
 Retrieve the corresponding upstream source, including build scripts and all
 pinned dependencies (do not use submodule update --remote):
@@ -21,13 +33,27 @@ pinned dependencies (do not use submodule update --remote):
   git -C termux-x11-source checkout --detach fa3a8b430e2896a19f44c99a9cb056254615ae06
   git -C termux-x11-source submodule update --init --recursive
 
-Check the submodule commits against sources.json. The exact superproject tree
-includes CMake recipes, patches and Gradle/toolchain configuration. Native
-sources are under lorie/src/main/cpp. Upstream builds the Xlorie CMake target;
-lorie/version.gradle records its NDK version. No native modifications are made
-to the extracted libXlorie.so by this project. The upstream engine's auxiliary
-TCP knock listener is not disabled by -nolisten tcp: the embedding service must
-apply this project's process-wide network guard before loading/starting it.
+Check the submodule commits against the repository's sources.json. The exact
+superproject tree includes CMake recipes, patches and Gradle/toolchain settings.
+Native sources are under lorie/src/main/cpp. Apply this project's complete
+overrides tree and build with its helper rather than building upstream alone.
+
+From this project's source root:
+
+  python3 scripts/x11_native.py --prepare-only
+  python3 scripts/x11_assets.py --native .build/apk/lib/arm64-v8a --assets .build/assets
+
+On Ubuntu aarch64, the helper uses host clang-18 and a locally extracted,
+checksum-pinned toolchain: complete official NDK r29 headers and Android API30
+link stubs, static C++ runtimes, Termux compiler-rt, and Ubuntu build tools.
+X11_TOOLCHAIN_ROOT selects its cache; X11_SOURCE_ROOT selects the pristine source
+tree. On other hosts, set ANDROID_NDK_HOME and provide CMake, Ninja, Bison, patch,
+and the host C compiler. The standard NDK route also uses Android API30 and
+static libc++. No native build failure falls back to the upstream APK library.
+
+The upstream engine's auxiliary TCP knock listener is not disabled by
+-nolisten tcp: the embedding service must apply this project's process-wide
+network guard before loading/starting it.
 
 This project's adapted Java sources, network guard, packaging scripts and build
 configuration are also part of the source needed for the combined application.

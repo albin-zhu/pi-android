@@ -40,7 +40,11 @@ import java.util.zip.ZipInputStream;
 /** Same UID, separate :x11server process: Xorg's exit() must never terminate the app. */
 public final class X11Service extends Service {
     static final int WATCH = 1, ATTACH = 2, DETACH = 3, STOP = 4;
-    static final int STATUS = 10, CONNECTION = 11;
+    static final int STATUS = 10, WINDOWS = 11, RESIZE = 12, FOCUS = 13,
+            POINTER = 14, KEY = 15, TEXT = 16, CLOSE = 17, RELEASE = 18;
+    static final int CLIPBOARD_ENABLED = 19, CLIPBOARD_ANNOUNCE = 20, CLIPBOARD_TEXT = 21,
+            CLIPBOARD_RECEIVED = 22, CLIPBOARD_REQUEST = 23;
+    static final int IME_RESET = 24, POPUP_OUTCOME = 25, GAMEPAD = 26;
     static final String ACTION_START = "com.termux.x11.START";
     static final String ACTION_STOP = "com.termux.x11.STOP";
     private static final String CHANNEL = "embedded-x11";
@@ -51,13 +55,36 @@ public final class X11Service extends Service {
     private final Map<IBinder, Client> clients = new LinkedHashMap<>();
     private CmdEntryPoint entry;
     private String state = "Stopped";
+    private final String session = java.util.UUID.randomUUID().toString();
+    private final Map<Long, Bundle> windows = new LinkedHashMap<>();
+    private RootlessNative renderer;
+    private long rendererHandle, nextLease;
+    private boolean rendererConnected;
+    private volatile Client clipboardOwner;
+    private volatile Client focusedClient;
+    private GamepadPublisher gamepad;
+    private Client gamepadOwner;
+    private String gamepadError;
+    private final Runnable gamepadHeartbeat = new Runnable() {
+        @Override public void run() {
+            if (stopping || gamepad == null) return;
+            try {
+                gamepad.heartbeat(SystemClock.elapsedRealtime());
+                handler.postDelayed(this, 500);
+            } catch (IOException error) { disableGamepad(error); }
+        }
+    };
+    private final java.util.Set<String> announcedWindows = new java.util.HashSet<>();
+    private final Map<Long, Long> generations = new LinkedHashMap<>();
+    private final Map<String, Runnable> popupTimeouts = new LinkedHashMap<>();
+    private static final long POPUP_TIMEOUT_MS = 8000;
 
     public static void start(Context context) {
         context.startForegroundService(new Intent(context, X11Service.class).setAction(ACTION_START));
     }
     private boolean starting, ready;
     private volatile boolean stopping;
-    private boolean drainScheduled;
+    private boolean connecting, connectionRetryScheduled;
 
     // Implemented by the app's Unix-only seccomp guard, before any Xlorie code is loaded.
     static native int restrictNetwork();
@@ -65,7 +92,8 @@ public final class X11Service extends Service {
     private final class Client implements IBinder.DeathRecipient {
         final Messenger reply;
         final int token;
-        boolean wantsConnection;
+        volatile long window, generation, lease, surface;
+        boolean readOnly;
         Client(Messenger reply, int token) { this.reply = reply; this.token = token; }
         @Override public void binderDied() { handler.post(() -> removeClient(reply.getBinder(), token)); }
     }
@@ -100,26 +128,135 @@ public final class X11Service extends Service {
     private boolean handleMessage(Message message) {
         if (message.sendingUid != Process.myUid()) return true;
         if (message.what == STOP) { stopServer(); return true; }
-        if (message.replyTo == null || stopping) return true;
+        if (message.replyTo == null) return true;
+        if (stopping) {
+            if (message.what == WATCH) sendStatus(new Client(message.replyTo, message.arg1));
+            return true;
+        }
         IBinder binder = message.replyTo.getBinder();
         Client client = clients.get(binder);
         if (message.what == WATCH) {
-            if (client != null) binder.unlinkToDeath(client, 0);
+            if (client != null) removeClient(binder, client.token);
             client = new Client(message.replyTo, message.arg1);
+            client.readOnly = message.getData().getBoolean("readOnly", true);
             try { binder.linkToDeath(client, 0); } catch (RemoteException dead) { return true; }
             clients.put(binder, client);
             sendStatus(client);
+            sendWindows(client);
         } else if (client != null && client.token == message.arg1) {
-            if (message.what == ATTACH) { client.wantsConnection = true; drainConnections(); }
-            else if (message.what == DETACH) removeClient(binder, message.arg1);
+            Bundle data = message.getData();
+            data.setClassLoader(android.view.Surface.class.getClassLoader());
+            if (message.what == DETACH) removeClient(binder, message.arg1);
+            else if (session.equals(data.getString("session"))) dispatch(client, message.what, data);
         }
         return true;
+    }
+
+    private String windowKey(Bundle info) {
+        return session + ":" + info.getLong("window") + ":" + info.getLong("generation");
+    }
+
+    private void openNewWindow(Bundle info) {
+        String key = windowKey(info);
+        info.putString("popupState", "requested");
+        updateWindowNotification(info);
+        Runnable timeout = () -> {
+            popupTimeouts.remove(key);
+            Bundle current = windows.get(info.getLong("window"));
+            if (!stopping && current != null && windowKey(current).equals(key)
+                    && "requested".equals(current.getString("popupState"))) {
+                current.putString("popupState", "unconfirmed");
+                updateWindowNotification(current);
+                broadcastWindows();
+            }
+        };
+        popupTimeouts.put(key, timeout);
+        handler.postDelayed(timeout, POPUP_TIMEOUT_MS);
+        try { WindowActivity.open(this, session, info, false); }
+        catch (RuntimeException error) {
+            Log.w("EmbeddedX11", "System popup request rejected", error);
+            clearPopupTimeout(info);
+            info.putString("popupState", "blocked");
+            updateWindowNotification(info);
+        }
+    }
+
+    private void clearPopupTimeout(Bundle info) {
+        Runnable timeout = popupTimeouts.remove(windowKey(info));
+        if (timeout != null) handler.removeCallbacks(timeout);
+    }
+
+    static String popupDescription(String outcome) {
+        if ("requested".equals(outcome)) return "Requesting system popup…";
+        if ("popup".equals(outcome)) return "System popup open";
+        if ("not-popup".equals(outcome)) return "Android opened a regular window, not a popup";
+        if ("blocked".equals(outcome)) return "Android rejected the popup request · tap to open";
+        if ("unconfirmed".equals(outcome)) return "Popup not confirmed · tap to open";
+        if ("hidden".equals(outcome)) return "Window hidden · tap to reopen";
+        return "";
+    }
+
+    private void updateWindowNotification(Bundle info) {
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        String outcome = info.getString("popupState");
+        if (stopping || "popup".equals(outcome) || "hidden".equals(outcome)) {
+            manager.cancel(windowKey(info), 120);
+            return;
+        }
+        try {
+            PendingIntent open = PendingIntent.getActivity(this, 0,
+                    WindowActivity.intent(this, session, info, false),
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE,
+                    dev.zfold.assistant.SystemWindowNavigation.popupOptions(this));
+            PendingIntent list = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class),
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            Notification notification = new Notification.Builder(this, CHANNEL)
+                    .setSmallIcon(android.R.drawable.ic_menu_view)
+                    .setContentTitle(info.getString("title", "X11 application"))
+                    .setContentText(popupDescription(outcome))
+                    .setContentIntent(open).setOnlyAlertOnce(true)
+                    .addAction(new Notification.Action.Builder(null, "Window manager", list).build()).build();
+            manager.notify(windowKey(info), 120, notification);
+        } catch (RuntimeException error) { Log.w("EmbeddedX11", "Cannot post window notification", error); }
+    }
+
+    private void popupOutcome(Bundle data) {
+        Bundle info = windows.get(data.getLong("window"));
+        if (info == null || info.getLong("generation") != data.getLong("generation")) return;
+        String outcome = !data.getBoolean("visible") ? "hidden"
+                : data.getBoolean("popup") ? "popup" : "not-popup";
+        clearPopupTimeout(info);
+        if (outcome.equals(info.getString("popupState"))) return;
+        info.putString("popupState", outcome);
+        updateWindowNotification(info);
+        broadcastWindows();
+    }
+
+    private void retireWindow(Bundle info) {
+        clearPopupTimeout(info);
+        getSystemService(NotificationManager.class).cancel(windowKey(info), 120);
+        Intent intent = WindowActivity.intent(this, session, info, false);
+        PendingIntent pending = PendingIntent.getActivity(this, 0, intent,
+                PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+        if (pending != null) pending.cancel();
+        android.app.ActivityManager manager = getSystemService(android.app.ActivityManager.class);
+        for (android.app.ActivityManager.AppTask task : manager.getAppTasks()) {
+            try {
+                Intent base = task.getTaskInfo().baseIntent;
+                if (base != null && intent.getData().equals(base.getData())) task.finishAndRemoveTask();
+            } catch (RuntimeException error) { Log.w("EmbeddedX11", "Cannot remove closed window task", error); }
+        }
+    }
+
+    private void broadcastWindows() {
+        for (Client client : new ArrayList<>(clients.values())) sendWindows(client);
     }
 
     private void removeClient(IBinder binder, int token) {
         Client client = clients.get(binder);
         if (client == null || client.token != token) return;
         clients.remove(binder);
+        release(client);
         binder.unlinkToDeath(client, 0);
     }
 
@@ -132,40 +269,176 @@ public final class X11Service extends Service {
         Message response = Message.obtain(null, STATUS, client.token, ready ? 1 : 0);
         Bundle data = new Bundle();
         data.putString("status", state);
+        data.putString("display", ":9");
+        data.putBoolean("running", !stopping && (starting || ready));
+        data.putBoolean("ready", ready && rendererConnected && !stopping);
+        data.putInt("windowCount", windows.size());
         data.putBoolean("starting", starting);
         data.putBoolean("stopping", stopping);
+        response.setData(data);
+        data.putString("session", session);
+        data.putBoolean("rendererConnected", rendererConnected);
+        data.putBoolean("gamepadReady", gamepad != null && rendererConnected && !stopping);
+        if (gamepadError != null) data.putString("gamepadError", gamepadError);
+        try { client.reply.send(response); }
+        catch (RemoteException dead) { removeClient(client.reply.getBinder(), client.token); }
+    }
+
+    private void release(Client client) {
+        disableClipboard(client);
+        releaseGamepad(client);
+        if (focusedClient == client) focusedClient = null;
+        if (client.lease != 0 && rendererHandle != 0)
+            renderer.detach(rendererHandle, client.window, client.generation, client.lease);
+        client.lease = 0;
+    }
+
+    private void dispatch(Client client, int command, Bundle data) {
+        long window = data.getLong("window"), generation = data.getLong("generation");
+        if (command == POPUP_OUTCOME) { popupOutcome(data); return; }
+        Bundle info = windows.get(window);
+        if ((window != 0 && (info == null || info.getLong("generation") != generation))
+                || (window == 0 && generation != 0) || !rendererConnected) return;
+        long surfaceId = data.getLong("surfaceId");
+        if (command == ATTACH) {
+            android.view.Surface surface = data.getParcelable("surface");
+            if (surface == null) return;
+            try {
+                if (!surface.isValid() || surfaceId <= client.surface) return;
+                release(client);
+                for (Client other : clients.values())
+                    if (other != client && other.window == window && other.generation == generation) release(other);
+                client.window = window; client.generation = generation; client.surface = surfaceId;
+                client.readOnly = window == 0 || data.getBoolean("readOnly");
+                client.lease = ++nextLease;
+                renderer.attach(rendererHandle, window, generation, client.lease, surface,
+                        dimension(data, "width"), dimension(data, "height"), client.readOnly);
+            } finally { surface.release(); }
+            return;
+        }
+        if (client.lease == 0 || client.window != window || client.generation != generation || client.surface != surfaceId) return;
+        if (command == RELEASE) { release(client); return; }
+        if (client.readOnly) return;
+        switch (command) {
+            case RESIZE: renderer.resize(rendererHandle, window, generation, dimension(data, "width"), dimension(data, "height")); break;
+            case FOCUS:
+                if (focusedClient != client) releaseGamepad(gamepadOwner);
+                if (clipboardOwner != null && clipboardOwner != client) disableClipboard(clipboardOwner);
+                focusedClient = client;
+                renderer.focus(rendererHandle, window, generation);
+                break;
+            case POINTER: renderer.pointer(rendererHandle, window, generation, data.getFloat("x"), data.getFloat("y"),
+                    data.getInt("button"), data.getBoolean("down"), data.getBoolean("relative")); break;
+            case KEY: renderer.key(rendererHandle, window, generation, data.getInt("scanCode"), data.getInt("keyCode"), data.getBoolean("down")); break;
+            case TEXT: String text = data.getString("text"); if (text != null) renderer.text(rendererHandle, window, generation, text); break;
+            case CLOSE: renderer.closeWindow(rendererHandle, window, generation); break;
+            case GAMEPAD: publishGamepad(client, data); break;
+            case CLIPBOARD_ENABLED:
+                if (data.getBoolean("enabled")) {
+                    if (focusedClient != client) return;
+                    if (clipboardOwner != null && clipboardOwner != client) disableClipboard(clipboardOwner);
+                    clipboardOwner = client;
+                    renderer.clipboardEnabled(rendererHandle, window, generation, true);
+                } else {
+                    releaseGamepad(client);
+                    disableClipboard(client);
+                    // Activity sends disable on blur/pause; it no longer owns focused UI callbacks.
+                    if (focusedClient == client) focusedClient = null;
+                }
+                break;
+            case CLIPBOARD_ANNOUNCE:
+                if (clipboardOwner == client) renderer.clipboardAnnounce(rendererHandle, window, generation);
+                break;
+            case CLIPBOARD_TEXT:
+                if (clipboardOwner == client) renderer.clipboardText(rendererHandle, window, generation, data.getString("text", ""));
+                break;
+        }
+    }
+
+    private void publishGamepad(Client client, Bundle data) {
+        if (gamepad == null || focusedClient != client) return;
+        try {
+            if (gamepad.update(data.getInt("buttons"), data.getIntArray("axes"), SystemClock.elapsedRealtime()))
+                gamepadOwner = client;
+            else releaseGamepad(client);
+        } catch (IOException error) { disableGamepad(error); }
+    }
+
+    private void releaseGamepad(Client client) {
+        if (client == null || gamepadOwner != client) return;
+        gamepadOwner = null;
+        if (gamepad != null) try { gamepad.neutral(SystemClock.elapsedRealtime()); }
+        catch (IOException error) { disableGamepad(error); }
+    }
+
+    private void disableGamepad(IOException error) {
+        handler.removeCallbacks(gamepadHeartbeat);
+        gamepadOwner = null;
+        GamepadPublisher previous = gamepad;
+        gamepad = null;
+        if (previous != null) try { previous.close(); }
+        catch (IOException closeError) { Log.w("EmbeddedX11", "Cannot close gamepad state", closeError); }
+        if (error != null) {
+            gamepadError = error.getMessage();
+            Log.e("EmbeddedX11", "Gamepad bridge unavailable", error);
+            for (Client client : new ArrayList<>(clients.values())) sendStatus(client);
+        }
+    }
+
+    private void disableClipboard(Client client) {
+        if (clipboardOwner != client) return;
+        clipboardOwner = null;
+        if (rendererHandle != 0) renderer.clipboardEnabled(rendererHandle, client.window, client.generation, false);
+    }
+
+    private void forwardCallback(int what, long window, long generation, String text) {
+        Client owner = what == IME_RESET ? focusedClient : clipboardOwner;
+        if (owner == null) return;
+        long lease = owner.lease;
+        handler.post(() -> {
+            if (stopping || !rendererConnected || owner != focusedClient
+                    || (what != IME_RESET && owner != clipboardOwner) || lease == 0 || owner.lease != lease
+                    || owner.readOnly || owner.window != window || owner.generation != generation) return;
+            Message message = Message.obtain(null, what, owner.token, 0);
+            Bundle data = new Bundle();
+            data.putString("session", session); data.putLong("window", window); data.putLong("generation", generation);
+            data.putLong("surfaceId", owner.surface); data.putString("text", text);
+            message.setData(data);
+            try { owner.reply.send(message); }
+            catch (RemoteException dead) { removeClient(owner.reply.getBinder(), owner.token); }
+        });
+    }
+
+    private static int dimension(Bundle data, String name) { return Math.max(1, Math.min(16384, data.getInt(name))); }
+
+    private void sendWindows(Client client) {
+        Message response = Message.obtain(null, WINDOWS, client.token, 0);
+        Bundle data = new Bundle();
+        data.putString("session", session);
+        data.putParcelableArrayList("windows", new ArrayList<>(windows.values()));
         response.setData(data);
         try { client.reply.send(response); }
         catch (RemoteException dead) { removeClient(client.reply.getBinder(), client.token); }
     }
 
-    private void drainConnections() {
-        if (!ready || stopping) return;
-        boolean pending = false;
-        for (Client client : new ArrayList<>(clients.values())) {
-            if (!client.wantsConnection) continue;
-            if (CmdEntryPoint.connected()) { pending = true; break; }
-            client.wantsConnection = false;
-            // Never replace a still-live native connection: its later HUP would clear the new one.
-            try (ParcelFileDescriptor fd = entry.getXConnection()) {
-                if (fd == null) throw new IOException("Native renderer socket was not created");
-                Message response = Message.obtain(null, CONNECTION, client.token, 0);
-                Bundle data = new Bundle();
-                data.putParcelable("fd", fd);
-                response.setData(data);
-                client.reply.send(response);
-            } catch (IOException | RemoteException error) {
-                Log.w("EmbeddedX11", "Renderer connection failed", error);
-                removeClient(client.reply.getBinder(), client.token);
+    private void connectRenderer() {
+        if (!ready || stopping || connecting || rendererConnected) return;
+        // The old Xorg endpoint's HUP clears global conn_fd. Never replace it before that teardown.
+        if (CmdEntryPoint.connected()) {
+            if (!connectionRetryScheduled) {
+                connectionRetryScheduled = true;
+                handler.postDelayed(() -> {
+                    connectionRetryScheduled = false;
+                    connectRenderer();
+                }, 100);
             }
-            // getXConnection queues registration on Xorg's thread; let that finish before another.
-            pending = true;
-            break;
+            return;
         }
-        if (pending && !drainScheduled) {
-            drainScheduled = true;
-            handler.postDelayed(() -> { drainScheduled = false; drainConnections(); }, 100);
-        }
+        connecting = true;
+        try (ParcelFileDescriptor fd = entry.getXConnection()) {
+            if (fd == null) throw new IOException("Native renderer socket was not created");
+            renderer.connect(rendererHandle, fd.detachFd());
+        } catch (IOException | RuntimeException error) { fail(error); }
     }
 
     private void startServer() {
@@ -199,13 +472,98 @@ public final class X11Service extends Service {
             // A trailing slash keeps that call from changing the actual temporary directory.
             Os.setenv("TMPDIR", tmp.getAbsolutePath() + "/", true);
             Os.setenv("XKB_CONFIG_ROOT", xkb.getAbsolutePath(), true);
+            try {
+                gamepad = new GamepadPublisher(new File(tmp.getParentFile(), "gamepad"),
+                        Process.myPid(), SystemClock.elapsedRealtime());
+                handler.postDelayed(gamepadHeartbeat, 500);
+            } catch (IOException gamepadFailure) { disableGamepad(gamepadFailure); }
             entry = new CmdEntryPoint(this);
+            renderer = new RootlessNative(new RootlessNative.Listener() {
+                @Override public void window(long window, long generation, int width, int height, String title, boolean present) {
+                    handler.post(() -> {
+                        if (stopping) return;
+                        Long latest = generations.get(window);
+                        if (latest != null && generation < latest) return;
+                        Bundle old = windows.get(window);
+                        if (present) {
+                            generations.put(window, generation);
+                            if (old != null && old.getLong("generation") != generation) {
+                                retireWindow(old);
+                                for (Client client : clients.values())
+                                    if (client.window == window && client.generation == old.getLong("generation")) release(client);
+                                old = null;
+                            }
+                            boolean firstAppearance = window != 0 && announcedWindows.add(window + ":" + generation);
+                            Bundle info = old == null ? new Bundle() : new Bundle(old);
+                            info.putLong("window", window); info.putLong("generation", generation);
+                            info.putInt("width", width); info.putInt("height", height); info.putString("title", title);
+                            windows.put(window, info);
+                            if (firstAppearance) openNewWindow(info);
+                            else if (window != 0 && info.containsKey("popupState")) updateWindowNotification(info);
+                        } else {
+                            generations.put(window, generation);
+                            if (old != null && old.getLong("generation") == generation) {
+                                windows.remove(window);
+                                retireWindow(old);
+                            }
+                            for (Client client : clients.values())
+                                if (client.window == window && client.generation == generation) release(client);
+                        }
+                        broadcastWindows();
+                    });
+                }
+                @Override public void clipboardText(long window, long generation, String text) {
+                    forwardCallback(CLIPBOARD_RECEIVED, window, generation, text);
+                }
+                @Override public void clipboardRequest(long window, long generation) {
+                    forwardCallback(CLIPBOARD_REQUEST, window, generation, null);
+                }
+                @Override public void imeReset(long window, long generation) {
+                    forwardCallback(IME_RESET, window, generation, null);
+                }
+                @Override public void error(String message) { handler.post(() -> setState("X11: " + message)); }
+                @Override public void connected(boolean connected) {
+                    handler.post(() -> {
+                        rendererConnected = connected; connecting = false;
+                        if (!connected) releaseGamepad(gamepadOwner);
+                        if (!stopping) {
+                            setState(connected ? "Running :9 · independent application windows" : "X11 renderer disconnected");
+                            if (!connected && ready) handler.postDelayed(() -> connectRenderer(), 250);
+                        }
+                    });
+                }
+            });
+            rendererHandle = renderer.create();
+            if (rendererHandle == 0) throw new IOException("Rootless renderer initialization failed");
+            configureDisplay();
             // JNI obtains AChoreographer and starts Xorg's thread: this call belongs on main Looper.
             if (!entry.start(new String[]{":9", "-nolisten", "tcp", "-auth", authority.getAbsolutePath(), "-noreset"}))
                 throw new IOException("Native X11 initialization failed");
             setState("Starting authenticated X11 display :9…");
             new Thread(() -> awaitReady(new File(tmp, ".X11-unix/X9"), cookie), "X11-ready").start();
         } catch (Exception | LinkageError error) { fail(error); }
+    }
+
+    private void configureDisplay() {
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        int edge = Math.max(metrics.widthPixels, metrics.heightPixels);
+        int refreshRate = 60;
+        android.hardware.display.DisplayManager manager = getSystemService(android.hardware.display.DisplayManager.class);
+        android.view.Display display = manager == null ? null : manager.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+        if (display != null) {
+            android.graphics.Point size = new android.graphics.Point();
+            display.getRealSize(size);
+            edge = Math.max(edge, Math.max(size.x, size.y));
+            for (android.view.Display.Mode mode : display.getSupportedModes())
+                edge = Math.max(edge, Math.max(mode.getPhysicalWidth(), mode.getPhysicalHeight()));
+            float rate = display.getRefreshRate();
+            if (Float.isFinite(rate) && rate > 0) refreshRate = Math.round(rate);
+        }
+        edge = Math.max(64, Math.min(8192, edge > 0 ? edge : 1280));
+        refreshRate = Math.max(1, Math.min(240, refreshRate));
+        // One fixed square virtual canvas trades root-buffer memory for rotation/fold headroom.
+        // Activities only resize their own X windows; attaching or readonly viewing never resizes root.
+        renderer.configureDisplay(rendererHandle, edge, edge, refreshRate);
     }
 
     private void awaitReady(File socket, byte[] cookie) {
@@ -227,7 +585,7 @@ public final class X11Service extends Service {
                     if (stopping) return;
                     starting = false; ready = true;
                     setState("Running :9 · DISPLAY=:9");
-                    drainConnections();
+                    connectRenderer();
                 });
                 return;
             } catch (Exception error) {
@@ -255,6 +613,15 @@ public final class X11Service extends Service {
     }
 
     private void finishProcess() {
+        disableGamepad(null);
+        for (Bundle info : windows.values()) retireWindow(info);
+        windows.clear();
+        broadcastWindows();
+        if (rendererHandle != 0) {
+            renderer.destroy(rendererHandle);
+            rendererHandle = 0;
+            rendererConnected = false;
+        }
         stopForeground(STOP_FOREGROUND_REMOVE);
         // Give Xorg its normal signal teardown (including socket/lock cleanup). The deadline
         // also covers native initialization failures before its signal handlers were installed.
@@ -268,6 +635,10 @@ public final class X11Service extends Service {
 
     @Override public void onDestroy() {
         stopping = true;
+        disableGamepad(null);
+        for (Bundle info : windows.values()) retireWindow(info);
+        windows.clear();
+        handler.removeCallbacksAndMessages(null);
         super.onDestroy();
         Process.killProcess(Process.myPid());
     }

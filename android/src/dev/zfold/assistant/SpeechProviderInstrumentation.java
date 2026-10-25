@@ -11,7 +11,7 @@ import java.util.concurrent.*;
 
 /** Emulator only. Optional live tests use fixed synthetic audio, never a microphone. */
 public final class SpeechProviderInstrumentation extends Instrumentation {
-  private boolean live;private CloudTtsPlayer player;private CloudAsrClient recognizer;private MainActivity chat;private AlertDialog dialog;
+  private boolean live;private CloudTtsPlayer player;private CloudAsrClient recognizer;private Activity chat;private AlertDialog dialog;
   @Override public void onCreate(Bundle args){live=args!=null&&"true".equals(args.getString("live"));start();}
   @Override public void onStart(){Bundle report=new Bundle();int code=Activity.RESULT_OK;byte[] original=null;boolean existed=false,isolated=false;
     try{
@@ -22,9 +22,10 @@ public final class SpeechProviderInstrumentation extends Instrumentation {
       SpeechConfig.save(getTargetContext(),false,true,2,"");config=SpeechConfig.load(getTargetContext());
       check(!config.cloudAsr&&config.cloudTts&&config.document.optString("apiKey").equals("synthetic-test-secret"),"Blank key did not preserve credential");
       check(config.document.optJSONObject("asr").optJSONArray("hotwords").length()>0,"ASR hotwords missing");report.putBoolean("independentProvidersAndKeyPreservation",true);
-      EmulatorChecks.shell(this,"am start --windowingMode 1 -n dev.zfold.assistant/.MainActivity");
-      for(int i=0;i<150&&(MainActivity.current()==null||!MainActivity.current().runtime.ready);i++)Thread.sleep(100);
-      chat=MainActivity.current();check(chat!=null&&chat.runtime.ready,"Runtime not ready");
+      chat=startActivitySync(new android.content.Intent(getTargetContext(),SettingsActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+      PiRuntime runtime=PiRuntime.get(getTargetContext());
+      for(int i=0;i<150&&!runtime.ready;i++)Thread.sleep(100);
+      check(chat!=null&&runtime.ready,"Runtime not ready");
       // A silence deadline ends cloud audio; only the server's final revision may dispatch a prompt.
       int[] premature={0};VoiceTurnController isolatedVoice=new VoiceTurnController(getTargetContext(),new VoiceTurnController.Callback(){public boolean active(){return true;}public void status(String text){}public void voiceState(boolean session,boolean speaking){}public void prompt(String text){premature[0]++;}public void sessionEnded(String reason){}});
       CloudAsrClient pendingRecognition=new CloudAsrClient(getTargetContext(),new CloudAsrClient.Callback(){public void ready(){}public void partial(String text){}public void result(String text){}public void error(String reason){}});
@@ -32,7 +33,7 @@ public final class SpeechProviderInstrumentation extends Instrumentation {
       java.lang.reflect.Method deadline=VoiceTurnController.class.getDeclaredMethod("finalizeLivePartial",long.class);deadline.setAccessible(true);
       runOnMainSync(()->{try{deadline.invoke(isolatedVoice,7L);}catch(Exception error){throw new IllegalStateException(error);}});
       check(premature[0]==0&&isolatedVoice.listeningForInput(),"Cloud partial dispatched before final result");runOnMainSync(isolatedVoice::destroy);report.putBoolean("cloudSilenceWaitsForFinalRevision",true);
-      runOnMainSync(()->dialog=SpeechSettings.show(chat,chat.voice,()->{}));Thread.sleep(400);
+      runOnMainSync(()->dialog=SpeechSettings.show(chat,VoiceCoordinator.get(chat).controller,()->{}));Thread.sleep(400);
       check(find(dialog.getWindow().getDecorView(),"语音识别 · ASR") instanceof Spinner,"ASR selector missing");
       check(find(dialog.getWindow().getDecorView(),"语音合成 · TTS") instanceof Spinner,"TTS selector missing");
       View field=find(dialog.getWindow().getDecorView(),"豆包语音 API Key");check(field instanceof EditText&&((EditText)field).getText().length()==0,"Secret was rendered in UI");

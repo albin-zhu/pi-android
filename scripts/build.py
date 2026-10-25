@@ -3,6 +3,7 @@
 import hashlib, io, json, os, pathlib, shutil, subprocess, sys, urllib.request, zipfile
 import tarfile
 from x11_assets import prepare as prepare_x11
+from input_controls import prepare as prepare_input_controls
 ROOT=pathlib.Path(__file__).resolve().parent.parent
 SDK=pathlib.Path(os.environ.get('ANDROID_SDK_ROOT') or os.environ.get('ANDROID_HOME') or pathlib.Path.home()/'Library/Android/sdk')
 JAVA=pathlib.Path(os.environ['JAVA_HOME'])/'bin' if os.environ.get('JAVA_HOME') else pathlib.Path('/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin')
@@ -64,6 +65,8 @@ def bootstrap_xz(native):
     (native/'libzfold_xz.so').write_bytes(extracted[0])
     (native/'libzfold_lzma.so').write_bytes(extracted[1])
 def main():
+    key=BUILD/'debug.keystore'
+    if not key.is_file():raise FileNotFoundError(f'Missing signing key: {key}. Restore the existing key as described in SIGNING.md; refusing to generate a replacement.')
     for d in [BUILD,OUT,VENDOR]:d.mkdir(exist_ok=True)
     archive=pinned(VENDOR/f'nodejs-mobile-android-{VERSION}.zip',URL,SHA256)
     aar=pinned(VENDOR/f'sherpa-onnx-{SHERPA_VERSION}.aar',f'https://github.com/k2-fsa/sherpa-onnx/releases/download/v{SHERPA_VERSION}/sherpa-onnx-{SHERPA_VERSION}.aar',SHERPA_SHA256)
@@ -87,6 +90,7 @@ def main():
     native.mkdir(parents=True)
     bootstrap_xz(native)
     prepare_x11(native, BUILD/'assets', VENDOR)
+    prepare_input_controls()
     staleRuntime=BUILD/'assets/runtime'
     if staleRuntime.exists():
       shutil.rmtree(staleRuntime/'npm',ignore_errors=True)
@@ -137,8 +141,6 @@ def main():
         for f in dex.glob('*.dex'):apk.write(f,f.name)
         for f in native.glob('*.so'):apk.write(f,'lib/arm64-v8a/'+f.name)
     run(tools/'zipalign','-P','16','-f','4',unsigned,BUILD/'aligned.apk')
-    key=BUILD/'debug.keystore'
-    if not key.exists():run(JAVA/'keytool','-genkeypair','-keystore',key,'-storepass','android','-keypass','android','-alias','zfold','-dname','CN=Zfold Development','-keyalg','RSA','-keysize','2048','-validity','10000')
     target=OUT/f"Zfold-{APP_RELEASE}-debug.apk"
     run(JAVA/'java','-jar',tools/'lib/apksigner.jar','sign','--ks',key,'--ks-key-alias','zfold','--ks-pass','pass:android','--key-pass','pass:android','--out',target,BUILD/'aligned.apk')
     run(JAVA/'java','-jar',tools/'lib/apksigner.jar','verify',target)

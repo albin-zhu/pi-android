@@ -68,7 +68,7 @@ final class ModelPicker {
     LinearLayout manage=new LinearLayout(context);manage.setGravity(Gravity.CENTER_VERTICAL);manage.setPadding(Ui.dp(context,14),0,Ui.dp(context,10),0);manage.setMinimumHeight(Ui.dp(context,48));
     manage.setBackground(Ui.ripple(context,Color.TRANSPARENT,0,theme.ink));manage.setClickable(true);manage.setFocusable(true);
     manage.addView(Ui.text(context,"供应商与模型设置…",13,theme.muted),new LinearLayout.LayoutParams(0,-2,1));
-    manage.setOnClickListener(v->{handle[0].dismiss();context.startActivity(new Intent(context,MainActivity.class).putExtra("open_models",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));});
+    manage.setOnClickListener(v->{handle[0].dismiss();context.startActivity(new Intent(context,SettingsActivity.class).putExtra("open_models",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP));});
     list.addView(manage);
     ScrollView scroll=new ScrollView(context);scroll.setVerticalScrollBarEnabled(false);scroll.addView(list);
     int maxHeight=Ui.dp(context,Math.min(420,Math.max(190,rows*40+46)));

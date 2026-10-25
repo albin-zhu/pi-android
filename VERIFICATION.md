@@ -1,6 +1,107 @@
-# 验证记录 · 2026-09-22
+# 验证记录
 
-当前交付状态（2026-10-12）：Fold7 已覆盖安装 0.2.87-compat28，实际 Pi SDK 为 1.0.4，`openai-codex/gpt-6.1-sol` 与原会话恢复；模型中断原因可从历史查看，自动重试/压缩进度可见。八份私有配置指纹保留已核对。本次只修复可观察性与构建版本校验，不宣称消除上游连接故障或完成 CLI/TUI 迁移。下面保留各版本原始记录。
+当前构建：0.2.93-compat28-input-controls。已生成原签名 APK；未覆盖安装主应用。手柄协议与访客 I/O 已实际验证，两套布局的真机触控、键鼠和三星小窗适配仍需更新后验收。
+
+## 0.2.93 X11 双输入布局增量
+
+- 实现窗口内单按钮选择 Xbox／鼠标键盘／收起，仍共享 `:9`、每个应用独立系统 task；只读窗口不启用输入。按 pointer ID 分配实际控制区与透明区域，保留历史坐标；隐藏、失焦、尺寸变化和取消释放输入。实体鼠标可点击选择按钮，其他区域继续操作 X11。这里只记录源码与编译结果，不声称已完成真机多指验证。
+- 在 JVM 中运行产品 `GamepadPublisher`，通过真实 64 字节状态文件驱动当前 Ubuntu 的 SDL2 GameController：识别 `X360 Controller`，双摇杆、模拟扳机、A／LB／Start／D-pad Up 组合值精确匹配；松开后六轴全零、无按键。发现并修正 evdev 对称范围使 SDL 零位变成 `-1` 的问题，改为标准有符号范围后实际消费者零位为 `0`。
+- 实测独占写者拒绝、关闭发布者清零、超过两秒无心跳后的清零和非法输入拒绝。协议边界 C 检查覆盖撕裂／奇数序列、过期／未来时间、非法按钮／轴及墙钟边界。Android 上 `/proc/uptime` 实际不可读，因此 Wine 使用与 BOOTTIME 心跳配对的墙钟时间，不依赖读取 proc uptime。
+- 原生回归保留了失败前／修复后证据：小缓冲区消费时 poll／epoll 必须持续可读直到事件队列耗尽；普通管道、socket、FIFO open 和阻塞记录锁仍保留 libc 的线程取消语义，不占住虚拟设备锁。原适配器的 FIFO／记录锁取消超时，普通 libc 对照通过；修复后全部通过。`tests/input-controls-state.c`、`input-controls-linux.c`、`input-controls-files.c` 已接入 CI；两项构建任务补齐 glibc 交叉编译与 LLVM 18 依赖，未执行远端 CI。
+- 实际 Wine 10／Box64 下分别运行 Win64 和 WoW64 消费者：五个 XInput DLL 家族各完成 300 轮采样，两个进程均退出 `0`；读取 Xbox 身份 `045e:028e`、正确 Y 轴方向、模拟扳机、组合按键和释放。另用事件驱动消费者验证 packet number、释放与失活返回 `1167`，32／64 位均干净退出。初次冷 prefix 有现有 Wine 初始化警告，先前并发轮询探针曾超时／被 SIGKILL；原因未定位，不将顺序验证当作并发、游戏或长期稳定性通过。
+- 在独立临时 prefix 实测关闭恢复、重新启用及自定义 DLL 碰撞拒绝，默认 Wine prefix 未改动。没有创建内核手柄或 udev 热插拔；只保证所测 SDL／XInput 路径，不宣称静态 Linux 程序、仅 udev 枚举的引擎、DirectInput、震动或耳机可用。
+- 重建 runtime 资产、访客原生库和 204 份产品 Java，重新执行 D8；复用未修改且已核验的 Android native 缓存。ZIP、11 个访客文件哈希、16 KiB 对齐、badging 与原证书 v3 签名通过。最终 APK 内 Linux／XInput 库字节与实际消费者使用的库一致；验证程序、密钥与构建目录未进入 APK。
+- 正式包：`artifacts/Zfold-0.2.93-compat28-input-controls.apk`，57,643,210 bytes，SHA-256 `0ecd4b9c5da9fb417da99e4cf1fa47059c38b1ff4515b91b5d5945da95474481`。versionCode 293、targetSdk 28；证书 SHA-256 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。未安装、未提交／推送。
+- 证据在 `.build/input-controls/verification.json`、`.build/input-controls/evidence/` 和 `.build/packager/`。本轮临时 Wine prefix、状态文件、消费者和 JVM 驱动已清理，保留构建缓存及验证记录。ADB／mDNS 未发现设备，computer 后端不可用；未用旧版界面冒充新版布局的验证。
+
+## 0.2.93 TXT／JSON 文档入口
+
+- 原外部入口虽然声明 text/plain，却限制为 Markdown 文件名；授权文件夹列表和相对跳转也仅接受 Markdown／图片。改为共享文档分类策略，TXT／JSON 使用既有原生等宽、可选择文本视图，Markdown 仍由原渲染器处理。保留原 exported 组件名称，避免无必要地更换系统打开目标。
+- `PreviewFilesCheck` 与 `PreviewMarkdownPathsCheck` 实际通过：普通文本、显式 JSON 不误判 Markdown、HTML 文本不启用脚本、通用／缺失 MIME 的扩展名回退、无效元数据、严格 Unicode 解码、空文件、2 MiB 边界、二进制拒绝及目录边界。首次检查发现 structured XML MIME 规则误接收 image/svg+xml，已收窄为 application 下的结构化文本类型后通过。
+- AAPT2、200 份产品 Java 源码、D8、ZIP 完整性、zipalign 及原证书 v3 签名校验通过。复用未修改的 JS 资产和 native 缓存，没有重新下载依赖或冷构建 native。
+- 用户安装独立包 `dev.zfold.assistant.popupcheck`（Zfold Text Preview Smoke）。自建 provider 的同 UID URI 没有显式系统读取授权，被产品入口拒绝；未放宽授权检查。随后尝试系统文件管理器真实文件路径，但默认打开了主应用，尚未完成选择验收包及成功渲染的观察。用户要求停止测试后，不再继续操作手机；不能将宿主机检查或安装成功声称为 TXT／JSON 真机预览通过。
+- 正式包：`artifacts/Zfold-0.2.93-compat28-text-preview.apk`，58,342,784 bytes，SHA-256 `d62c45ff61b2489dc7b111f8336024d08ba3b2cf54310ebc5a3edb00bab9b1b0`。versionCode 293、targetSdk 28；使用仓库本地 `.build/debug.keystore`，证书 SHA-256 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。构建与检查日志在 `.build/text-preview/`；本轮临时驱动、样例和中间 APK 清理，不卸载手机验收包，不删除旧用户 APK。
+
+## 原签名密钥固定到仓库本地
+
+- 经用户选择“不进 Git”，将已有 `/workspace/debug.keystore` 复制到 `.build/debug.keystore`，保留原文件。两处 keystore 导出的公开证书 SHA-256 均为本文记录的原签名指纹；`git check-ignore -v` 确认本地副本被 `.build/` 规则排除，未提交或推送。
+- 通用构建在下载、创建输出目录或编译前检查密钥，缺失即失败；删除原有静默生成新 key 的分支。PR 工作流单独显式生成测试签名，正常发布仍从 Secret 恢复原签名。
+- 实际在临时空路径调用构建 `main()`，得到缺失密钥错误，未创建构建目录；使用仓库本地副本对现有 APK 的临时输出重新签名，apksigner 验证通过且证书与原主包一致。PR 专用生成命令在临时目录运行成功，证书与主包不同。临时密钥与 APK 已清理，正式 APK 未改动；未执行远端 CI 或全量重构建。
+- Android 共享存储不兑现请求的 600 权限，实际模式为 660；这只是固定位置与 Git 排除，不是文件保密隔离。路径、恢复方式及清理注意事项已写入 `SIGNING.md`。
+
+## 0.2.92 窗口内三指键盘 · Fold7 真机
+
+- `WindowView` 在既有触控路径前识别三指轻点，调用系统 WindowInsets IME 显示／收起；硬件鼠标、单指与双指原有路径保留。识别器以 pointer ID 跟踪接触点和历史移动，不按会重排的 index 绑定手指；超过触控 slop、超时、替换手指、第四指、取消及失焦均不能触发有效轻点。只读 View 不分配识别器且不处理输入。
+- `ThreeFingerTapCheck` 实际通过，覆盖单／双／三／四指、位移后返回、拖动中加指、超时、取消、手指身份／替换及新手势恢复；不以宿主机测试证明 Android 键盘已显示。
+- 使用与正式包相同的 200 份产品 Java 源码和未修改的 native 缓存，更新独立包 `dev.zfold.assistant.popupcheck`。临时驱动连接其私有真实 X11 server，向实际 `WindowView.dispatchTouchEvent` 注入 MotionEvent，不直接调用键盘切换方法，也不是模拟 Surface 或 IME。
+- 真机回执：singleDoesNotToggle、doubleDoesNotToggle、fourDoesNotToggle、cancelDoesNotToggle、dragDoesNotToggle、threeShowsIme、threeHidesIme 及 readOnlyDoesNotToggle 全部为 true；切换只读会真正重建 WindowActivity。`PiRuntime.running()` 保持 null。实际屏幕截图显示纯 X11 绿色窗口和 `com.osfans.trime.voice` 系统输入法，系统窗口类型为 2。
+- 驱动曾在私有 server 启动前被操作而记录 Connection refused；启动就绪后才执行上述窗口手势验收。旧私有 Xauthority 已存在，因此本轮不将驱动遗留的 cold/cancel 文件断言作为通过项。没有关闭主应用浏览器、重启其共享 server 或覆盖安装主 APK。
+- 边界：这是设备上的多指事件注入，不是物理三指触屏测试；未验证三星系统手势拦截、所有输入法、实体键盘或复杂 XIM。第一指继续发送原有鼠标按下，不能声称三指手势对应用没有初始点击副作用。普通点击／滚动的完整应用交互回归不在本轮证明范围。
+- 证据：`.build/keyboard/native-report.json`、`three-finger-ime-shown.jpg`、`ime-shown-windows.json`、`host-check.txt` 及构建／签名日志。验收后移除本轮临时 Java 驱动改动与中间 APK，保留证据、永久边界检查和正式包；旧验收包／旧用户 APK 不删除。
+- runtime bundle、AAPT2、javac、D8、ZIP 完整性、zipalign 与原证书 v3 签名验证通过。正式包 `artifacts/Zfold-0.2.92-compat28-window-keyboard.apk`，58,342,784 bytes，SHA-256 `8599728fc13d20cf2a4db414f63ea104f781d6c6048c8de96e0723c0b860109e`；versionCode 292、targetSdk 28，证书 SHA-256 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。未运行全套 Node／instrumentation，未冷构建未修改的 native 库。
+
+## 原生 ARM64 Agent 浏览器 · 主应用真机
+
+- 当前 Ubuntu 架构为 arm64；软件源中的 chromium-browser／firefox 是 Snap 过渡包，未采用。通过既有 Node 24 工具链运行固定 `playwright-core@1.64.1` 安装器，仅下载 headed Chrome for Testing 156.0.8078.4（chromium-1248）和附带 FFmpeg，未安装 Firefox、WebKit 或 headless shell，未复制 Node／项目／Ubuntu。
+- `agent-browser@0.39.1` 官方 npm 归档经发布元数据的 SHA-512 integrity 校验，只安装 Linux ARM64 可执行文件及匹配技能／许可，不保留其他架构二进制。CLI `--version` 和 `skills get core` 成功。ELF 头确认浏览器及控制工具均为 64 位 AArch64；网页 UA 的 Linux x86_64 文本不能用来判断实际可执行架构。
+- 首次原生启动因 `/dev/shm` 不存在而失败；增加 `--disable-dev-shm-usage` 后明确报 root 不支持启用沙箱。随后向用户说明风险，使用 `--no-sandbox` 与独立 profile；没有屏蔽 HTTPS 错误，也没有把 PRoot 或 profile 声称为安全隔离。
+- 用户级默认配置固定 headed、现有 executablePath、X11 平台和独立 profile。浏览器约 401 MiB、附带 FFmpeg 3.9 MiB、控制工具 16 MiB，初始 profile 约 3.8 MiB；消费后的 npm 安装归档已删除。配置和 profile 目录权限收紧，用户个人浏览器资料未读取／迁移。
+- 从实际项目 cwd 执行 Agent 命令成功。`open https://example.com` 返回 Example Domain，手机截图实际出现 Google Chrome for Testing 的系统小窗；Android 可见窗口 ID 为 21917，不是 Wine、Xvfb 截图或后台不可见实例。
+- 首轮测试没有等待点击导航完成，紧接着 back 遇到页面上下文切换错误；重新快照后旧 @e1 也被工具明确拒绝。改为读取当前 @e2 的 href、点击并显式等待 IANA URL 与 DOMContentLoaded 后，实际到达 `https://www.iana.org/help/example-domains`，标题 Example Domains；返回成功，再打开 example.org 新标签。两个标签始终位于同一 Android 窗口 ID 21917，X11 主窗口数保持 1。
+- CDP 返回回环地址；实际对 CDP 及流式端口分别连接：127.0.0.1 成功，当前设备非回环 IPv4 返回 ECONNREFUSED。`ss` 不存在，Android 禁止读取 `/proc/net/tcp`，因此不声称完成全部接口／IPv6 或局域网另一台设备的端口审计。
+- 过程中 X11 status 曾保留 input-grab 警告，但 ready／rendererConnected 为 true，CDP 导航与标签操作完成；未将其当成手动切窗／鼠标抓取已完全通过。未验证 GPU、音视频、复杂表单、登录资料恢复或长期后台。浏览器保留打开供用户查看。
+- 证据：`.build/browser/installation.json`、`browser-windows.json`、`browser-tabs-window.json`、`loopback-check.json`、`chromium-first-window.jpg`、`chromium-two-tabs.jpg`。本轮无 Android 产品源码变更，未添加永久测试或新 APK。
+
+## 0.2.91 纯窗口与补充真机验收
+
+- 主应用实际冷 `status` 返回 `Stopped/ready=false/running=false/windowCount=0`；AI 调用 `start` 返回 renderer 就绪，重复 start 保持 session `ab8687f4-5fd1-4ebb-b6c9-06142eb46262`，没有额外 server 或空白应用窗口。
+- 从当前 Ubuntu 经真实 libX11 连接主应用 `:9`。在三星桌面停留 12 秒，创建前再次确认活动窗口仍是 One UI 主屏幕；创建 B 后，实际系统窗口列表与截图显示 `Zfold acceptance B` 为独立小窗，桌面仍在后方。没有手动切回 Zfold 才显示。
+- A、B 同时存在时，添加 B 的 WM_TRANSIENT_FOR 子窗口并改名，主窗口数保持 2，B 的 Android 可见窗口 ID 保持 21487；橙色子窗口实际合成在蓝色 B 内。隐藏 B 后再次改名没有重新弹出。销毁本轮 X11 客户端窗口后主服务仍 ready、session 未变、窗口数为 0，未停止共享 server 或原终端。
+- `WindowActivity` 改为直接承载 `WindowView`，删除自有标题、状态、工具按钮与快捷键栏，以及仅为按钮服务的修饰键状态。系统 task 标题、输入、剪贴板、窗口身份和服务生命周期保留。窗口管理页长按对应项请求软键盘，只读模式没有该入口。
+- 0.2.91 独立验收包使用相同产品 Java／native 代码；实际 X11 客户端创建绿色、蓝色窗口，截图确认内容区只有应用画面，顶部为三星系统拖动条，没有应用自绘操作栏。窗口管理页可恢复隐藏窗口。
+- 首轮长按只打开窗口，未出现 IME。将键盘显示请求延后到视图焦点就绪，并通过 `WindowInsetsController.show(Type.ime())` 显式请求后重新打包、更新验收包；再次长按实际显示系统输入法 `com.osfans.trime.voice`（系统窗口 type 2），纯 X11 窗口保持显示。未声称完成所有输入法、实体键盘或复杂 XIM 组合输入回归。
+- 真机实际执行 ACTION_SEND → ProcessTextActivity → 草稿确认 → 真实 Android PTY。接收文件字节精确为 `EXISTING 分享测试 保留已有输入`，保留前缀、换行归一化且无 CR/LF；草稿被消费，重新打开终端没有重放。启动器显示 TUI 空状态，工作区包含全部 X11 窗口／Wine 入口；设置独立显示并可返回，`PiRuntime.running()` 保持 null。没有使用原主应用终端做输入试验。
+- 证据在 `.build/popup/main-acceptance/`：`background.json`、`lifecycle.json`、`background-popup-B.jpg`、`transient-grouped.jpg`、`pure-X11-canvas.jpg`、`pure-keyboard-fixed.jpg`、`keyboard-fixed.json`、`share-native.json` 和 `standalone-settings.jpg`。部分人工点击产生的额外验收窗口不作为受控后台场景的证明。
+- runtime bundle、AAPT2、199 份 Java 源码编译、D8、签名和对齐实际通过；本轮 Java/UI 调整未重跑整套 Node／instrumentation，也未冷构建未修改的 native 库。正式 APK 为 `artifacts/Zfold-0.2.91-compat28-pure-windows.apk`，58,342,784 bytes，SHA-256 `e0ef2be95c21136ce7694af8e405a1f62762a8aa363756923b8bf5dd7b576f93`。aapt2 确认包名 `dev.zfold.assistant`、versionCode 291、targetSdk 28、启动器 LauncherActivity。v3 原证书 SHA-256 仍为 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`。
+- 用户在清理阶段明确表示自行清理；未卸载 `dev.zfold.assistant.popupcheck`（名称 `Zfold Window Smoke`），未删除其 APK／临时驱动，也未再操作手机。正式主应用未自动覆盖更新，避免结束承载当前开发会话的 Ubuntu。独立实时语音、长期后台、锁屏及其他 OEM 不在本轮通过范围。
+
+## 0.2.90 TUI 收口、系统 X11 小窗与启动 API
+
+- 删除原生 GUI 文字聊天、旧聊天面板／气泡及其恢复调用和专用 instrumentation；独立 SettingsActivity 保留模型配置、授权、工具、语音等能力，导航本身不初始化 Pi。启动器固定进入 TUI，系统文字／图片分享迁入终端草稿。独立实时语音／相机及手机控制 Stop 保留；没有删除用户模型凭据、会话、Ubuntu 或 Wine。
+- 在当前 Ubuntu 实际执行 `windows status`，返回 `installed: true`、`wine-10.0-box64-b99d443`、`DISPLAY=:9`，默认 prefix 仍为 `/root/.local/share/zfold/wineprefixes/default`。用户开启显示后 `xwininfo -display :9 -root -tree` 能查询主应用服务；本轮未重装 Wine、运行游戏或改动原主应用 X11。
+- `x11_server` 接入 AndroidTools、phone 工具目录／CLI 和 omp 扩展，只提供 `status` 与 `start`。沿用外部客户端授权，start 不能被标成只读；不调用 Activity／shell／ADB，不启动 Pi。启动完成条件为服务认证探针成功且 renderer 连接；取消等待只解绑观察者，不停止共享服务。
+- X11Service 自动为首次出现的主窗口请求系统小窗，按 session／XID／generation 保持文档 task 身份；不再因主进程未可见而直接跳过，也不从只读观察者继承自动窗口的输入模式。实际 Activity 回报小窗状态；未确认或系统拒绝时保留明确的通知／列表入口，不把 Intent 派发当成功。
+- 实际重打 runtime bundle，使用已有 Node 24.22.0／依赖缓存。AAPT2、199 份 Java 源码编译、D8 通过；未改动 native 引擎，继续复用此前核验的 native 缓存，不声称完成全量 NDK 冷构建。
+- 定向 Node 检查运行 36 项、全部通过；其中 4 项新增工具发现／转发 smoke 在执行后从永久测试中删除，不以模拟 native 回执证明真实 server 就绪。`TerminalAttachmentFilesCheck` 和 `X11GeometryCheck` 通过；删除了绑定默认提问文案的旧断言，没有重新固定文案。实际安全边界包括控制字符／路径转义、文件导入、X11 认证与非修改式几何读取。
+- 临时包 `dev.zfold.assistant.popupcheck` 使用相同产品代码、独立 UID 和私有文件；没有复制 Ubuntu、用户项目或凭据。临时原生驱动经生产 AndroidTools 调用 API，再用真实 X11 协议连接该包的私有 Unix socket、创建主窗口；不是模拟 renderer 或用自绘 View 假装 X11。
+- 第一轮冷 `status` 暴露真实 Android 行为：`bindService(flags=0)` 可返回 true，却不会为未运行的服务触发连接回调，导致超时。修复为先观察本应用服务是否已启动／运行，再进行非创建式绑定。修复后实际结果：冷查询 `running=false/ready=false/windowCount=0` 且未创建 Xauthority；预取消 start 和非法 action 被拒绝，未启动服务；start 返回认证／renderer 就绪，窗口数仍为 0，没有打开 WindowActivity，Pi 仍未启动；再次 start 的 server session 完全一致。
+- 真机记录到 4 个不同 XID，分别属于 4 个不同 Android task；多次恢复／调整后每个 XID 仍只对应同一个 task。所有记录均为 `popup=true/readOnly=false`，窗口宽高均小于屏幕，实际系统窗口列表也列出了独立 `X11 Foreground A`／`X11 Background B` 窗口。原始结果在 `.build/popup/native-popup-report.json`。驱动曾在 A 尚未创建时执行元数据步骤并记录 `Create A first`，因此不能把该步骤称为已通过。
+- 当时未完成：受控的 Home 后延迟创建、菜单／transient 分组、分享文字到真实 PTY、新版设置／启动器及独立语音回归。验收期间设备折叠并锁屏，未尝试绕过锁屏。后续补测与用户接手清理的状态见上方 0.2.91 记录；历史独立验收包安装不是主应用更新。
+- 最终 APK：`artifacts/Zfold-0.2.90-compat28-tui-windows.apk`，58,342,784 bytes，SHA-256 `810833c1abc57ddfeb62d4362b6efc3fe3c286dce7c2052b5855752383716e5e`，versionCode 290／targetSdk 28。v3 原签名证书 SHA-256 为 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`；签名后 zipalign 与 ZIP 完整性检查通过。使用用户已有 `/workspace/debug.keystore`，没有再次导出、复制或生成密钥。
+
+## 0.2.89 圈选到终端 · Fold7 隔离真机 smoke
+
+- 桌面快捷入口、QS 磁贴、无障碍快捷操作及默认助手圈选模式改为保存 PNG 后打开终端工作台。圈选回调直接传递有明确回收归属的 Bitmap，不再经过 Base64／JPEG 往返或旧 Pi 提问流程。原有非圈选的文字／图片分享聊天入口未改。
+- 单份草稿由私有偏好保存图片位置、问题、目标句柄和身份标识；图片位于既有工作区附件目录。确认插入前检查确切 Job、图片可读性及 Android／Ubuntu 路径，再消费草稿并粘贴。没有 Enter，已消费的草稿不重放；原标签关闭不会自动改投另一个标签。缺失图片仍能打开草稿并明确丢弃。
+- 宿主机 `TerminalAttachmentFilesCheck` 通过，覆盖原有真实文件导入与 Shell 引号边界，并增加圈选问题的换行／制表符归一化、控制字符与超长输入拒绝、生成文件归属、符号链接越界拒绝。Android 资源链接、224 份 Java 源码编译和 D8 通过。
+- 使用临时包 `dev.zfold.assistant.circlecheck`，仅在其自己的 `agent-smoke` 根创建验证数据和两个原生 PTY；没有复制 Ubuntu、使用用户项目或更新主应用。通过系统文件管理器安装，使用现有 phonecontrol 观察并操作真实 Android 界面；未开启无线调试。
+- 原生烟测将样例 Bitmap 保存成 PNG，保留捕获时目标 A，再选中标签 B。实际界面的草稿仍明确指向 A；点击“切换并插入”后，界面选中 A。两个真实 PTY 使用非 canonical、无 echo 的 `cat` 接收输入：A 的文件字节精确等于既有 `EXISTING ` 加带引号路径和单行问题，B 文件保持为空。PNG 实际解码尺寸／颜色正确，Ctrl 清除，`PiRuntime.running()` 保持 null；没有回车／换行字节。结束并重新打开 TerminalActivity 后，接收字节未增加，草稿未重放。
+- 无会话的样例草稿实际展示图片、问题及明确的新建入口，没有自动创建 PTY；“稍后”留下可重新打开的草稿横条。视觉截图与实测结果保存在 `.build/circle/circle-composer-phone.jpg`、`circle-inserted-phone.jpg` 和 `native-circle-report.json`。
+- 首次同时启动两个真实 PTY 暴露 `RuntimeEnvironment.base()` 的目录创建竞态：一个报告“无法创建运行环境目录”，另一个运行。`mkdirs()` 返回 false 后重新检查目录，允许另一个线程已完成创建的情况；不屏蔽真实的非目录／创建失败。修复后的验证从该临时包的空 home/tmp 冷启动两个接收终端成功。永久 instrumentation 也调整为先并发创建，再分别等待就绪。
+- `TerminalCircleInstrumentation` 已加入注册并编译，包含重建、关闭目标、失效草稿身份、缺失文件、SAF 冲突等回归场景；**没有声称整套 instrumentation 执行通过**。设备拒绝应用 UID 自行启动 instrumentation（要求 SHELL），因此改用临时原生 Activity 驱动上述真实 PTY 与产品界面。未验证完整外部屏幕抓取／自由圈选链路、真实 Ubuntu 目标、进程被杀后的恢复或所有折叠／旋转状态。
+- 最终 APK：`artifacts/Zfold-0.2.89-compat28-circle-terminal.apk`，58,465,664 bytes，SHA-256 `c3b3e01ef5e3417ed51799d9e12425a325e593b217cd4f2503052918cde04d26`。versionCode 289，targetSdk 28；v3 签名证书 SHA-256 为 `192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`，与原主包一致。未改动的运行时资产和 native 库复用此前已核验的缓存，不宣称冷构建全部 NDK 依赖。
+- 验证包已通过系统卸载并从 `app_list` 消失；已返回原主应用。临时驱动源码、验证 APK 和本轮中间 APK 已删除，只保留本轮最终安装包、构建日志与证据；旧用户 APK 未删除。
+
+## 0.2.88 TUI 工作台首阶段 · 宿主机打包
+
+- 固定使用 `/workspace/workspace/pi-android`。将 `/root/pi-android-main` 的 `729c68e` 中已交付的终端附件／启动入口、Markdown 预览／授权／导航和 rootless X11 源码逐项合入，保留当前目录镜像预览兼容路径及用户文件。没有切分支、复制仓库、node_modules 或 Ubuntu rootfs。
+- 新增工作区元数据和选择抽屉、按工作区与环境创建终端、显式空状态／进程中断提示及 GUI 返回入口。终端共用资产初始化不启动 Pi 引擎；已有 PTY 的目录、环境与输入归属不因选择工作区而变化。新增 `TerminalWorkspaceInstrumentation`，覆盖真实 PTY、路径边界、切换／关闭和延迟 IME 事件；**已编译但未在设备执行**。
+- 使用已有 Node 24.22.0 与依赖缓存，通过 `ZFOLD_NODE_MODULES` 打包，实际 Pi SDK 为 1.0.4、Marked 为 18.0.11。AAPT2 编译／链接、221 份 Java 源码（410 个 class）编译、D8 和 ZIP 完整性／zipalign 检查通过；Java 仅有 source 11 系统模块路径及弃用提示。D8 首次参数文件错误地保留引号，改为直接参数后成功。
+- Node 报告 11 项测试通过、0 失败：Markdown 表格／语义／URL／安全边界与打开目标分派；路径检查脚本同时完成。6 个 Java 检查程序通过：`DirectoryChoicesCheck`、`PreviewFilesCheck`、`PreviewMarkdownPathsCheck`、`TerminalAttachmentFilesCheck`、`TerminalLinkTargetsCheck`、`X11GeometryCheck`。另实际调用 `renderMarkdown` 渲染包含中文和相对链接的表格，输出 `<table>`、`<th scope="col">` 及保留相对 URL 的 `<a>`。不是浏览器或手机视觉验收。
+- Native 库复用已有缓存。当前 `native/` 文件与缓存对应源码一致；Xlorie 构建脚本、固定源码／构建输入、全部 overrides 及库 SHA-256 按缓存 provenance 核验。库指纹为 `059746f36be5f8e00074cd77db3c5b87678c3c171464245f71755e1d2af25921`；不宣称 NDK 冷构建。
+- 最终产物：`artifacts/Zfold-0.2.88-compat28-tui.apk`，58,453,376 bytes；SHA-256 `9839b943c6710d94ee98f499f6da4354406ef8c669ec006eb5792271ebe10c42`。包名 `dev.zfold.assistant`、versionCode 288、versionName `0.2.88-compat28-tui`、targetSdk 28。`apksigner verify --verbose --print-certs` 通过，v3 签名有效，证书 SHA-256 与原主包一致：`192ee603469e9f3a289c7cea7d223228565f51faf38dd82f27b421a477a08530`；签名后 zipalign 再验证通过。已删除本轮中间未签名 APK，仅保留最终安装包。
+- 用户提供的 ADB 35019 端口完成 TLS 连接，但设备拒绝当前客户端证书（`CERTIFICATE_UNKNOWN`）。用户随后要求只打包、手动安装；本轮未运行设备安装、force-stop 或 instrumentation，本地诊断 ADB 服务已停止。最初只检查 Android 私有密钥与构建缓存，遗漏用户此前提供的 `/workspace/debug.keystore`；通过历史记录找回路径、校验证书后直接复用，未重新索取、导出、复制或生成密钥。签名不需要本轮 ADB 授权。
+- 设备边界：新工作台布局、折叠／横屏、IME 及滚动切换、Ubuntu 的真实启动目录、进程回收、GUI／预览／窗口返回仍未真机验收。运行日志和产物元数据保存在 `.build/tui/`；不把编译成功或历史版本的设备记录等同于本轮行为验证。
 
 ## 通用 X11 / Wine 集成 · Fold7 真机
 

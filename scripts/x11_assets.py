@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare pinned X11 native/data inputs without an Android SDK or NDK."""
+"""Prepare source-built rootless X11 native code and pinned keyboard data."""
 import argparse
 import hashlib
 import io
@@ -11,6 +11,8 @@ import tarfile
 import tempfile
 import urllib.request
 import zipfile
+
+from x11_native import build as build_native
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -101,27 +103,37 @@ def prepare(native, assets, cache=None):
         directory.mkdir(parents=True, exist_ok=True)
     upstream = ROOT / 'third_party/termux-x11'
     keyboard = ROOT / 'third_party/xkeyboard-config'
-    x11 = json.loads((upstream / 'sources.json').read_text())
+    library = build_native(native, cache / 'x11-source')
     xkb = json.loads((keyboard / 'sources.json').read_text())
-    apk = pinned(cache, f'termux-x11-{x11["commit"]}.apk', x11['apk'])
-    with zipfile.ZipFile(apk) as archive:
-        marker = ('commit ' + x11['commit']).encode() + b'\0'
-        dex_files = [name for name in archive.namelist() if name.startswith('classes') and name.endswith('.dex')]
-        if not any(marker in archive.read(name) for name in dex_files):
-            raise RuntimeError('Pinned X11 APK does not identify the expected corresponding source commit')
-        library = archive.read(x11['native']['member'])
-        verify(library, x11['native']['sha256'], 'libXlorie.so')
     package = pinned(cache, f'xkb-data_{xkb["version"]}_all.deb', xkb['package'])
     keyboard_zip(package, assets / 'x11/xkb.zip')
-    (native / 'libXlorie.so').write_bytes(library)
     for component, directory in (('termux-x11', upstream), ('xkeyboard-config', keyboard)):
         destination = assets / 'x11/licenses' / component
         destination.mkdir(parents=True, exist_ok=True)
-        for filename in ('LICENSE.txt', 'sources.json', 'SOURCE.txt'):
+        for filename in ('LICENSE.txt', 'sources.json', 'SOURCE.txt', 'build-inputs.json'):
             source = directory / filename
-            if source.exists():
+            if source.exists() and not (component == 'termux-x11' and filename == 'sources.json'):
                 shutil.copyfile(source, destination / filename)
-    return native / 'libXlorie.so', assets / 'x11/xkb.zip'
+    receipt_path = native / 'libXlorie.provenance.json'
+    receipt = json.loads(receipt_path.read_text())
+    actual = hashlib.sha256(library.read_bytes()).hexdigest()
+    if actual != receipt['library_sha256']:
+        raise RuntimeError('Built Xlorie does not match its source-build provenance')
+    metadata = json.loads((upstream / 'sources.json').read_text())
+    metadata['upstream_artifacts'] = {'apk': metadata.pop('apk'), 'native': metadata.pop('native')}
+    metadata['native'] = {
+        'member': 'lib/arm64-v8a/libXlorie.so',
+        'sha256': actual,
+        'modified': True,
+        'upstream_commit': receipt['source_commit'],
+        'build_fingerprint': receipt['fingerprint'],
+        'overrides': receipt['overrides'],
+        'provenance': 'native-build.json',
+    }
+    destination = assets / 'x11/licenses/termux-x11'
+    (destination / 'sources.json').write_text(json.dumps(metadata, indent=2, sort_keys=True) + '\n')
+    shutil.copyfile(receipt_path, destination / 'native-build.json')
+    return library, assets / 'x11/xkb.zip'
 
 
 def main():

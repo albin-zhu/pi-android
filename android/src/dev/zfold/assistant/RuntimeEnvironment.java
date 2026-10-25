@@ -9,17 +9,19 @@ import org.json.*;
 
 /** Shared command environment for the Agent, one-shot processes and PTYs. */
 final class RuntimeEnvironment {
-  private static final Set<String> COMMON=new HashSet<>(Arrays.asList("HOME","TMPDIR","PATH","PREFIX","TERMINFO","TERM","LD_LIBRARY_PATH","ZFOLD_PKG_SOCKET","ZFOLD_PHONE_SOCKET","ZFOLD_AGENT_ROOT","ZFOLD_RUNTIME_PID"));
+  private static final Set<String> COMMON=new HashSet<>(Arrays.asList("HOME","TMPDIR","PATH","PREFIX","TERMINFO","TERM","LD_LIBRARY_PATH","ZFOLD_PKG_SOCKET","ZFOLD_PHONE_SOCKET","ZFOLD_AGENT_ROOT","ZFOLD_SHARED_STORAGE","ZFOLD_RUNTIME_PID"));
   static JSONObject base(Context context)throws IOException{
+    RuntimeAssets.prepare(context);
     File runtime=new File(context.getFilesDir(),"runtime"),pkg=PiPackageManager.root(context),pack=PiRuntimePacks.cache(context);
     File home=new File(pkg,"home"),tmp=new File(pkg,"tmp");
-    if((!home.isDirectory()&&!home.mkdirs())||(!tmp.isDirectory()&&!tmp.mkdirs()))throw new IOException("无法创建运行环境目录");
+    if((!home.isDirectory()&&!home.mkdirs()&&!home.isDirectory())||(!tmp.isDirectory()&&!tmp.mkdirs()&&!tmp.isDirectory()))throw new IOException("无法创建运行环境目录");
     prepareUbuntu(runtime);
     JSONObject value=PiRuntime.json("HOME",home.getCanonicalPath(),"TMPDIR",tmp.getCanonicalPath(),
       "PATH",new File(runtime,"bin").getPath()+":"+new File(runtime,"tools").getPath()+":"+new File(pkg,"usr/bin").getPath()+":"+new File(pack,"usr/bin").getPath()+":/system/bin:/system/xbin:/vendor/bin",
       "ZFOLD_PKG_SOCKET",PackageCliServer.ensure(context),
       "ZFOLD_PHONE_SOCKET",PhoneToolServer.ensure(context),
       "ZFOLD_AGENT_ROOT",PiRuntime.agentRoot(context).getCanonicalPath(),
+      "ZFOLD_SHARED_STORAGE",Environment.getExternalStorageDirectory().getAbsolutePath(),
       "ZFOLD_RUNTIME_PID",android.os.Process.myPid(),
       "PREFIX",new File(pkg,"usr").getPath(),"TERMINFO",new File(pkg,"usr/share/terminfo").getPath(),"TERM","xterm-256color",
       "LD_LIBRARY_PATH",new File(pkg,"usr/lib").getPath()+":"+new File(pack,"usr/lib").getPath());
@@ -40,7 +42,7 @@ final class RuntimeEnvironment {
     JSONObject value=base(context),scoped=PiRuntimePacks.scopedEnvironment(context,executable);
     if(scoped!=null)for(Iterator<String> keys=scoped.keys();keys.hasNext();){String key=keys.next();
       // Profile-specific loaders/tool searches can differ; user home and temp do not.
-      if(!key.equals("HOME")&&!key.equals("TMPDIR")&&!key.equals("ZFOLD_PHONE_SOCKET")&&!key.equals("ZFOLD_AGENT_ROOT"))put(value,key,scoped.opt(key));
+      if(!key.equals("HOME")&&!key.equals("TMPDIR")&&!key.equals("ZFOLD_PHONE_SOCKET")&&!key.equals("ZFOLD_AGENT_ROOT")&&!key.equals("ZFOLD_SHARED_STORAGE"))put(value,key,scoped.opt(key));
     }
     return value;
   }

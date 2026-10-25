@@ -17,6 +17,7 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
+from gamepad_wine import configure as configure_gamepad, strip_linux_preload
 
 VERSION = 'wine-10.0-box64-b99d443'
 ASSETS = (
@@ -133,6 +134,8 @@ def launch(command, arguments, prefix):
         raise RuntimeError('Wine is not installed. Run: windows install')
     box64, wine = binaries(directory)
     environment = os.environ.copy()
+    gamepad_assets = Path(__file__).resolve().parent / 'input-controls'
+    strip_linux_preload(environment, gamepad_assets)
     environment['WINEPREFIX'] = str(prefix)
     environment['WINEARCH'] = 'win64'  # WoW64 supports Win32 within this prefix.
     environment['BOX64_LD_LIBRARY_PATH'] = str(directory / 'box64/usr/lib/box64-x86_64-linux-gnu')
@@ -149,6 +152,7 @@ def launch(command, arguments, prefix):
         raise RuntimeError('No DISPLAY. Open the app X11 view and enter a new Ubuntu shell.')
     if command != 'stop':
         prefix.parent.mkdir(parents=True, exist_ok=True)
+        configure_gamepad(prefix, environment, gamepad_assets)
     print('Wine prefix: ' + str(prefix), flush=True)
     os.execve(box64, [str(box64), str(executable), *parameters], environment)
 

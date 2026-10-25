@@ -21,7 +21,6 @@ final class PhoneHud {
   static synchronized void takeover(Context context,String action){show(context,action,true);}
   static synchronized void forceHide(){takeover=false;hideLocked();}
   private static synchronized void show(Context context,String action,boolean takeoverMode){
-    if(SystemWindowNavigation.active()&&!takeoverMode){MainActivity.current().showStatus(action);return;}
     takeover=takeoverMode;
     if(takeoverMode)UnifiedOverlay.takeover(context,action);
     else UnifiedOverlay.task(context,action);
@@ -41,7 +40,7 @@ final class PhoneHud {
       if(!outcome.isBlank())return outcome;
       return "Jev 正在操作手机";
     }
-    if("error".equals(event.optString("status")))return ToolCallView.label(name)+" · 失败";
+    if("error".equals(event.optString("status")))return label(name)+" · 失败";
     return describe(name,args==null?"":args.optString("text",args.optString("packageName","")),args);
   }
   private static String outcome(JSONObject output){
@@ -87,7 +86,21 @@ final class PhoneHud {
       case "read":return "读取文件";case "write":return "写入文件";case "edit":return "编辑文件";
       case "ls":return "列出目录";case "bash":return "执行命令";case "pty":return "打开终端";
       case "runtime_exec":return "执行工具";case "pkg":return "管理软件包";case "sandbox_status":return "检查运行时";
-      default:return ToolCallView.label(kind)+(value.isBlank()?"":" · "+target);
+      default:return label(kind)+(value.isBlank()?"":" · "+target);
+    }
+  }
+  static String label(String name){
+    switch(name){
+      case "ask_user_question":return "向用户提问";
+      case "phone_capabilities":return "电话与相机能力";case "phone_call":return "拨打电话";case "phone_sms":return "短信与回执";case "contact_search":return "查找联系人";case "camera_capture":return "拍照并获取图片";
+      case "read":return "读取文件";case "write":return "写入文件";case "edit":return "编辑文件";
+      case "subagent":return "子Agent · 独立上下文";case "ls":return "列出文件";case "bash":return "执行 Shell";case "reload_skills":return "重载 Skills";case "phone_task":return "Jev 操作手机";case "device_info":return "读取手机状态";
+      case "screen_read":return "读取当前界面";case "screen_capture":return "截取屏幕";
+      case "ui_select":return "选择界面目标";case "ui_tap":return "点击界面";
+      case "ui_input":return "输入文字";case "ui_swipe":return "滑动界面";
+      case "ui_back":return "返回上一页";case "app_open":return "打开应用";
+      case "open":return "打开 URL/文件";case "tool_install":return "安装脚本工具";case "pty":return "连接 Runtime PTY";
+      case "app_list":return "列出应用";case "split_screen":return "折叠屏分屏";default:return name;
     }
   }
 }

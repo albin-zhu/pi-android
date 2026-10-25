@@ -14,7 +14,7 @@ public final class QuestionSessionService extends Service {
   @Override public void onCreate(){super.onCreate();active=this;update();}
   private void update(){
     getSystemService(NotificationManager.class).createNotificationChannel(new NotificationChannel("user_questions","需要回答的任务",NotificationManager.IMPORTANCE_DEFAULT));
-    UserQuestions.Request question=UserQuestions.current();Intent intent=question==null?new Intent(this,MainActivity.class):new Intent(this,UserQuestionActivity.class).putExtra("question_request_id",question.id);
+    UserQuestions.Request question=UserQuestions.current();Intent intent=question==null?new Intent(this,TerminalActivity.class):new Intent(this,UserQuestionActivity.class).putExtra("question_request_id",question.id);
     PendingIntent open=PendingIntent.getActivity(this,81,intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
     Intent cancel=new Intent(this,QuestionSessionService.class).setAction("stop").setData(Uri.parse("chengcheng-question://stop/"+turn)).putExtra("turn",turn);
     PendingIntent stop=PendingIntent.getService(this,82,cancel,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);

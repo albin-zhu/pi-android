@@ -41,6 +41,29 @@ public final class AndroidTools {
         PhoneActions.execute(context,name,args,request.optString("id"),result);return;
       }
       if(name.equals("runtime_environment")){result.done(RuntimeEnvironment.base(context),null);return;}
+      if(name.equals("x11_server")) {
+        String action=args.getString("action");
+        if(!action.equals("status")&&!action.equals("start"))throw new Exception("x11_server action 只能是 status 或 start");
+        NativeToolExecution call=NativeToolExecution.currentCall();
+        com.termux.x11.X11ServerControl.request(context,action,call::cancelled,(state,error)->{
+          if(state==null){result.done(null,error==null?"X11 server 未返回状态":error);return;}
+          try{
+            JSONObject value=new JSONObject();
+            for(String key:state.keySet())value.put(key,state.get(key));
+            result.done(value,error);
+          }catch(JSONException failure){result.done(null,failure.getMessage());}
+        });
+        return;
+      }
+      if(name.equals("virtual_screen")) {
+        String requested=args.optString("display","").trim();
+        if(!requested.isEmpty()&&!requested.matches(":?\\d{1,3}"))throw new Exception("display 必须是 :N");
+        int display=requested.isEmpty()?9:Integer.parseInt(requested.startsWith(":")?requested.substring(1):requested);
+        String target=":"+display;
+        VirtualScreenActivity.open(context,target);
+        result.done(PiRuntime.json("opened",true,"display",target,"readOnly",true,
+            "backend",display==9?"termux-x11":"xvfb-jpeg"),null);return;
+      }
       if(name.equals("device_info")) {
         Intent battery=context.registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         int level=battery==null?-1:battery.getIntExtra(BatteryManager.EXTRA_LEVEL,-1),scale=battery==null?100:battery.getIntExtra(BatteryManager.EXTRA_SCALE,100);

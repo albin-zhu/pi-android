@@ -21,14 +21,16 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
 /** Avatar picker stage with rotation, pan, and pinch cropping. */
-public final class AvatarEditorActivity extends Activity {
+public final class AvatarEditorActivity extends NavigableActivity {
   interface Encoded {void done(String data);}
   private static volatile Encoded pending;
   private CropView crop;private Bitmap source;private volatile boolean loaded;
 
   static void edit(Context context,Uri uri,Encoded callback){
     pending=callback;
-    context.startActivity(new Intent(context,AvatarEditorActivity.class).setData(uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    Intent intent=new Intent(context,AvatarEditorActivity.class).setData(uri);
+    if(!(context instanceof Activity))intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+    context.startActivity(intent);
   }
 
   @Override protected void onCreate(Bundle state){

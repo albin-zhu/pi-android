@@ -10,12 +10,9 @@ import android.os.Looper;
 public final class CircleEntryActivity extends Activity {
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
-    boolean fromChat=MainActivity.current()!=null&&!MainActivity.current().isFinishing();
-    if(fromChat)moveTaskToBack(true);
     finish();
     overridePendingTransition(0,0);
-    long delay=fromChat?280:40;
-    new Handler(Looper.getMainLooper()).postDelayed(()->CircleOverlay.beginOnCurrentScreen(getApplicationContext()),delay);
+    new Handler(Looper.getMainLooper()).postDelayed(()->CircleOverlay.beginOnCurrentScreen(getApplicationContext()),40);
   }
 
   static Intent intent(android.content.Context context){
